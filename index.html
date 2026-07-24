@@ -76,6 +76,7 @@
     .menu-card-text { font-size: 1.8rem; font-weight: 600; letter-spacing: 4px; color: #f0f4f8; }
     .menu-card-desc { font-size: 0.8rem; color: #7a8b9a; margin-top: 8px; text-align: center; }
 
+    /* 登录/注册模态框 */
     .modal {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100;
@@ -96,6 +97,66 @@
     }
     .modal-btn:hover { background: #00a3ff; }
 
+    /* 个人中心 - 修改密码区域 */
+    .password-change {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #1f2a33;
+    }
+    .btn-change-pw {
+      background: transparent;
+      border: 1px solid #3a5060;
+      color: #b0c7d6;
+      padding: 10px;
+      width: 100%;
+      font-family: inherit;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: 0.2s;
+      margin-bottom: 15px;
+    }
+    .btn-change-pw:hover {
+      border-color: #ffaa00;
+      color: #ffaa00;
+      box-shadow: 0 0 10px rgba(255,170,0,0.3);
+    }
+    .pw-form {
+      display: none;
+      margin-bottom: 15px;
+    }
+    .pw-form input {
+      width: 100%;
+      background: #1a1e24;
+      border: 1px solid #3a5060;
+      color: #fff;
+      padding: 8px;
+      margin-bottom: 10px;
+      font-family: inherit;
+    }
+    .pw-form .form-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .pw-form .btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      font-family: inherit;
+      font-weight: bold;
+      cursor: pointer;
+      letter-spacing: 1px;
+    }
+    .btn-save-pw {
+      background: #ffaa00;
+      color: #000;
+    }
+    .btn-cancel-pw {
+      background: #3a5060;
+      color: #fff;
+    }
+
+    /* 移动端适配 */
     @media (max-width: 600px) {
       .container { max-width: 100%; margin: 10px; min-height: auto; }
       .menu-title { font-size: 2rem; letter-spacing: 6px; }
@@ -179,6 +240,20 @@
           </button>
         </div>
 
+        <!-- 修改密码区域 -->
+        <div class="password-change">
+          <button class="btn-change-pw" id="btnShowPasswordForm">修改密码</button>
+          <div class="pw-form" id="pwForm">
+            <input type="password" id="oldPassword" placeholder="旧密码">
+            <input type="password" id="newPassword" placeholder="新密码">
+            <input type="password" id="confirmPassword" placeholder="确认新密码">
+            <div class="form-actions">
+              <button class="btn btn-save-pw" id="btnSavePassword">保存</button>
+              <button class="btn btn-cancel-pw" id="btnCancelPassword">取消</button>
+            </div>
+          </div>
+        </div>
+
         <div class="profile-actions">
           <button class="btn-profile btn-delete-account" id="btnDeleteAccount">彻底注销账号</button>
           <button class="btn-profile btn-close-profile" onclick="closeProfile()">关闭</button>
@@ -232,6 +307,15 @@
     const btnDeleteAccount = document.getElementById('btnDeleteAccount');
     const adminEntry = document.getElementById('adminEntry');
 
+    // 密码修改相关元素
+    const btnShowPasswordForm = document.getElementById('btnShowPasswordForm');
+    const pwForm = document.getElementById('pwForm');
+    const oldPasswordInput = document.getElementById('oldPassword');
+    const newPasswordInput = document.getElementById('newPassword');
+    const confirmPasswordInput = document.getElementById('confirmPassword');
+    const btnSavePassword = document.getElementById('btnSavePassword');
+    const btnCancelPassword = document.getElementById('btnCancelPassword');
+
     let modalMode = 'login';
 
     function updateUI() {
@@ -256,8 +340,12 @@
       if (!currentUser) return;
       profileUsername.textContent = currentUser.username;
       profileRecord.textContent = currentUser.highestRecord || 0;
-      // 管理员显示管理入口
       adminEntry.style.display = currentUser.isAdmin ? 'block' : 'none';
+      // 重置密码表单
+      pwForm.style.display = 'none';
+      oldPasswordInput.value = '';
+      newPasswordInput.value = '';
+      confirmPasswordInput.value = '';
       profileModal.style.display = 'flex';
     }
 
@@ -265,6 +353,61 @@
       profileModal.style.display = 'none';
     };
 
+    // 显示/隐藏密码表单
+    btnShowPasswordForm.addEventListener('click', () => {
+      pwForm.style.display = 'block';
+    });
+
+    btnCancelPassword.addEventListener('click', () => {
+      pwForm.style.display = 'none';
+      oldPasswordInput.value = '';
+      newPasswordInput.value = '';
+      confirmPasswordInput.value = '';
+    });
+
+    // 修改密码逻辑
+    btnSavePassword.addEventListener('click', () => {
+      const currentUser = getCurrentUser();
+      if (!currentUser) {
+        alert('请先登录');
+        return;
+      }
+      const oldPw = oldPasswordInput.value;
+      const newPw = newPasswordInput.value;
+      const confirmPw = confirmPasswordInput.value;
+
+      if (!oldPw || !newPw || !confirmPw) {
+        alert('请填写完整信息');
+        return;
+      }
+      if (newPw !== confirmPw) {
+        alert('两次输入的新密码不一致');
+        return;
+      }
+      if (oldPw !== currentUser.password) {
+        alert('旧密码错误');
+        return;
+      }
+
+      const users = getUsers();
+      const user = users.find(u => u.username === currentUser.username);
+      if (user) {
+        user.password = newPw;
+        saveUsers(users);
+        // 更新当前登录用户信息
+        currentUser.password = newPw;
+        setCurrentUser(currentUser);
+        alert('密码修改成功！');
+        pwForm.style.display = 'none';
+        oldPasswordInput.value = '';
+        newPasswordInput.value = '';
+        confirmPasswordInput.value = '';
+      } else {
+        alert('发生错误，请重新登录');
+      }
+    });
+
+    // 注销账号
     btnDeleteAccount.addEventListener('click', () => {
       if (!confirm('⚠️ 确定要彻底删除你的账号吗？此操作不可恢复！')) return;
       const currentUser = getCurrentUser();
@@ -279,6 +422,7 @@
 
     btnProfile.addEventListener('click', openProfile);
 
+    // 登录/注册模态框
     function openModal(mode) {
       modalMode = mode;
       modalTitle.textContent = mode === 'login' ? '登录' : '注册';
