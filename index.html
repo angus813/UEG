@@ -37,7 +37,6 @@
       border-bottom: 2px solid #00c8ff; border-right: 2px solid #00c8ff;
     }
 
-    /* 主菜单内容 */
     .menu-view {
       display: flex; flex-direction: column; align-items: center;
       justify-content: center; min-height: 450px; padding: 40px 20px;
@@ -77,7 +76,6 @@
     .menu-card-text { font-size: 1.8rem; font-weight: 600; letter-spacing: 4px; color: #f0f4f8; }
     .menu-card-desc { font-size: 0.8rem; color: #7a8b9a; margin-top: 8px; text-align: center; }
 
-    /* 登录/注册模态框 */
     .modal {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100;
@@ -98,7 +96,6 @@
     }
     .modal-btn:hover { background: #00a3ff; }
 
-    /* 移动端适配 */
     @media (max-width: 600px) {
       .container { max-width: 100%; margin: 10px; min-height: auto; }
       .menu-title { font-size: 2rem; letter-spacing: 6px; }
@@ -113,7 +110,6 @@
 </head>
 <body>
   <div class="container">
-    <!-- 用户状态栏 -->
     <div class="user-bar" id="userBar">
       <span class="user-info" id="userInfo">未登录</span>
       <button class="btn-user" id="btnProfile" style="display:none;">个人中心</button>
@@ -122,7 +118,6 @@
       <button class="btn-user" id="btnLogout" style="display:none;">注销</button>
     </div>
 
-    <!-- 主菜单 -->
     <div class="menu-view">
       <div class="menu-title">UEG小网站</div>
       <div class="menu-subtitle">UNITED EARTH GOVNMENT 3 YEARS</div>
@@ -163,7 +158,7 @@
       </div>
     </div>
 
-    <!-- 个人中心模态框（含管理界面） -->
+    <!-- 个人中心模态框 -->
     <div class="profile-modal" id="profileModal">
       <div class="profile-modal-content">
         <div class="profile-header">
@@ -177,13 +172,11 @@
           </div>
         </div>
 
-        <!-- 管理员专属区域 -->
-        <div class="admin-section" id="adminSection" style="display:none;">
-          <h3>用户管理</h3>
-          <table class="user-table">
-            <thead><tr><th>用户名</th><th>管理员</th><th>最高记录</th><th>操作</th></tr></thead>
-            <tbody id="userTableBody"></tbody>
-          </table>
+        <!-- 管理员入口按钮（仅管理员可见） -->
+        <div id="adminEntry" style="display:none; margin-bottom: 20px;">
+          <button class="btn-profile" onclick="window.location.href='admin.html'" style="background: #ff6a00; border-color: #ff6a00; color: #000;">
+            🛡️ 管理用户
+          </button>
         </div>
 
         <div class="profile-actions">
@@ -195,7 +188,6 @@
   </div>
 
   <script>
-    // ================= 用户系统 =================
     const USERS_KEY = 'ueg_users';
     const CURRENT_USER_KEY = 'ueg_current_user';
 
@@ -214,8 +206,8 @@
       else localStorage.removeItem(CURRENT_USER_KEY);
     }
 
-    // ================= 默认管理员创建 =================
-    (function ensureDefaultAdmin() {
+    // 默认管理员
+    (function() {
       let users = getUsers();
       if (!users.find(u => u.username === 'angus')) {
         users.push({ username: 'angus', password: 'angus123', isAdmin: true, highestRecord: 0 });
@@ -223,7 +215,6 @@
       }
     })();
 
-    // ================= UI 元素 =================
     const userInfo = document.getElementById('userInfo');
     const btnLogin = document.getElementById('btnLogin');
     const btnRegister = document.getElementById('btnRegister');
@@ -235,13 +226,11 @@
     const passwordInput = document.getElementById('passwordInput');
     const modalConfirm = document.getElementById('modalConfirm');
 
-    // 个人中心元素
     const profileModal = document.getElementById('profileModal');
     const profileUsername = document.getElementById('profileUsername');
     const profileRecord = document.getElementById('profileRecord');
     const btnDeleteAccount = document.getElementById('btnDeleteAccount');
-    const adminSection = document.getElementById('adminSection');
-    const userTableBody = document.getElementById('userTableBody');
+    const adminEntry = document.getElementById('adminEntry');
 
     let modalMode = 'login';
 
@@ -253,7 +242,6 @@
         btnRegister.style.display = 'none';
         btnLogout.style.display = 'inline-block';
         btnProfile.style.display = 'inline-block';
-        // 不再显示独立管理面板
       } else {
         userInfo.textContent = '未登录';
         btnLogin.style.display = 'inline-block';
@@ -263,76 +251,13 @@
       }
     }
 
-    function renderAdminTable() {
-      const users = getUsers();
-      let html = '';
-      users.forEach(u => {
-        html += `<tr>
-          <td>${u.username}</td>
-          <td>${u.isAdmin ? '是' : '否'}</td>
-          <td>${u.highestRecord || 0}</td>
-          <td>
-            <button class="btn-small" onclick="toggleAdmin('${u.username}')">${u.isAdmin ? '取消' : '设管理'}</button>
-            <input type="number" class="record-input" id="record-${u.username}" placeholder="等级">
-            <button class="btn-small" onclick="setRecord('${u.username}')">设置</button>
-          </td>
-        </tr>`;
-      });
-      userTableBody.innerHTML = html;
-    }
-
-    // 全局函数
-    window.toggleAdmin = function(username) {
-      const users = getUsers();
-      const user = users.find(u => u.username === username);
-      if (user) {
-        user.isAdmin = !user.isAdmin;
-        saveUsers(users);
-        const cu = getCurrentUser();
-        if (cu && cu.username === username) {
-          cu.isAdmin = user.isAdmin;
-          setCurrentUser(cu);
-        }
-        renderAdminTable(); // 刷新列表
-      }
-    };
-
-    window.setRecord = function(username) {
-      const input = document.getElementById(`record-${username}`);
-      const record = parseInt(input.value);
-      if (isNaN(record) || record < 0) {
-        alert('请输入有效的数字');
-        return;
-      }
-      const users = getUsers();
-      const user = users.find(u => u.username === username);
-      if (user) {
-        user.highestRecord = record;
-        saveUsers(users);
-        renderAdminTable();
-        const cu = getCurrentUser();
-        if (cu && cu.username === username) {
-          cu.highestRecord = record;
-          setCurrentUser(cu);
-        }
-      }
-    };
-
-    // 个人中心功能
     function openProfile() {
       const currentUser = getCurrentUser();
       if (!currentUser) return;
       profileUsername.textContent = currentUser.username;
       profileRecord.textContent = currentUser.highestRecord || 0;
-
-      // 根据管理员身份显示或隐藏管理区域
-      if (currentUser.isAdmin) {
-        adminSection.style.display = 'block';
-        renderAdminTable();
-      } else {
-        adminSection.style.display = 'none';
-      }
-
+      // 管理员显示管理入口
+      adminEntry.style.display = currentUser.isAdmin ? 'block' : 'none';
       profileModal.style.display = 'flex';
     }
 
@@ -354,7 +279,6 @@
 
     btnProfile.addEventListener('click', openProfile);
 
-    // 登录/注册模态框操作
     function openModal(mode) {
       modalMode = mode;
       modalTitle.textContent = mode === 'login' ? '登录' : '注册';
@@ -370,16 +294,10 @@
     modalConfirm.addEventListener('click', () => {
       const username = usernameInput.value.trim();
       const password = passwordInput.value.trim();
-      if (!username || !password) {
-        alert('用户名和密码不能为空');
-        return;
-      }
+      if (!username || !password) { alert('用户名和密码不能为空'); return; }
       const users = getUsers();
       if (modalMode === 'register') {
-        if (users.find(u => u.username === username)) {
-          alert('用户名已存在');
-          return;
-        }
+        if (users.find(u => u.username === username)) { alert('用户名已存在'); return; }
         const isAdmin = (username === 'angus');
         users.push({ username, password, isAdmin, highestRecord: 0 });
         saveUsers(users);
@@ -387,10 +305,7 @@
         closeModal();
       } else {
         const user = users.find(u => u.username === username && u.password === password);
-        if (!user) {
-          alert('用户名或密码错误');
-          return;
-        }
+        if (!user) { alert('用户名或密码错误'); return; }
         setCurrentUser(user);
         updateUI();
         closeModal();
@@ -399,12 +314,8 @@
 
     btnLogin.addEventListener('click', () => openModal('login'));
     btnRegister.addEventListener('click', () => openModal('register'));
-    btnLogout.addEventListener('click', () => {
-      setCurrentUser(null);
-      updateUI();
-    });
+    btnLogout.addEventListener('click', () => { setCurrentUser(null); updateUI(); });
 
-    // 初始化
     updateUI();
   </script>
 </body>
