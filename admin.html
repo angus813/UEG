@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>用户管理 - UEG小网站</title>
+  <link rel="stylesheet" href="admin.css">
+  <style>
+    body {
+      background: #0a0c0f;
+      color: #e0e8f0;
+      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0;
+    }
+    .admin-container {
+      width: 900px;
+      max-width: 95%;
+      background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
+      border: 1px solid #2a3340;
+      box-shadow: 0 0 30px rgba(0,160,255,0.1);
+      position: relative;
+      overflow: hidden;
+      padding: 30px 20px;
+      margin: 20px auto;
+    }
+    .admin-container::before {
+      content: ''; position: absolute; top: 0; left: 0;
+      width: 60px; height: 60px;
+      border-top: 2px solid #00c8ff; border-left: 2px solid #00c8ff;
+    }
+    .admin-container::after {
+      content: ''; position: absolute; bottom: 0; right: 0;
+      width: 60px; height: 60px;
+      border-bottom: 2px solid #00c8ff; border-right: 2px solid #00c8ff;
+    }
+    .admin-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #2a3340;
+    }
+    .admin-title {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #ff6a00;
+      letter-spacing: 4px;
+      text-shadow: 0 0 10px rgba(255,106,0,0.4);
+    }
+    .back-link {
+      color: #00c8ff;
+      text-decoration: none;
+      font-size: 1rem;
+      border: 1px solid #00c8ff;
+      padding: 6px 15px;
+      transition: 0.3s;
+      letter-spacing: 2px;
+    }
+    .back-link:hover {
+      background: rgba(0,200,255,0.1);
+      box-shadow: 0 0 15px rgba(0,200,255,0.4);
+    }
+    .admin-table {
+      width: 100%;
+      border-collapse: collapse;
+      color: #d0dae4;
+    }
+    .admin-table th, .admin-table td {
+      padding: 12px 10px;
+      border-bottom: 1px solid #1f2a33;
+      text-align: left;
+    }
+    .admin-table th {
+      color: #7a8b9a;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .btn-small {
+      background: transparent;
+      border: 1px solid #3a5060;
+      color: #b0c7d6;
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: 0.2s;
+      font-family: inherit;
+      font-size: 0.8rem;
+      margin-right: 6px;
+    }
+    .btn-small:hover {
+      border-color: #00c8ff;
+      color: #fff;
+    }
+    .record-input {
+      background: #1a1e24;
+      border: 1px solid #3a5060;
+      color: #fff;
+      padding: 4px;
+      width: 70px;
+      font-family: inherit;
+      font-size: 0.85rem;
+    }
+    .error-message {
+      text-align: center;
+      padding: 50px;
+      color: #ff6666;
+      font-size: 1.2rem;
+    }
+    @media (max-width: 600px) {
+      .admin-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .admin-title {
+        font-size: 1.5rem;
+      }
+      .admin-table {
+        font-size: 0.8rem;
+      }
+      .admin-table th, .admin-table td {
+        padding: 8px 4px;
+      }
+      .btn-small {
+        padding: 3px 6px;
+        font-size: 0.7rem;
+      }
+      .record-input {
+        width: 50px;
+        font-size: 0.75rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-container" id="adminContainer">
+    <div class="admin-header">
+      <div class="admin-title">用户管理</div>
+      <a href="index.html" class="back-link">← 返回主页</a>
+    </div>
+
+    <!-- 非管理员提示（默认隐藏） -->
+    <div id="unauthorized" style="display:none;">
+      <div class="error-message">⚠️ 您没有管理员权限，无法访问此页面。</div>
+      <div style="text-align:center; margin-top:20px;">
+        <a href="index.html" class="back-link">返回主页</a>
+      </div>
+    </div>
+
+    <!-- 管理表格（默认隐藏） -->
+    <div id="adminContent" style="display:none;">
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>用户名</th>
+            <th>管理员</th>
+            <th>最高记录</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="userTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const USERS_KEY = 'ueg_users';
+    const CURRENT_USER_KEY = 'ueg_current_user';
+
+    function getUsers() {
+      return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+    }
+    function saveUsers(users) {
+      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    }
+    function getCurrentUser() {
+      const cu = localStorage.getItem(CURRENT_USER_KEY);
+      return cu ? JSON.parse(cu) : null;
+    }
+
+    // 权限检查
+    function checkAdmin() {
+      const currentUser = getCurrentUser();
+      if (!currentUser || !currentUser.isAdmin) {
+        document.getElementById('unauthorized').style.display = 'block';
+        document.getElementById('adminContent').style.display = 'none';
+        return false;
+      }
+      document.getElementById('unauthorized').style.display = 'none';
+      document.getElementById('adminContent').style.display = 'block';
+      return true;
+    }
+
+    // 渲染用户表格
+    function renderTable() {
+      const users = getUsers();
+      const tbody = document.getElementById('userTableBody');
+      let html = '';
+      users.forEach(user => {
+        html += `<tr>
+          <td>${user.username}</td>
+          <td>${user.isAdmin ? '是' : '否'}</td>
+          <td>${user.highestRecord || 0}</td>
+          <td>
+            <button class="btn-small" onclick="toggleAdmin('${user.username}')">${user.isAdmin ? '取消管理' : '设为管理'}</button>
+            <input type="number" class="record-input" id="record-${user.username}" placeholder="等级" value="${user.highestRecord || ''}">
+            <button class="btn-small" onclick="setRecord('${user.username}')">保存</button>
+          </td>
+        </tr>`;
+      });
+      tbody.innerHTML = html;
+    }
+
+    // 切换管理员权限
+    window.toggleAdmin = function(username) {
+      const users = getUsers();
+      const user = users.find(u => u.username === username);
+      if (!user) return;
+      user.isAdmin = !user.isAdmin;
+      saveUsers(users);
+      // 如果修改的是当前登录用户，更新 session
+      const currentUser = getCurrentUser();
+      if (currentUser && currentUser.username === username) {
+        currentUser.isAdmin = user.isAdmin;
+        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUser));
+        // 如果取消了自己的管理员权限，刷新页面后会失去访问权限，重新检查
+        if (!user.isAdmin) {
+          alert('你已取消自己的管理员权限，即将跳转回主页。');
+          window.location.href = 'index.html';
+          return;
+        }
+      }
+      renderTable();
+    };
+
+    // 设置最高记录
+    window.setRecord = function(username) {
+      const input = document.getElementById(`record-${username}`);
+      const record = parseInt(input.value);
+      if (isNaN(record) || record < 0) {
+        alert('请输入有效的数字');
+        return;
+      }
+      const users = getUsers();
+      const user = users.find(u => u.username === username);
+      if (user) {
+        user.highestRecord = record;
+        saveUsers(users);
+        // 更新当前用户 session
+        const currentUser = getCurrentUser();
+        if (currentUser && currentUser.username === username) {
+          currentUser.highestRecord = record;
+          localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUser));
+        }
+        renderTable();
+      }
+    };
+
+    // 初始化
+    if (checkAdmin()) {
+      renderTable();
+    }
+  </script>
+</body>
+</html>
