@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>卫戍协议 - 星河防线</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0c0f;
+      color: #e0e8f0;
+      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      touch-action: manipulation;
+    }
+    .game-container {
+      width: 100%;
+      max-width: 500px;
+      background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
+      border: 1px solid #2a3340;
+      box-shadow: 0 0 30px rgba(0,160,255,0.1);
+      position: relative;
+      overflow: hidden;
+      margin: 10px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 15px;
+      border-bottom: 1px solid #2a3340;
+      background: rgba(20,25,30,0.9);
+    }
+    .title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: #00c8ff;
+      text-shadow: 0 0 10px #00a3ff;
+    }
+    .stats {
+      display: flex;
+      gap: 15px;
+      font-size: 0.9rem;
+    }
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .stat-icon {
+      font-size: 1.2rem;
+    }
+    #energyDisplay, #lifeDisplay, #waveDisplay {
+      font-weight: 700;
+      color: #ff6a00;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      grid-template-rows: repeat(6, 1fr);
+      gap: 2px;
+      padding: 10px;
+      background: #0d1116;
+      aspect-ratio: 5/6;
+      margin: 0 auto;
+    }
+    .cell {
+      background: #1a2028;
+      border: 1px solid #2a3340;
+      position: relative;
+      cursor: pointer;
+      transition: 0.1s;
+    }
+    .cell:hover { background: #25303a; }
+    .tower {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      background: #1f3a4a;
+      border-radius: 2px;
+    }
+    .enemy {
+      position: absolute;
+      width: 60%;
+      height: 60%;
+      top: 20%;
+      left: 20%;
+      background: #ff4444;
+      border-radius: 2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: bold;
+      color: white;
+    }
+    .tower-bar {
+      display: flex;
+      gap: 10px;
+      padding: 10px;
+      background: rgba(20,25,30,0.8);
+      border-top: 1px solid #2a3340;
+      overflow-x: auto;
+    }
+    .tower-card {
+      flex: 1;
+      min-width: 70px;
+      background: rgba(20,26,33,0.9);
+      border: 1px solid #2e3b47;
+      padding: 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: 0.2s;
+      user-select: none;
+    }
+    .tower-card.selected {
+      border-color: #ff6a00;
+      box-shadow: 0 0 10px rgba(255,106,0,0.4);
+    }
+    .tower-card:active { background: rgba(255,106,0,0.2); }
+    .tower-icon { font-size: 2rem; }
+    .tower-name { font-size: 0.8rem; color: #b0c7d6; }
+    .tower-cost { font-size: 0.7rem; color: #ffaa00; }
+    .btn-start {
+      background: #00c8ff;
+      border: none;
+      color: #000;
+      padding: 8px 20px;
+      font-weight: bold;
+      font-family: inherit;
+      cursor: pointer;
+      letter-spacing: 2px;
+      margin: 10px auto;
+      display: block;
+    }
+    /* 强化选择弹窗 */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.8);
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+    .modal-content {
+      background: #13171c;
+      border: 1px solid #2a3340;
+      padding: 20px;
+      width: 300px;
+      max-width: 90%;
+    }
+    .modal-content h3 {
+      color: #ff6a00;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+    .upgrade-option {
+      background: #1f2a33;
+      border: 1px solid #2a3340;
+      padding: 12px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .upgrade-option:hover { border-color: #00c8ff; }
+    .game-over {
+      display: none;
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.9);
+      padding: 30px;
+      text-align: center;
+      z-index: 50;
+    }
+    .game-over h2 { color: #ff4444; }
+    .btn-restart {
+      background: #00c8ff;
+      border: none;
+      padding: 10px 25px;
+      margin-top: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    @media (max-width: 500px) {
+      .tower-icon { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="game-container">
+  <div class="header">
+    <div class="title">卫戍协议</div>
+    <div class="stats">
+      <div class="stat">⚡<span id="energyDisplay">100</span></div>
+      <div class="stat">❤️<span id="lifeDisplay">10</span></div>
+      <div class="stat">🌊<span id="waveDisplay">1</span></div>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div style="text-align:center; padding:5px;">
+    <button class="btn-start" id="startBtn">开始作战</button>
+  </div>
+
+  <div class="tower-bar" id="towerBar">
+    <div class="tower-card" data-type="guard" data-cost="20">
+      <div class="tower-icon">⚓</div>
+      <div class="tower-name">护卫舰</div>
+      <div class="tower-cost">20⚡</div>
+    </div>
+    <div class="tower-card" data-type="destroyer" data-cost="35">
+      <div class="tower-icon">🚢</div>
+      <div class="tower-name">驱逐舰</div>
+      <div class="tower-cost">35⚡</div>
+    </div>
+    <div class="tower-card" data-type="cruiser" data-cost="50">
+      <div class="tower-icon">🛳️</div>
+      <div class="tower-name">巡洋舰</div>
+      <div class="tower-cost">50⚡</div>
+    </div>
+    <div class="tower-card" data-type="battleship" data-cost="80">
+      <div class="tower-icon">🚢✨</div>
+      <div class="tower-name">战列舰</div>
+      <div class="tower-cost">80⚡</div>
+    </div>
+  </div>
+
+  <!-- 强化选择弹窗 -->
+  <div class="modal" id="upgradeModal">
+    <div class="modal-content">
+      <h3>选择强化协议</h3>
+      <div id="upgradeOptions"></div>
+    </div>
+  </div>
+
+  <!-- 游戏结束 -->
+  <div class="game-over" id="gameOver">
+    <h2>防线失守</h2>
+    <p>你坚持了 <span id="finalWaves">0</span> 波</p>
+    <button class="btn-restart" onclick="restartGame()">重新部署</button>
+  </div>
+</div>
+
+<script>
+  // 游戏状态
+  const GRID_COLS = 5;
+  const GRID_ROWS = 6;
+  let grid = Array(GRID_ROWS).fill().map(() => Array(GRID_COLS).fill(null)); // 0:空, tower对象
+  let enemies = [];
+  let energy = 100;
+  let life = 10;
+  let wave = 1;
+  let gameActive = false;
+  let selectedTower = null;
+  let spawnInterval = null;
+  let gameLoopInterval = null;
+  let energyRegen = 2; // 每秒回复
+  let globalDamageBonus = 0;
+  let globalAttackSpeed = 1;
+
+  // 塔数据
+  const towerStats = {
+    guard: { name:'护卫舰', damage:10, range:1.5, fireRate:1.0, cost:20 },
+    destroyer: { name:'驱逐舰', damage:18, range:2.5, fireRate:1.2, cost:35 },
+    cruiser: { name:'巡洋舰', damage:30, range:3.0, fireRate:0.8, cost:50 },
+    battleship: { name:'战列舰', damage:55, range:4.0, fireRate:0.5, cost:80 }
+  };
+
+  // 敌人类型
+  function createEnemy(waveNum) {
+    let baseHp = 50 + waveNum * 20;
+    let speed = 0.6 + waveNum * 0.05;
+    let armor = Math.floor(waveNum / 3) * 2;
+    return {
+      hp: baseHp,
+      maxHp: baseHp,
+      speed: speed,
+      armor: armor,
+      row: Math.floor(Math.random() * GRID_ROWS),
+      col: -0.5, // 从左侧外开始
+      reward: 15 + waveNum * 2
+    };
+  }
+
+  // 初始化网格
+  function renderGrid() {
+    const gridEl = document.getElementById('grid');
+    gridEl.innerHTML = '';
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.row = r;
+        cell.dataset.col = c;
+        // 放置塔
+        cell.addEventListener('click', () => placeTower(r, c));
+        if (grid[r][c]) {
+          cell.innerHTML = '<div class="tower">' + (grid[r][c].type === 'guard' ? '⚓' : grid[r][c].type === 'destroyer' ? '🚢' : grid[r][c].type === 'cruiser' ? '🛳️' : '🚢✨') + '</div>';
+        }
+        gridEl.appendChild(cell);
+      }
+    }
+  }
+
+  function renderEnemies() {
+    // 清除旧敌人元素
+    document.querySelectorAll('.enemy').forEach(el => el.remove());
+    const cells = document.querySelectorAll('.cell');
+    enemies.forEach(enemy => {
+      const row = Math.floor(enemy.row);
+      const col = Math.floor(enemy.col);
+      if (row >= 0 && row < GRID_ROWS && col >= 0 && col < GRID_COLS) {
+        const index = row * GRID_COLS + col;
+        if (cells[index]) {
+          const enemyEl = document.createElement('div');
+          enemyEl.className = 'enemy';
+          enemyEl.style.width = `${Math.max(20, (enemy.hp / enemy.maxHp) * 90)}%`;
+          enemyEl.innerHTML = Math.ceil(enemy.hp);
+          cells[index].appendChild(enemyEl);
+        }
+      }
+    });
+  }
+
+  function placeTower(row, col) {
+    if (!gameActive || !selectedTower) return;
+    if (grid[row][col]) return; // 已占用
+    const stats = towerStats[selectedTower];
+    if (energy < stats.cost) return;
+    energy -= stats.cost;
+    grid[row][col] = {
+      type: selectedTower,
+      lastFireTime: 0,
+      damage: stats.damage + globalDamageBonus,
+      fireRate: stats.fireRate * globalAttackSpeed,
+      range: stats.range
+    };
+    updateEnergy();
+    renderGrid();
+  }
+
+  function updateEnergy() {
+    document.getElementById('energyDisplay').textContent = Math.floor(energy);
+  }
+  function updateLife() {
+    document.getElementById('lifeDisplay').textContent = life;
+  }
+  function updateWave() {
+    document.getElementById('waveDisplay').textContent = wave;
+  }
+
+  // 攻击逻辑
+  function towersAttack(now) {
+    for (let r = 0; r < GRID_ROWS; r++) {
+      for (let c = 0; c < GRID_COLS; c++) {
+        const tower = grid[r][c];
+        if (!tower) continue;
+        if (now - tower.lastFireTime < 1000 / tower.fireRate) continue;
+        // 寻找范围内最靠前的敌人
+        let target = null;
+        for (let enemy of enemies) {
+          if (enemy.col > GRID_COLS) continue;
+          const dist = Math.sqrt(Math.pow(enemy.row - r, 2) + Math.pow(enemy.col - c, 2));
+          if (dist <= tower.range) {
+            if (!target || enemy.col > target.col) {
+              target = enemy;
+            }
+          }
+        }
+        if (target) {
+          tower.lastFireTime = now;
+          let dmg = tower.damage - target.armor;
+          if (dmg < 1) dmg = 1;
+          target.hp -= dmg;
+          if (target.hp <= 0) {
+            const idx = enemies.indexOf(target);
+            if (idx > -1) {
+              enemies.splice(idx, 1);
+              energy += target.reward;
+              updateEnergy();
+            }
+          }
+        }
+      }
+    }
+  }
+
+  function moveEnemies() {
+    for (let enemy of enemies) {
+      enemy.col += enemy.speed * 0.016; // 假设60fps约为16ms，实际用间隔更准确
+    }
+    // 检查越界
+    enemies = enemies.filter(enemy => {
+      if (enemy.col >= GRID_COLS) {
+        life--;
+        updateLife();
+        if (life <= 0) {
+          gameOver();
+        }
+        return false;
+      }
+      return true;
+    });
+  }
+
+  function gameLoop() {
+    const now = Date.now();
+    towersAttack(now);
+    moveEnemies();
+    renderEnemies();
+    // 能量回复
+    energy = Math.min(energy + energyRegen * 0.05, 200);
+    updateEnergy();
+  }
+
+  function spawnEnemy() {
+    if (!gameActive) return;
+    const enemy = createEnemy(wave);
+    enemies.push(enemy);
+  }
+
+  function startWave() {
+    document.getElementById('startBtn').style.display = 'none';
+    gameActive = true;
+    // 每波敌人数量
+    const enemyCount = 3 + wave * 2;
+    let spawned = 0;
+    spawnInterval = setInterval(() => {
+      if (spawned < enemyCount) {
+        spawnEnemy();
+        spawned++;
+      } else {
+        clearInterval(spawnInterval);
+        // 检查是否清完敌人
+        checkWaveEnd();
+      }
+    }, 800);
+  }
+
+  function checkWaveEnd() {
+    const checker = setInterval(() => {
+      if (!gameActive) {
+        clearInterval(checker);
+        return;
+      }
+      if (enemies.length === 0 && !spawnInterval) {
+        clearInterval(checker);
+        // 波次结束，弹出强化选择
+        gameActive = false;
+        showUpgrade();
+      }
+    }, 500);
+  }
+
+  function showUpgrade() {
+    const upgrades = [
+      { name: '能量回复+1', effect: () => { energyRegen += 1; } },
+      { name: '所有塔攻击+5', effect: () => { globalDamageBonus += 5; } },
+      { name: '攻速提升20%', effect: () => { globalAttackSpeed *= 1.2; } },
+      { name: '生命恢复2点', effect: () => { life = Math.min(life + 2, 20); updateLife(); } },
+      { name: '立即获得80能量', effect: () => { energy = Math.min(energy + 80, 200); updateEnergy(); } },
+    ];
+    // 随机选3个
+    const shuffled = [...upgrades].sort(() => Math.random() - 0.5);
+    const options = shuffled.slice(0, 3);
+    const container = document.getElementById('upgradeOptions');
+    container.innerHTML = options.map((opt, i) => `
+      <div class="upgrade-option" onclick="selectUpgrade(${i})">${opt.name}</div>
+    `).join('');
+    document.getElementById('upgradeModal').style.display = 'flex';
+    // 保存当前选项
+    window.tempUpgrades = options;
+  }
+
+  window.selectUpgrade = function(index) {
+    if (window.tempUpgrades && window.tempUpgrades[index]) {
+      window.tempUpgrades[index].effect();
+    }
+    document.getElementById('upgradeModal').style.display = 'none';
+    wave++;
+    updateWave();
+    document.getElementById('startBtn').style.display = 'block';
+    // 下一波准备
+  };
+
+  function gameOver() {
+    gameActive = false;
+    clearInterval(spawnInterval);
+    clearInterval(gameLoopInterval);
+    document.getElementById('finalWaves').textContent = wave;
+    document.getElementById('gameOver').style.display = 'block';
+  }
+
+  window.restartGame = function() {
+    // 重置所有
+    grid = Array(GRID_ROWS).fill().map(() => Array(GRID_COLS).fill(null));
+    enemies = [];
+    energy = 100;
+    life = 10;
+    wave = 1;
+    energyRegen = 2;
+    globalDamageBonus = 0;
+    globalAttackSpeed = 1;
+    gameActive = false;
+    selectedTower = null;
+    clearInterval(spawnInterval);
+    clearInterval(gameLoopInterval);
+    document.getElementById('gameOver').style.display = 'none';
+    document.getElementById('startBtn').style.display = 'block';
+    updateEnergy();
+    updateLife();
+    updateWave();
+    renderGrid();
+    renderEnemies();
+  };
+
+  // 塔选择
+  document.querySelectorAll('.tower-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.tower-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+      selectedTower = card.dataset.type;
+    });
+  });
+
+  document.getElementById('startBtn').addEventListener('click', () => {
+    if (gameActive) return;
+    startWave();
+    gameLoopInterval = setInterval(gameLoop, 50);
+  });
+
+  // 初始化
+  renderGrid();
+  updateEnergy();
+  updateLife();
+  updateWave();
+</script>
+</body>
+</html>

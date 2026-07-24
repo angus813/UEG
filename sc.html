@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>色块拼图 · 移动端适配 · 无限关卡</title>
+    <title>色块拼图 · 障碍上限 · 移动端流畅拖拽</title>
     <style>
         :root {
             --cell-size: 48px;
@@ -36,11 +36,10 @@
             -webkit-user-select: none;
             -webkit-tap-highlight-color: transparent;
             -webkit-touch-callout: none;
-            -webkit-overflow-scrolling: touch;
+            touch-action: manipulation;
         }
 
-        html,
-        body {
+        html, body {
             width: 100%;
             height: 100%;
             overflow: hidden;
@@ -63,7 +62,6 @@
             padding-bottom: max(6px, env(safe-area-inset-bottom));
             padding-left: max(6px, env(safe-area-inset-left));
             padding-right: max(6px, env(safe-area-inset-right));
-            -webkit-overflow-scrolling: touch;
         }
 
         .top-bar {
@@ -90,7 +88,6 @@
             font-size: 13px;
             font-weight: 600;
             letter-spacing: 1px;
-            white-space: nowrap;
         }
         .timer-display {
             font-size: 14px;
@@ -99,20 +96,14 @@
             letter-spacing: 1px;
             font-family: 'SF Mono', 'Consolas', 'Menlo', monospace;
             transition: color 0.5s;
-            white-space: nowrap;
         }
         .timer-display.warning {
             color: var(--warning);
             animation: pulse-warning 1s infinite;
         }
         @keyframes pulse-warning {
-            0%,
-            100% {
-                opacity: 1;
-            }
-            50% {
-                opacity: 0.5;
-            }
+            0%,100% { opacity: 1; }
+            50% { opacity: 0.5; }
         }
         .hint-banner {
             display: none;
@@ -125,20 +116,11 @@
             color: var(--warning);
             font-size: 11px;
             animation: fadeInSlide 0.5s ease;
-            white-space: nowrap;
         }
-        .hint-banner.visible {
-            display: flex;
-        }
+        .hint-banner.visible { display: flex; }
         @keyframes fadeInSlide {
-            from {
-                opacity: 0;
-                transform: translateY(-4px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         .game-container {
@@ -233,39 +215,15 @@
             border-radius: 2px;
             transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1.2);
         }
-        .col-bar {
-            width: var(--cell-size);
-            height: var(--hint-bar-height);
-        }
-        .row-bar {
-            width: var(--hint-bar-width);
-            height: var(--cell-size);
-        }
-        .hint-bar[data-target-color="red"] {
-            background: rgba(232, 93, 111, 0.4);
-        }
-        .hint-bar[data-target-color="blue"] {
-            background: rgba(91, 155, 213, 0.4);
-        }
-        .hint-bar[data-target-color="green"] {
-            background: rgba(76, 175, 132, 0.4);
-        }
-        .hint-bar.lit {
-            box-shadow: 0 0 10px 3px var(--glow-color);
-            transform: scale(1.04);
-        }
-        .hint-bar.lit-red {
-            background: var(--red-light);
-            --glow-color: rgba(255, 120, 135, 0.8);
-        }
-        .hint-bar.lit-blue {
-            background: var(--blue-light);
-            --glow-color: rgba(120, 185, 245, 0.8);
-        }
-        .hint-bar.lit-green {
-            background: var(--green-light);
-            --glow-color: rgba(100, 225, 160, 0.8);
-        }
+        .col-bar { width: var(--cell-size); height: var(--hint-bar-height); }
+        .row-bar { width: var(--hint-bar-width); height: var(--cell-size); }
+        .hint-bar[data-target-color="red"] { background: rgba(232, 93, 111, 0.4); }
+        .hint-bar[data-target-color="blue"] { background: rgba(91, 155, 213, 0.4); }
+        .hint-bar[data-target-color="green"] { background: rgba(76, 175, 132, 0.4); }
+        .hint-bar.lit { box-shadow: 0 0 10px 3px var(--glow-color); transform: scale(1.04); }
+        .hint-bar.lit-red { background: var(--red-light); --glow-color: rgba(255, 120, 135, 0.8); }
+        .hint-bar.lit-blue { background: var(--blue-light); --glow-color: rgba(120, 185, 245, 0.8); }
+        .hint-bar.lit-green { background: var(--green-light); --glow-color: rgba(100, 225, 160, 0.8); }
 
         .extra-bar {
             display: none;
@@ -274,35 +232,17 @@
             box-shadow: 0 0 8px 2px rgba(255, 70, 70, 0.5);
             animation: extra-appear 0.3s ease;
             background-color: #555;
-            background-image: repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255, 255, 255, 0.3) 2px, rgba(255, 255, 255, 0.3) 4px);
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.3) 2px, rgba(255,255,255,0.3) 4px);
         }
         @keyframes extra-appear {
-            from {
-                transform: scale(0);
-                opacity: 0;
-            }
-            to {
-                transform: scale(1);
-                opacity: 1;
-            }
+            from { transform: scale(0); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
         }
-        .extra-bar.col-extra {
-            width: var(--cell-size);
-            height: var(--hint-bar-height);
-        }
-        .extra-bar.row-extra {
-            width: var(--hint-bar-width);
-            height: var(--cell-size);
-        }
-        .extra-bar.red-extra {
-            background-color: var(--red-base);
-        }
-        .extra-bar.blue-extra {
-            background-color: var(--blue-base);
-        }
-        .extra-bar.green-extra {
-            background-color: var(--green-base);
-        }
+        .extra-bar.col-extra { width: var(--cell-size); height: var(--hint-bar-height); }
+        .extra-bar.row-extra { width: var(--hint-bar-width); height: var(--cell-size); }
+        .extra-bar.red-extra { background-color: var(--red-base); }
+        .extra-bar.blue-extra { background-color: var(--blue-base); }
+        .extra-bar.green-extra { background-color: var(--green-base); }
 
         .grid-wrapper {
             position: relative;
@@ -311,6 +251,7 @@
             box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(255, 255, 255, 0.07);
             padding: var(--padding-grid);
             flex-shrink: 0;
+            touch-action: none;
         }
         .grid {
             display: grid;
@@ -327,49 +268,37 @@
             cursor: default;
             border: 1px solid rgba(255, 255, 255, 0.03);
         }
-        .grid-cell.occupied-red {
-            background: #e85d6f;
-            box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.18), 0 0 5px rgba(232, 93, 111, 0.35);
+        .grid-cell.occupied-red { background: #e85d6f; box-shadow: inset 0 0 10px rgba(255,255,255,0.18), 0 0 5px rgba(232,93,111,0.35); }
+        .grid-cell.occupied-blue { background: #5b9bd5; box-shadow: inset 0 0 10px rgba(255,255,255,0.18), 0 0 5px rgba(91,155,213,0.35); }
+        .grid-cell.occupied-green { background: #4caf84; box-shadow: inset 0 0 10px rgba(255,255,255,0.18), 0 0 5px rgba(76,175,132,0.35); }
+        .grid-cell.blocked {
+            background: #2a2a35 !important;
+            border: 1px solid rgba(255,255,255,0.08);
+            position: relative;
         }
-        .grid-cell.occupied-blue {
-            background: #5b9bd5;
-            box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.18), 0 0 5px rgba(91, 155, 213, 0.35);
-        }
-        .grid-cell.occupied-green {
-            background: #4caf84;
-            box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.18), 0 0 5px rgba(76, 175, 132, 0.35);
+        .grid-cell.blocked::after {
+            content: '';
+            position: absolute;
+            top: 15%; left: 15%;
+            width: 70%; height: 70%;
+            background: repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,80,80,0.25) 2px, rgba(255,80,80,0.25) 4px);
+            border-radius: 2px;
         }
         .grid-cell.highlight-valid {
-            box-shadow: 0 0 0 3px rgba(100, 220, 150, 0.7), 0 0 14px rgba(100, 220, 150, 0.35) !important;
+            box-shadow: 0 0 0 3px rgba(100,220,150,0.7), 0 0 14px rgba(100,220,150,0.35) !important;
             z-index: 5;
         }
         .grid-cell.highlight-invalid {
-            box-shadow: 0 0 0 3px rgba(255, 100, 100, 0.7), 0 0 14px rgba(255, 100, 100, 0.35) !important;
+            box-shadow: 0 0 0 3px rgba(255,100,100,0.7), 0 0 14px rgba(255,100,100,0.35) !important;
             z-index: 5;
         }
-        .grid-cell.hint-target {
-            animation: hint-pulse 2s infinite;
-        }
-        .grid-cell.hint-target-red {
-            background: rgba(232, 93, 111, 0.3) !important;
-            border-color: rgba(232, 93, 111, 0.5) !important;
-        }
-        .grid-cell.hint-target-blue {
-            background: rgba(91, 155, 213, 0.3) !important;
-            border-color: rgba(91, 155, 213, 0.5) !important;
-        }
-        .grid-cell.hint-target-green {
-            background: rgba(76, 175, 132, 0.3) !important;
-            border-color: rgba(76, 175, 132, 0.5) !important;
-        }
+        .grid-cell.hint-target { animation: hint-pulse 2s infinite; }
+        .grid-cell.hint-target-red { background: rgba(232,93,111,0.3) !important; border-color: rgba(232,93,111,0.5) !important; }
+        .grid-cell.hint-target-blue { background: rgba(91,155,213,0.3) !important; border-color: rgba(91,155,213,0.5) !important; }
+        .grid-cell.hint-target-green { background: rgba(76,175,132,0.3) !important; border-color: rgba(76,175,132,0.5) !important; }
         @keyframes hint-pulse {
-            0%,
-            100% {
-                opacity: 0.5;
-            }
-            50% {
-                opacity: 0.85;
-            }
+            0%,100% { opacity: 0.5; }
+            50% { opacity: 0.85; }
         }
 
         .pieces-panel {
@@ -385,11 +314,10 @@
             flex-shrink: 0;
         }
         .pieces-panel h3 {
-            color: rgba(255, 255, 255, 0.5);
+            color: rgba(255,255,255,0.5);
             font-size: 11px;
             letter-spacing: 1.5px;
             font-weight: 500;
-            white-space: nowrap;
         }
         .piece-card {
             display: flex;
@@ -402,8 +330,8 @@
             transition: transform 0.2s, opacity 0.3s;
             padding: 4px;
             border-radius: 8px;
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px dashed rgba(255, 255, 255, 0.1);
+            background: rgba(255,255,255,0.02);
+            border: 1px dashed rgba(255,255,255,0.1);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -413,8 +341,8 @@
         }
         .piece-holder:hover {
             transform: scale(1.04);
-            background: rgba(255, 255, 255, 0.04);
-            border-color: rgba(255, 255, 255, 0.22);
+            background: rgba(255,255,255,0.04);
+            border-color: rgba(255,255,255,0.22);
         }
         .piece-holder:active {
             cursor: grabbing;
@@ -430,28 +358,16 @@
             gap: 1px;
             pointer-events: none;
         }
-        .mini-cell {
-            border-radius: 2px;
-            pointer-events: none;
-        }
-        .mini-cell.filled-red {
-            background: #e85d6f;
-        }
-        .mini-cell.filled-blue {
-            background: #5b9bd5;
-        }
-        .mini-cell.filled-green {
-            background: #4caf84;
-        }
-        .mini-cell.empty {
-            background: transparent;
-        }
+        .mini-cell { border-radius: 2px; pointer-events: none; }
+        .mini-cell.filled-red { background: #e85d6f; }
+        .mini-cell.filled-blue { background: #5b9bd5; }
+        .mini-cell.filled-green { background: #4caf84; }
+        .mini-cell.empty { background: transparent; }
         .piece-label {
             font-size: 8px;
-            color: rgba(255, 255, 255, 0.35);
+            color: rgba(255,255,255,0.35);
             text-align: center;
             pointer-events: none;
-            white-space: nowrap;
         }
         .rotate-btn {
             width: 34px;
@@ -459,8 +375,8 @@
             min-width: 34px;
             min-height: 34px;
             border-radius: 50%;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.04);
             color: #ccc;
             cursor: pointer;
             font-size: 14px;
@@ -469,22 +385,15 @@
             justify-content: center;
             transition: all 0.3s;
             touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
         }
         .rotate-btn:hover {
-            background: rgba(255, 255, 255, 0.12);
-            border-color: rgba(255, 255, 255, 0.35);
+            background: rgba(255,255,255,0.12);
+            border-color: rgba(255,255,255,0.35);
             color: #fff;
             transform: rotate(90deg);
         }
-        .rotate-btn:active {
-            transform: rotate(180deg) scale(0.9);
-            transition: transform 0.1s;
-        }
-        .rotate-btn.disabled {
-            opacity: 0.2;
-            pointer-events: none;
-        }
+        .rotate-btn:active { transform: rotate(180deg) scale(0.9); transition: transform 0.1s; }
+        .rotate-btn.disabled { opacity: 0.2; pointer-events: none; }
 
         .drag-preview {
             position: fixed;
@@ -493,28 +402,23 @@
             display: grid;
             gap: var(--gap-sm);
             opacity: 0.8;
-            filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.55));
-            transition: none;
+            filter: drop-shadow(0 8px 18px rgba(0,0,0,0.55));
+            will-change: left, top;
         }
         .drag-preview .drag-cell {
             border-radius: 3px;
-            box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.2);
+            box-shadow: inset 0 0 5px rgba(255,255,255,0.2);
             width: var(--cell-size);
             height: var(--cell-size);
         }
 
-        .btn-row {
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
+        .btn-row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
         .btn {
             padding: 10px 18px;
             min-height: 40px;
             border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.16);
-            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255,255,255,0.16);
+            background: rgba(255,255,255,0.04);
             color: #ccc;
             cursor: pointer;
             font-size: 12px;
@@ -522,218 +426,72 @@
             transition: all 0.3s;
             font-family: inherit;
             touch-action: manipulation;
-            -webkit-tap-highlight-color: transparent;
-            white-space: nowrap;
         }
-        .btn:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.28);
-            color: #fff;
-        }
-        .btn:active {
-            transform: scale(0.95);
-            transition: transform 0.1s;
-        }
+        .btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.28); color: #fff; }
+        .btn:active { transform: scale(0.95); transition: transform 0.1s; }
 
         .win-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.78);
+            top:0; left:0; right:0; bottom:0;
+            background: rgba(0,0,0,0.78);
             z-index: 2000;
             display: flex;
             align-items: center;
             justify-content: center;
             animation: fadeIn 0.35s ease;
         }
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-            }
-            to {
-                opacity: 1;
-            }
-        }
+        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
         .win-dialog {
             background: #1e2a3a;
             border-radius: 18px;
             padding: 28px 22px;
             text-align: center;
-            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55), 0 0 0 2px rgba(255, 215, 60, 0.35);
+            box-shadow: 0 24px 48px rgba(0,0,0,0.55), 0 0 0 2px rgba(255,215,60,0.35);
             animation: popIn 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             max-width: 90vw;
             margin: 0 16px;
         }
-        @keyframes popIn {
-            from {
-                transform: scale(0.7);
-                opacity: 0;
-            }
-            to {
-                transform: scale(1);
-                opacity: 1;
-            }
-        }
-        .win-dialog .trophy {
-            font-size: 48px;
-            animation: bounce 0.8s ease infinite alternate;
-        }
-        @keyframes bounce {
-            from {
-                transform: translateY(0);
-            }
-            to {
-                transform: translateY(-10px);
-            }
-        }
-        .win-dialog h2 {
-            color: #f0c040;
-            font-size: 22px;
-            margin: 4px 0;
-            letter-spacing: 1px;
-        }
-        .win-dialog p {
-            color: #bbb;
-            margin: 3px 0 12px;
-            font-size: 12px;
-        }
+        @keyframes popIn { from { transform:scale(0.7); opacity:0; } to { transform:scale(1); opacity:1; } }
+        .win-dialog .trophy { font-size: 48px; animation: bounce 0.8s ease infinite alternate; }
+        @keyframes bounce { from { transform:translateY(0); } to { transform:translateY(-10px); } }
+        .win-dialog h2 { color: #f0c040; font-size: 22px; margin: 4px 0; letter-spacing: 1px; }
+        .win-dialog p { color: #bbb; margin: 3px 0 12px; font-size: 12px; }
         .win-dialog button {
-            padding: 12px 28px;
-            min-height: 44px;
-            border-radius: 22px;
-            border: none;
+            padding: 12px 28px; min-height: 44px; border-radius: 22px; border: none;
             background: linear-gradient(135deg, #f0c040, #e0a030);
-            color: #1a1a2e;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            letter-spacing: 1px;
-            font-family: inherit;
-            box-shadow: 0 5px 18px rgba(240, 192, 64, 0.28);
+            color: #1a1a2e; cursor: pointer; font-size: 14px; font-weight: 600;
+            letter-spacing: 1px; font-family: inherit;
+            box-shadow: 0 5px 18px rgba(240,192,64,0.28);
             touch-action: manipulation;
         }
-        .win-dialog button:hover {
-            transform: scale(1.04);
-        }
-        .win-dialog button:active {
-            transform: scale(0.95);
-        }
+        .win-dialog button:hover { transform: scale(1.04); }
+        .win-dialog button:active { transform: scale(0.95); }
 
-        /* ========== 响应式布局 ========== */
         @media (max-width: 620px) {
-            .game-container {
-                flex-direction: column;
-                gap: 12px;
-                padding: 12px 8px;
-                border-radius: 14px;
-            }
-            .pieces-panel {
-                flex-direction: row;
-                flex-wrap: wrap;
-                gap: 8px;
-                min-width: auto;
-                justify-content: center;
-                padding: 10px 8px;
-                border-radius: 12px;
-                width: 100%;
-            }
-            .pieces-panel h3 {
-                width: 100%;
-                text-align: center;
-                font-size: 10px;
-                margin-bottom: 0;
-            }
-            .piece-card {
-                gap: 2px;
-            }
-            .btn {
-                padding: 8px 14px;
-                min-height: 36px;
-                font-size: 11px;
-                border-radius: 16px;
-            }
-            .top-bar {
-                padding: 6px 10px;
-                gap: 5px;
-                border-radius: 16px;
-            }
-            .level-badge {
-                font-size: 11px;
-                padding: 3px 10px;
-            }
-            .timer-display {
-                font-size: 12px;
-            }
-            .hint-banner {
-                font-size: 10px;
-                padding: 3px 8px;
-            }
+            .game-container { flex-direction: column; gap: 12px; padding: 12px 8px; border-radius: 14px; }
+            .pieces-panel { flex-direction: row; flex-wrap: wrap; gap: 8px; min-width: auto; justify-content: center; padding: 10px 8px; border-radius: 12px; width: 100%; }
+            .pieces-panel h3 { width: 100%; text-align: center; font-size: 10px; margin-bottom: 0; }
+            .piece-card { gap: 2px; }
+            .btn { padding: 8px 14px; min-height: 36px; font-size: 11px; border-radius: 16px; }
+            .top-bar { padding: 6px 10px; gap: 5px; border-radius: 16px; }
+            .level-badge { font-size: 11px; padding: 3px 10px; }
+            .timer-display { font-size: 12px; }
+            .hint-banner { font-size: 10px; padding: 3px 8px; }
         }
-
         @media (max-width: 400px) {
-            .game-container {
-                gap: 8px;
-                padding: 8px 4px;
-                border-radius: 10px;
-            }
-            .pieces-panel {
-                gap: 5px;
-                padding: 8px 4px;
-            }
-            .btn {
-                padding: 7px 10px;
-                min-height: 32px;
-                font-size: 10px;
-                border-radius: 14px;
-                letter-spacing: 0.5px;
-            }
-            .top-bar {
-                padding: 5px 8px;
-                gap: 3px;
-                border-radius: 12px;
-            }
-            .level-badge {
-                font-size: 10px;
-                padding: 2px 8px;
-                border-radius: 10px;
-            }
-            .timer-display {
-                font-size: 11px;
-            }
-            .hint-banner {
-                font-size: 9px;
-                padding: 2px 6px;
-                border-radius: 10px;
-            }
-            .rotate-btn {
-                width: 28px;
-                height: 28px;
-                min-width: 28px;
-                min-height: 28px;
-                font-size: 12px;
-            }
-            .piece-holder {
-                min-width: 28px;
-                min-height: 28px;
-                padding: 3px;
-            }
-            .win-dialog {
-                padding: 20px 16px;
-                border-radius: 14px;
-            }
-            .win-dialog .trophy {
-                font-size: 36px;
-            }
-            .win-dialog h2 {
-                font-size: 18px;
-            }
-            .win-dialog button {
-                padding: 10px 20px;
-                min-height: 38px;
-                font-size: 13px;
-            }
+            .game-container { gap: 8px; padding: 8px 4px; border-radius: 10px; }
+            .pieces-panel { gap: 5px; padding: 8px 4px; }
+            .btn { padding: 7px 10px; min-height: 32px; font-size: 10px; border-radius: 14px; letter-spacing: 0.5px; }
+            .top-bar { padding: 5px 8px; gap: 3px; border-radius: 12px; }
+            .level-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; }
+            .timer-display { font-size: 11px; }
+            .hint-banner { font-size: 9px; padding: 2px 6px; border-radius: 10px; }
+            .rotate-btn { width: 28px; height: 28px; min-width: 28px; min-height: 28px; font-size: 12px; }
+            .piece-holder { min-width: 28px; min-height: 28px; padding: 3px; }
+            .win-dialog { padding: 20px 16px; border-radius: 14px; }
+            .win-dialog .trophy { font-size: 36px; }
+            .win-dialog h2 { font-size: 18px; }
+            .win-dialog button { padding: 10px 20px; min-height: 38px; font-size: 13px; }
         }
     </style>
 </head>
@@ -780,113 +538,93 @@
             const COLORS = { red: '#e85d6f', blue: '#5b9bd5', green: '#4caf84' };
             const COLOR_CLASS_MAP = { 'red': 'red', 'blue': 'blue', 'green': 'green' };
             const HINT_TIMEOUT_SEC = 120;
-            const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
             const BASIC_SHAPES = [
-                { offsets: [
-                        [0, 0],
-                        [0, 1],
-                        [1, 0],
-                        [1, 1]
-                    ], rows: 2, cols: 2 },
-                { offsets: [
-                        [0, 0],
-                        [1, 0],
-                        [1, 1]
-                    ], rows: 2, cols: 2 },
-                { offsets: [
-                        [0, 0],
-                        [0, 1],
-                        [0, 2]
-                    ], rows: 1, cols: 3 },
-                { offsets: [
-                        [0, 0],
-                        [1, 0],
-                        [2, 0]
-                    ], rows: 3, cols: 1 },
-                { offsets: [
-                        [0, 0],
-                        [0, 1]
-                    ], rows: 1, cols: 2 },
-                { offsets: [
-                        [0, 0],
-                        [1, 0]
-                    ], rows: 2, cols: 1 },
-                { offsets: [
-                        [0, 0]
-                    ], rows: 1, cols: 1 },
+                { offsets: [[0,0],[0,1],[1,0],[1,1]], rows:2, cols:2 },
+                { offsets: [[0,0],[1,0],[1,1]], rows:2, cols:2 },
+                { offsets: [[0,0],[0,1],[0,2]], rows:1, cols:3 },
+                { offsets: [[0,0],[1,0],[2,0]], rows:3, cols:1 },
+                { offsets: [[0,0],[0,1]], rows:1, cols:2 },
+                { offsets: [[0,0],[1,0]], rows:2, cols:1 },
+                { offsets: [[0,0]], rows:1, cols:1 },
             ];
 
             function rotateShape(shape, rot) {
                 rot = ((rot % 4) + 4) % 4;
-                let offsets = shape.offsets.map(([r, c]) => [r, c]);
-                let rows = shape.rows,
-                    cols = shape.cols;
+                let offsets = shape.offsets.map(([r,c]) => [r,c]);
+                let rows = shape.rows, cols = shape.cols;
                 for (let i = 0; i < rot; i++) {
-                    const newOff = offsets.map(([r, c]) => [c, rows - 1 - r]);
+                    const newOff = offsets.map(([r,c]) => [c, rows-1-r]);
                     [rows, cols] = [cols, rows];
                     offsets = newOff;
                 }
-                const minR = Math.min(...offsets.map(o => o[0]));
-                const minC = Math.min(...offsets.map(o => o[1]));
-                offsets = offsets.map(([r, c]) => [r - minR, c - minC]);
-                const maxR = Math.max(...offsets.map(o => o[0]));
-                const maxC = Math.max(...offsets.map(o => o[1]));
-                return { offsets, rows: maxR + 1, cols: maxC + 1 };
+                const minR = Math.min(...offsets.map(o=>o[0]));
+                const minC = Math.min(...offsets.map(o=>o[1]));
+                offsets = offsets.map(([r,c]) => [r-minR, c-minC]);
+                const maxR = Math.max(...offsets.map(o=>o[0]));
+                const maxC = Math.max(...offsets.map(o=>o[1]));
+                return { offsets, rows: maxR+1, cols: maxC+1 };
             }
 
             function generateLevel(levelNumber) {
-                const gridSize = 4 + Math.min(Math.floor((levelNumber - 1) / 5), 4);
-                const pieceCount = 4 + Math.min(Math.floor((levelNumber - 1) / 2), 4);
-                const colors = ['red', 'blue', 'green'];
-                for (let attempt = 0; attempt < 800; attempt++) {
-                    const grid = Array.from({ length: gridSize }, () => Array(gridSize).fill(null));
+                const gridSize = 4 + Math.min(Math.floor((levelNumber-1)/5), 4);
+                const pieceCount = 4 + Math.min(Math.floor((levelNumber-1)/2), 4);
+                const colors = ['red','blue','green'];
+                for (let attempt=0; attempt<800; attempt++) {
+                    const grid = Array.from({length: gridSize}, () => Array(gridSize).fill(null));
                     const pieces = [];
                     let success = true;
-                    for (let i = 0; i < pieceCount; i++) {
+                    for (let i=0; i<pieceCount; i++) {
                         const base = BASIC_SHAPES[Math.floor(Math.random() * BASIC_SHAPES.length)];
                         const rot = Math.floor(Math.random() * 4);
                         const eff = rotateShape(base, rot);
                         const color = colors[Math.floor(Math.random() * colors.length)];
                         let placed = false;
-                        for (let tryPos = 0; tryPos < 200; tryPos++) {
+                        for (let tryPos=0; tryPos<200; tryPos++) {
                             const ar = Math.floor(Math.random() * (gridSize - eff.rows + 1));
                             const ac = Math.floor(Math.random() * (gridSize - eff.cols + 1));
-                            const cells = eff.offsets.map(([dr, dc]) => [ar + dr, ac + dc]);
-                            if (cells.every(([r, c]) => r >= 0 && r < gridSize && c >= 0 && c < gridSize && grid[r][c] ===
-                                    null)) {
-                                cells.forEach(([r, c]) => { grid[r][c] = color; });
-                                pieces.push({ id: `p${i}`, name: `拼图${i+1}`, color, shapeOffsets: base.offsets,
-                                    gridCols: base.cols, gridRows: base.rows });
+                            const cells = eff.offsets.map(([dr,dc]) => [ar+dr, ac+dc]);
+                            if (cells.every(([r,c]) => r>=0 && r<gridSize && c>=0 && c<gridSize && grid[r][c]===null)) {
+                                cells.forEach(([r,c]) => { grid[r][c] = color; });
+                                pieces.push({ id: `p${i}`, name: `拼图${i+1}`, color, shapeOffsets: base.offsets, gridCols: base.cols, gridRows: base.rows });
                                 placed = true;
                                 break;
                             }
                         }
                         if (!placed) { success = false; break; }
                     }
-                    if (success) return { gridSize, targetPattern: grid, pieces };
+                    if (success) {
+                        // 障碍格（第10关起，最多4个）
+                        let blockedCells = [];
+                        if (levelNumber >= 10) {
+                            const obstacleCount = Math.min(2 + Math.floor((levelNumber - 10) / 5) * 2, 4);
+                            const emptyPositions = [];
+                            for (let r = 0; r < gridSize; r++)
+                                for (let c = 0; c < gridSize; c++)
+                                    if (grid[r][c] === null) emptyPositions.push({r, c});
+                            const shuffled = emptyPositions.sort(() => Math.random() - 0.5);
+                            for (let i = 0; i < Math.min(obstacleCount, shuffled.length); i++) {
+                                const {r, c} = shuffled[i];
+                                grid[r][c] = 'blocked';
+                                blockedCells.push({r, c});
+                            }
+                        }
+                        return { gridSize, targetPattern: grid, pieces, blockedCells };
+                    }
                 }
+                // 后备关卡
                 return {
                     gridSize: 4,
                     targetPattern: [
-                        ['red', 'red', null, null],
-                        ['red', 'red', null, null],
-                        [null, null, 'blue', 'blue'],
-                        [null, null, 'blue', 'blue']
+                        ['red','red',null,null],
+                        ['red','red',null,null],
+                        [null,null,'blue','blue'],
+                        [null,null,'blue','blue']
                     ],
                     pieces: [
-                        { id: 'p1', name: '红块', color: 'red', shapeOffsets: [
-                                [0, 0],
-                                [0, 1],
-                                [1, 0],
-                                [1, 1]
-                            ], gridCols: 2, gridRows: 2 },
-                        { id: 'p2', name: '蓝块', color: 'blue', shapeOffsets: [
-                                [0, 0],
-                                [0, 1],
-                                [1, 0],
-                                [1, 1]
-                            ], gridCols: 2, gridRows: 2 }
-                    ]
+                        {id:'p1',name:'红块',color:'red',shapeOffsets:[[0,0],[0,1],[1,0],[1,1]],gridCols:2,gridRows:2},
+                        {id:'p2',name:'蓝块',color:'blue',shapeOffsets:[[0,0],[0,1],[1,0],[1,1]],gridCols:2,gridRows:2}
+                    ],
+                    blockedCells: []
                 };
             }
 
@@ -895,15 +633,13 @@
             let GRID_SIZE = levelData.gridSize;
             let TARGET_PATTERN = levelData.targetPattern;
             let PIECE_DEFINITIONS_RAW = levelData.pieces;
+            let blockedCells = levelData.blockedCells || [];
             let pieceRotations = new Map();
             PIECE_DEFINITIONS_RAW.forEach(p => pieceRotations.set(p.id, 0));
             let gridState = [];
             let placedPieces = [];
             let availablePieceIds = new Set(PIECE_DEFINITIONS_RAW.map(p => p.id));
-            let timerStartTime = null,
-                timerInterval = null,
-                hintShown = false,
-                gameWon = false;
+            let timerStartTime = null, timerInterval = null, hintShown = false, gameWon = false;
 
             const gridEl = document.getElementById('grid');
             const columnHintsEl = document.getElementById('columnHints');
@@ -921,28 +657,23 @@
             function calculateCellSize() {
                 const vw = window.innerWidth;
                 const isMobile = vw < 620;
-                let maxAvailable;
-                if (isMobile) {
-                    maxAvailable = vw - 16 - (GRID_SIZE > 6 ? 30 : 40);
-                } else {
-                    maxAvailable = vw - 200;
-                }
+                let maxAvailable = isMobile ? (vw - 24 - 48) : (vw - 200);
                 const gapTotal = (GRID_SIZE - 1) * 1;
                 let cellSize = Math.floor((maxAvailable - gapTotal) / GRID_SIZE);
-                cellSize = Math.max(24, Math.min(50, cellSize));
+                cellSize = Math.max(24, Math.min(48, cellSize));
                 return cellSize;
             }
 
             function applyCellSize() {
                 const cs = calculateCellSize();
                 rootEl.style.setProperty('--cell-size', cs + 'px');
-                const hintBarW = Math.max(5, Math.floor(cs * 0.22));
-                const hintBarH = Math.max(5, Math.floor(cs * 0.22));
+                const hintBarW = Math.max(6, Math.floor(cs * 0.22));
+                const hintBarH = Math.max(6, Math.floor(cs * 0.22));
                 rootEl.style.setProperty('--hint-bar-width', hintBarW + 'px');
                 rootEl.style.setProperty('--hint-bar-height', hintBarH + 'px');
                 rootEl.style.setProperty('--hint-gap', Math.max(1, Math.floor(cs * 0.05)) + 'px');
-                const cornerW = Math.max(28, Math.floor(cs * 0.85));
-                const cornerH = Math.max(24, Math.floor(cs * 0.75));
+                const cornerW = Math.max(30, Math.floor(cs * 0.85));
+                const cornerH = Math.max(26, Math.floor(cs * 0.75));
                 rootEl.style.setProperty('--corner-width', cornerW + 'px');
                 rootEl.style.setProperty('--corner-height', cornerH + 'px');
                 rootEl.style.setProperty('--padding-grid', Math.max(2, Math.floor(cs * 0.07)) + 'px');
@@ -966,20 +697,18 @@
             }
 
             let rowHintsData, colHintsData;
-
             function refreshHintsData() {
-                rowHintsData = [];
-                colHintsData = [];
+                rowHintsData = []; colHintsData = [];
                 for (let r = 0; r < GRID_SIZE; r++) {
                     const hints = [];
                     for (let c = 0; c < GRID_SIZE; c++)
-                        if (TARGET_PATTERN[r][c] !== null) hints.push({ color: TARGET_PATTERN[r][c] });
+                        if (TARGET_PATTERN[r][c] !== null && TARGET_PATTERN[r][c] !== 'blocked') hints.push({ color: TARGET_PATTERN[r][c] });
                     rowHintsData.push(hints);
                 }
                 for (let c = 0; c < GRID_SIZE; c++) {
                     const hints = [];
                     for (let r = 0; r < GRID_SIZE; r++)
-                        if (TARGET_PATTERN[r][c] !== null) hints.push({ color: TARGET_PATTERN[r][c] });
+                        if (TARGET_PATTERN[r][c] !== null && TARGET_PATTERN[r][c] !== 'blocked') hints.push({ color: TARGET_PATTERN[r][c] });
                     colHintsData.push(hints);
                 }
             }
@@ -1030,7 +759,7 @@
                     const targetColors = colHintsData[c].map(h => h.color);
                     const actualColors = [];
                     for (let r = 0; r < GRID_SIZE; r++)
-                        if (gridState[r] && gridState[r][c] !== null) actualColors.push(gridState[r][c]);
+                        if (gridState[r]?.[c] !== null && gridState[r]?.[c] !== 'blocked') actualColors.push(gridState[r][c]);
                     const remainingActual = [...actualColors];
                     const bars = columnHintsEl.querySelectorAll(`.col-bar[data-col="${c}"]`);
                     bars.forEach(bar => {
@@ -1056,7 +785,7 @@
                     const targetColors = rowHintsData[r].map(h => h.color);
                     const actualColors = [];
                     for (let c = 0; c < GRID_SIZE; c++)
-                        if (gridState[r] && gridState[r][c] !== null) actualColors.push(gridState[r][c]);
+                        if (gridState[r]?.[c] !== null && gridState[r]?.[c] !== 'blocked') actualColors.push(gridState[r][c]);
                     const remainingActual = [...actualColors];
                     const bars = rowHintsEl.querySelectorAll(`.row-bar[data-row="${r}"]`);
                     bars.forEach(bar => {
@@ -1082,12 +811,14 @@
 
             function updateGridDisplay() {
                 gridEl.querySelectorAll('.grid-cell').forEach(cell => {
-                    const r = parseInt(cell.dataset.row),
-                        c = parseInt(cell.dataset.col);
-                    const color = gridState[r] ? gridState[r][c] : null;
-                    cell.classList.remove('occupied-red', 'occupied-blue', 'occupied-green', 'highlight-valid',
-                        'highlight-invalid', 'hint-target', 'hint-target-red', 'hint-target-blue', 'hint-target-green');
-                    if (color) cell.classList.add('occupied-' + COLOR_CLASS_MAP[color]);
+                    const r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
+                    const color = gridState[r]?.[c];
+                    cell.classList.remove('occupied-red','occupied-blue','occupied-green','blocked','highlight-valid','highlight-invalid','hint-target','hint-target-red','hint-target-blue','hint-target-green');
+                    if (color === 'blocked') {
+                        cell.classList.add('blocked');
+                    } else if (color) {
+                        cell.classList.add('occupied-' + COLOR_CLASS_MAP[color]);
+                    }
                 });
                 if (hintShown && !gameWon) applyHintGlow();
                 updateAllHints();
@@ -1096,16 +827,14 @@
 
             function applyHintGlow() {
                 gridEl.querySelectorAll('.grid-cell').forEach(cell => {
-                    const r = parseInt(cell.dataset.row),
-                        c = parseInt(cell.dataset.col);
-                    if (gridState[r] && gridState[r][c] === null && TARGET_PATTERN[r][c] !== null)
+                    const r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
+                    if (gridState[r]?.[c] === null && TARGET_PATTERN[r][c] !== null && TARGET_PATTERN[r][c] !== 'blocked')
                         cell.classList.add('hint-target', 'hint-target-' + COLOR_CLASS_MAP[TARGET_PATTERN[r][c]]);
                 });
             }
 
             function removeHintGlow() {
-                gridEl.querySelectorAll('.grid-cell').forEach(c => c.classList.remove('hint-target', 'hint-target-red',
-                    'hint-target-blue', 'hint-target-green'));
+                gridEl.querySelectorAll('.grid-cell').forEach(c => c.classList.remove('hint-target','hint-target-red','hint-target-blue','hint-target-green'));
             }
 
             function renderPieceHolders() {
@@ -1113,8 +842,7 @@
                 PIECE_DEFINITIONS_RAW.forEach(rawDef => {
                     const pieceId = rawDef.id;
                     const rotation = pieceRotations.get(pieceId) || 0;
-                    const effective = rotateShape({ offsets: rawDef.shapeOffsets, rows: rawDef.gridRows, cols: rawDef
-                            .gridCols }, rotation);
+                    const effective = rotateShape({offsets: rawDef.shapeOffsets, rows: rawDef.gridRows, cols: rawDef.gridCols}, rotation);
                     const isAvail = availablePieceIds.has(pieceId);
                     const card = document.createElement('div');
                     card.className = 'piece-card';
@@ -1124,8 +852,7 @@
                     if (!isAvail) holder.classList.add('used');
                     const miniGrid = document.createElement('div');
                     miniGrid.className = 'mini-grid';
-                    const s = Math.max(12, Math.floor(parseFloat(getComputedStyle(rootEl).getPropertyValue(
-                        '--cell-size')) * 0.38));
+                    const s = Math.max(12, Math.floor(parseFloat(getComputedStyle(rootEl).getPropertyValue('--cell-size')) * 0.38));
                     miniGrid.style.gridTemplateColumns = `repeat(${effective.cols}, ${s}px)`;
                     miniGrid.style.gridTemplateRows = `repeat(${effective.rows}, ${s}px)`;
                     const shapeSet = new Set(effective.offsets.map(o => `${o[0]},${o[1]}`));
@@ -1133,8 +860,7 @@
                         for (let c = 0; c < effective.cols; c++) {
                             const mc = document.createElement('div');
                             mc.className = 'mini-cell';
-                            mc.style.width = s + 'px';
-                            mc.style.height = s + 'px';
+                            mc.style.width = s + 'px'; mc.style.height = s + 'px';
                             if (shapeSet.has(`${r},${c}`)) mc.classList.add('filled-' + COLOR_CLASS_MAP[rawDef.color]);
                             else mc.classList.add('empty');
                             miniGrid.appendChild(mc);
@@ -1176,30 +902,41 @@
             }
 
             let dragState = null;
+            let cachedGridOffset = null;
 
             function getCellSizeVal() { return parseFloat(getComputedStyle(rootEl).getPropertyValue('--cell-size')); }
 
-            function getGridOffset() {
+            function updateGridOffsetCache() {
                 const r = gridWrapperEl.getBoundingClientRect();
                 const pad = parseFloat(getComputedStyle(rootEl).getPropertyValue('--padding-grid'));
-                return { left: r.left + pad, top: r.top + pad, cellSize: getCellSizeVal(), gap: parseFloat(
-                        getComputedStyle(rootEl).getPropertyValue('--gap-sm')) };
+                cachedGridOffset = {
+                    left: r.left + pad,
+                    top: r.top + pad,
+                    cellSize: getCellSizeVal(),
+                    gap: parseFloat(getComputedStyle(rootEl).getPropertyValue('--gap-sm'))
+                };
             }
 
-            function clientToGrid(cx, cy) { const o = getGridOffset(); const s = o.cellSize + o.gap; return { row: Math.round(
-                        (cy - o.top) / s), col: Math.round((cx - o.left) / s) }; }
+            function clientToGrid(cx, cy) {
+                const o = cachedGridOffset;
+                const step = o.cellSize + o.gap;
+                return { row: Math.round((cy - o.top) / step), col: Math.round((cx - o.left) / step) };
+            }
 
-            function getEffectiveShape(rawDef, rot) { return rotateShape({ offsets: rawDef.shapeOffsets, rows: rawDef.gridRows,
-                    cols: rawDef.gridCols }, rot); }
+            function getEffectiveShape(rawDef, rot) {
+                return rotateShape({offsets: rawDef.shapeOffsets, rows: rawDef.gridRows, cols: rawDef.gridCols}, rot);
+            }
 
             function isValidPlacement(shape, ar, ac, excludeId = null) {
-                const cells = shape.offsets.map(([dr, dc]) => ({ row: ar + dr, col: ac + dc }));
+                const cells = shape.offsets.map(([dr,dc]) => ({ row: ar+dr, col: ac+dc }));
                 if (cells.some(c => c.row < 0 || c.row >= GRID_SIZE || c.col < 0 || c.col >= GRID_SIZE)) return false;
                 for (const c of cells) {
-                    if (gridState[c.row] && gridState[c.row][c.col] !== null) {
+                    const val = gridState[c.row]?.[c.col];
+                    if (val === 'blocked') return false;
+                    if (val !== null && val !== undefined) {
                         if (!excludeId) return false;
-                        const occ = placedPieces.find(p => p.pieceId === excludeId && getEffectiveShape(p.rawDef, p.rotation)
-                            .offsets.some(([dr, dc]) => p.anchorRow + dr === c.row && p.anchorCol + dc === c.col));
+                        const occ = placedPieces.find(p => p.pieceId === excludeId &&
+                            getEffectiveShape(p.rawDef, p.rotation).offsets.some(([dr,dc]) => p.anchorRow+dr===c.row && p.anchorCol+dc===c.col));
                         if (!occ) return false;
                     }
                 }
@@ -1209,7 +946,7 @@
             function createDragPreview(shape, color) {
                 const el = document.createElement('div');
                 el.className = 'drag-preview';
-                const cs = getCellSizeVal();
+                const cs = cachedGridOffset.cellSize;
                 el.style.gridTemplateColumns = `repeat(${shape.cols}, ${cs}px)`;
                 el.style.gridTemplateRows = `repeat(${shape.rows}, ${cs}px)`;
                 const set = new Set(shape.offsets.map(o => `${o[0]},${o[1]}`));
@@ -1217,8 +954,7 @@
                     for (let c = 0; c < shape.cols; c++) {
                         const dc = document.createElement('div');
                         dc.className = 'drag-cell';
-                        dc.style.width = cs + 'px';
-                        dc.style.height = cs + 'px';
+                        dc.style.width = cs + 'px'; dc.style.height = cs + 'px';
                         dc.style.background = set.has(`${r},${c}`) ? COLORS[color] : 'transparent';
                         el.appendChild(dc);
                     }
@@ -1227,40 +963,40 @@
             }
 
             function snapAndUpdate(cx, cy) {
-                if (!dragState) return;
+                if (!dragState || !cachedGridOffset) return;
                 const { row, col } = clientToGrid(cx, cy);
                 dragState.currentAnchorRow = row;
                 dragState.currentAnchorCol = col;
-                dragState.isValidPlacement = isValidPlacement(dragState.effectiveShape, row, col, dragState.sourceType ===
-                    'grid' ? dragState.pieceId : null);
-                const off = getGridOffset();
+                dragState.isValidPlacement = isValidPlacement(dragState.effectiveShape, row, col, dragState.sourceType === 'grid' ? dragState.pieceId : null);
+                const off = cachedGridOffset;
                 const step = off.cellSize + off.gap;
-                let previewTop = off.top + row * step;
-                if (IS_TOUCH_DEVICE && dragState.previewEl) {
-                    previewTop -= off.cellSize * 1.6;
+                let top = off.top + row * step;
+                if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                    top -= off.cellSize * 1.6;
                 }
                 dragState.previewEl.style.left = (off.left + col * step) + 'px';
-                dragState.previewEl.style.top = previewTop + 'px';
+                dragState.previewEl.style.top = top + 'px';
                 dragState.previewEl.style.opacity = dragState.isValidPlacement ? '0.82' : '0.45';
-                gridEl.querySelectorAll('.grid-cell').forEach(c => c.classList.remove('highlight-valid',
-                    'highlight-invalid'));
+                gridEl.querySelectorAll('.grid-cell').forEach(c => c.classList.remove('highlight-valid','highlight-invalid'));
                 if (dragState) {
                     const cls = dragState.isValidPlacement ? 'highlight-valid' : 'highlight-invalid';
-                    dragState.effectiveShape.offsets.forEach(([dr, dc]) => {
-                        const cell = gridEl.querySelector(
-                            `.grid-cell[data-row="${row+dr}"][data-col="${col+dc}"]`);
+                    dragState.effectiveShape.offsets.forEach(([dr,dc]) => {
+                        const cell = gridEl.querySelector(`.grid-cell[data-row="${row+dr}"][data-col="${col+dc}"]`);
                         if (cell) cell.classList.add(cls);
                     });
                 }
             }
 
-            function removeDragPreview() { if (dragState?.previewEl) { dragState.previewEl.remove();
-                    dragState.previewEl = null; } gridEl.querySelectorAll('.grid-cell').forEach(c => c.classList.remove(
-                    'highlight-valid', 'highlight-invalid')); }
+            function removeDragPreview() {
+                if (dragState?.previewEl) {
+                    dragState.previewEl.remove();
+                    dragState.previewEl = null;
+                }
+                gridEl.querySelectorAll('.grid-cell').forEach(c => c.classList.remove('highlight-valid','highlight-invalid'));
+            }
 
             function placePiece(pid, rawDef, rot, shape, ar, ac) {
-                shape.offsets.forEach(([dr, dc]) => { if (gridState[ar + dr]) gridState[ar + dr][ac + dc] = rawDef
-                    .color; });
+                shape.offsets.forEach(([dr,dc]) => { if (gridState[ar+dr]) gridState[ar+dr][ac+dc] = rawDef.color; });
                 placedPieces.push({ pieceId: pid, rawDef, anchorRow: ar, anchorCol: ac, rotation: rot });
                 availablePieceIds.delete(pid);
             }
@@ -1269,41 +1005,51 @@
                 const idx = placedPieces.findIndex(p => p.pieceId === pid);
                 if (idx >= 0) {
                     const pp = placedPieces[idx];
-                    getEffectiveShape(pp.rawDef, pp.rotation).offsets.forEach(([dr, dc]) => { if (gridState[pp.anchorRow + dr])
-                            gridState[pp.anchorRow + dr][pp.anchorCol + dc] = null; });
+                    getEffectiveShape(pp.rawDef, pp.rotation).offsets.forEach(([dr,dc]) => { if (gridState[pp.anchorRow+dr]) gridState[pp.anchorRow+dr][pp.anchorCol+dc] = null; });
                     placedPieces.splice(idx, 1);
                     availablePieceIds.add(pid);
                 }
             }
 
-            function findPieceAt(row, col) { return placedPieces.find(pp => getEffectiveShape(pp.rawDef, pp.rotation).offsets
-                    .some(([dr, dc]) => pp.anchorRow + dr === row && pp.anchorCol + dc === col)); }
+            function findPieceAt(row, col) {
+                return placedPieces.find(pp => getEffectiveShape(pp.rawDef, pp.rotation).offsets.some(([dr,dc]) => pp.anchorRow+dr===row && pp.anchorCol+dc===col));
+            }
 
-            function isPointInPanel(cx, cy) { const r = piecesPanelEl.getBoundingClientRect(); return cx >= r.left && cx <= r
-                    .right && cy >= r.top && cy <= r.bottom; }
+            function isPointInPanel(cx, cy) {
+                const r = piecesPanelEl.getBoundingClientRect();
+                return cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom;
+            }
 
             function startDragFromPanel(e, rawDef, pid) {
                 if (!availablePieceIds.has(pid)) return;
                 e.preventDefault();
                 e.stopPropagation();
-                beginDrag(pid, rawDef, pieceRotations.get(pid) || 0, null, null, e.clientX, e.clientY);
+                updateGridOffsetCache();
+                beginDrag(pid, rawDef, pieceRotations.get(pid) || 0, null, null, e.clientX, e.clientY, e.pointerId);
             }
 
             function startDragFromGrid(e, pid, rawDef, rot, ar, ac) {
                 e.preventDefault();
                 e.stopPropagation();
-                beginDrag(pid, rawDef, rot, ar, ac, e.clientX, e.clientY);
+                updateGridOffsetCache();
+                beginDrag(pid, rawDef, rot, ar, ac, e.clientX, e.clientY, e.pointerId);
             }
 
-            function beginDrag(pid, rawDef, rot, origRow, origCol, cx, cy) {
+            function beginDrag(pid, rawDef, rot, origRow, origCol, cx, cy, pointerId) {
                 if (origRow !== null) removePiece(pid);
                 else availablePieceIds.delete(pid);
                 pieceRotations.set(pid, rot);
                 const shape = getEffectiveShape(rawDef, rot);
                 const preview = createDragPreview(shape, rawDef.color);
-                dragState = { pieceId: pid, rawDef, rotation: rot, effectiveShape: shape, sourceType: origRow !== null ?
-                        'grid' : 'panel', originalAnchorRow: origRow, originalAnchorCol: origCol, previewEl: preview,
-                    currentAnchorRow: 0, currentAnchorCol: 0, isValidPlacement: false };
+                preview.setPointerCapture(pointerId);
+                dragState = {
+                    pieceId: pid, rawDef, rotation: rot, effectiveShape: shape,
+                    sourceType: origRow !== null ? 'grid' : 'panel',
+                    originalAnchorRow: origRow, originalAnchorCol: origCol,
+                    previewEl: preview, pointerId,
+                    currentAnchorRow: 0, currentAnchorCol: 0,
+                    isValidPlacement: false
+                };
                 snapAndUpdate(cx, cy);
                 refreshPieceHolders();
                 updateGridDisplay();
@@ -1311,27 +1057,38 @@
 
             function finishDrag(cx, cy) {
                 if (!dragState) return;
-                const { pieceId, rawDef, rotation, effectiveShape, originalAnchorRow, originalAnchorCol } = dragState;
-                const row = dragState.currentAnchorRow,
-                    col = dragState.currentAnchorCol;
+                const { pieceId, rawDef, rotation, effectiveShape, originalAnchorRow, originalAnchorCol, previewEl, pointerId } = dragState;
+                const row = dragState.currentAnchorRow, col = dragState.currentAnchorCol;
                 const valid = dragState.isValidPlacement;
+                if (previewEl && pointerId) previewEl.releasePointerCapture(pointerId);
                 removeDragPreview();
                 const st = dragState;
                 dragState = null;
-                if (isPointInPanel(cx, cy)) { availablePieceIds.add(pieceId); } else if (valid) { placePiece(pieceId, rawDef,
-                        rotation, effectiveShape, row, col); } else if (originalAnchorRow !== null) { const origShape =
-                        getEffectiveShape(rawDef, rotation); if (isValidPlacement(origShape, originalAnchorRow,
-                        originalAnchorCol)) placePiece(pieceId, rawDef, rotation, origShape, originalAnchorRow,
-                        originalAnchorCol);
-                    else availablePieceIds.add(pieceId); } else { availablePieceIds.add(pieceId); }
+                if (isPointInPanel(cx, cy)) {
+                    availablePieceIds.add(pieceId);
+                } else if (valid) {
+                    placePiece(pieceId, rawDef, rotation, effectiveShape, row, col);
+                } else if (originalAnchorRow !== null) {
+                    const origShape = getEffectiveShape(rawDef, rotation);
+                    if (isValidPlacement(origShape, originalAnchorRow, originalAnchorCol))
+                        placePiece(pieceId, rawDef, rotation, origShape, originalAnchorRow, originalAnchorCol);
+                    else availablePieceIds.add(pieceId);
+                } else {
+                    availablePieceIds.add(pieceId);
+                }
                 updateGridDisplay();
                 refreshPieceHolders();
             }
 
             function checkWin() {
                 if (placedPieces.length !== PIECE_DEFINITIONS_RAW.length) return;
-                if (!TARGET_PATTERN.every((rowArr, r) => rowArr.every((col, c) => gridState[r] && gridState[r][c] === col)))
-                    return;
+                const allCorrect = TARGET_PATTERN.every((rowArr, r) =>
+                    rowArr.every((col, c) => {
+                        if (col === 'blocked') return true;
+                        return gridState[r]?.[c] === col;
+                    })
+                );
+                if (!allCorrect) return;
                 if (gameWon) return;
                 gameWon = true;
                 stopTimer();
@@ -1339,24 +1096,19 @@
                 hintBanner.classList.remove('visible');
                 timerDisplay.classList.remove('warning');
                 const elapsed = timerStartTime ? Math.floor((Date.now() - timerStartTime) / 1000) : 0;
-                winMessageEl.textContent =
-                    `第 ${currentLevelNumber} 关完成！用时 ${Math.floor(elapsed/60)}分${(elapsed%60).toString().padStart(2,'0')}秒`;
+                winMessageEl.textContent = `第 ${currentLevelNumber} 关完成！用时 ${Math.floor(elapsed/60)}分${(elapsed%60).toString().padStart(2,'0')}秒`;
                 winOverlayEl.style.display = 'flex';
             }
 
             function startTimer() {
                 timerStartTime = Date.now();
-                hintShown = false;
-                gameWon = false;
-                removeHintGlow();
-                hintBanner.classList.remove('visible');
-                timerDisplay.classList.remove('warning');
+                hintShown = false; gameWon = false;
+                removeHintGlow(); hintBanner.classList.remove('visible'); timerDisplay.classList.remove('warning');
                 if (timerInterval) clearInterval(timerInterval);
                 timerInterval = setInterval(() => {
                     if (!timerStartTime || gameWon) return;
-                    const e = Math.floor((Date.now() - timerStartTime) / 1000);
-                    timerDisplay.textContent = '⏱️ ' + Math.floor(e / 60).toString().padStart(2, '0') + ':' + (e % 60)
-                        .toString().padStart(2, '0');
+                    const e = Math.floor((Date.now()-timerStartTime)/1000);
+                    timerDisplay.textContent = '⏱️ '+Math.floor(e/60).toString().padStart(2,'0')+':'+(e%60).toString().padStart(2,'0');
                     if (currentLevelNumber <= 15 && e >= HINT_TIMEOUT_SEC && !hintShown && !gameWon) {
                         hintShown = true;
                         hintBanner.classList.add('visible');
@@ -1365,9 +1117,7 @@
                     }
                 }, 500);
             }
-
-            function stopTimer() { if (timerInterval) { clearInterval(timerInterval);
-                    timerInterval = null; } }
+            function stopTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
 
             function loadLevel(levelNum) {
                 currentLevelNumber = levelNum;
@@ -1375,9 +1125,11 @@
                 GRID_SIZE = levelData.gridSize;
                 TARGET_PATTERN = levelData.targetPattern;
                 PIECE_DEFINITIONS_RAW = levelData.pieces;
+                blockedCells = levelData.blockedCells || [];
                 pieceRotations = new Map();
                 PIECE_DEFINITIONS_RAW.forEach(p => pieceRotations.set(p.id, 0));
                 gridState = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
+                blockedCells.forEach(({r, c}) => { gridState[r][c] = 'blocked'; });
                 placedPieces = [];
                 availablePieceIds = new Set(PIECE_DEFINITIONS_RAW.map(p => p.id));
                 buildGrid();
@@ -1389,15 +1141,14 @@
                 winOverlayEl.style.display = 'none';
                 hintBanner.classList.remove('visible');
                 timerDisplay.classList.remove('warning');
-                gameWon = false;
-                hintShown = false;
+                gameWon = false; hintShown = false;
                 removeHintGlow();
             }
 
             function softReset() {
-                if (dragState) { removeDragPreview();
-                    dragState = null; }
+                if (dragState) { finishDrag(0,0); }
                 gridState = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
+                blockedCells.forEach(({r, c}) => { gridState[r][c] = 'blocked'; });
                 placedPieces = [];
                 availablePieceIds = new Set(PIECE_DEFINITIONS_RAW.map(p => p.id));
                 pieceRotations = new Map();
@@ -1407,68 +1158,64 @@
                 winOverlayEl.style.display = 'none';
                 hintBanner.classList.remove('visible');
                 timerDisplay.classList.remove('warning');
-                gameWon = false;
-                hintShown = false;
+                gameWon = false; hintShown = false;
             }
 
-            function nextLevel() { stopTimer();
-                loadLevel(currentLevelNumber + 1);
-                startTimer(); }
+            function nextLevel() { stopTimer(); loadLevel(currentLevelNumber + 1); startTimer(); }
 
-            // 全局事件（使用pointer事件统一处理鼠标和触摸）
             document.addEventListener('pointermove', e => {
                 if (dragState) {
                     e.preventDefault();
                     snapAndUpdate(e.clientX, e.clientY);
                 }
             }, { passive: false });
+
             document.addEventListener('pointerup', e => {
-                if (dragState) finishDrag(e.clientX, e.clientY);
+                if (dragState && e.pointerId === dragState.pointerId) {
+                    finishDrag(e.clientX, e.clientY);
+                }
             });
+
             document.addEventListener('pointercancel', e => {
-                if (dragState) finishDrag(e.clientX, e.clientY);
-            });
-            document.addEventListener('pointerleave', e => {
-                if (dragState && e.pointerType === 'touch') finishDrag(e.clientX, e.clientY);
+                if (dragState && e.pointerId === dragState.pointerId) {
+                    finishDrag(e.clientX, e.clientY);
+                }
             });
 
             gridEl.addEventListener('pointerdown', e => {
                 const cell = e.target.closest('.grid-cell');
                 if (!cell || dragState) return;
-                const r = parseInt(cell.dataset.row),
-                    c = parseInt(cell.dataset.col);
+                const r = parseInt(cell.dataset.row), c = parseInt(cell.dataset.col);
+                if (gridState[r]?.[c] === 'blocked') return;
                 const pp = findPieceAt(r, c);
                 if (pp) startDragFromGrid(e, pp.pieceId, pp.rawDef, pp.rotation, pp.anchorRow, pp.anchorCol);
             });
 
             document.getElementById('btnReset').addEventListener('click', softReset);
-            document.getElementById('btnPlayAgain').addEventListener('click', () => { winOverlayEl.style.display = 'none';
-                nextLevel(); });
+            document.getElementById('btnPlayAgain').addEventListener('click', () => { winOverlayEl.style.display = 'none'; nextLevel(); });
 
-            // 窗口大小变化时重新计算
             let resizeDebounce;
             window.addEventListener('resize', () => {
                 clearTimeout(resizeDebounce);
                 resizeDebounce = setTimeout(() => {
-                    applyCellSize();
-                    buildGrid();
-                    refreshHintsData();
-                    renderAllHints();
-                    renderPieceHolders();
-                    updateGridDisplay();
+                    if (dragState) {
+                        updateGridOffsetCache();
+                        snapAndUpdate(dragState.lastClientX || 0, dragState.lastClientY || 0);
+                    } else {
+                        buildGrid();
+                        refreshHintsData();
+                        renderAllHints();
+                        renderPieceHolders();
+                        updateGridDisplay();
+                    }
                 }, 300);
             });
 
-            // 阻止双击缩放
-            document.addEventListener('dblclick', e => {
-                if (e.target.closest('.grid-cell') || e.target.closest('.piece-holder') || e.target.closest(
-                        '.rotate-btn') || e.target.closest('button')) {
-                    e.preventDefault();
-                }
-            }, { passive: false });
+            document.addEventListener('pointermove', e => {
+                if (dragState) { dragState.lastClientX = e.clientX; dragState.lastClientY = e.clientY; }
+            }, { passive: true });
 
-            function initGame() { loadLevel(currentLevelNumber);
-                startTimer(); }
+            function initGame() { loadLevel(currentLevelNumber); startTimer(); }
             initGame();
         })();
     </script>
