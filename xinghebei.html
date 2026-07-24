@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>星河杯 - 指标选择</title>
+  <style>
+    /* 原样式不变，仅添加排行榜相关样式 */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0c0f; color: #e0e8f0;
+      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      min-height: 100vh; display: flex; justify-content: center; align-items: center;
+    }
+    .container {
+      width: 1100px; max-width: 95%;
+      background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
+      border: 1px solid #2a3340;
+      box-shadow: 0 0 30px rgba(0,160,255,0.1);
+      position: relative; overflow: hidden; min-height: 600px; margin: 20px auto;
+    }
+    .container::before {
+      content: ''; position: absolute; top: 0; left: 0;
+      width: 60px; height: 60px;
+      border-top: 2px solid #00c8ff; border-left: 2px solid #00c8ff;
+    }
+    .container::after {
+      content: ''; position: absolute; bottom: 0; right: 0;
+      width: 60px; height: 60px;
+      border-bottom: 2px solid #00c8ff; border-right: 2px solid #00c8ff;
+    }
+
+    .header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 20px 30px; border-bottom: 1px solid #2a3340;
+      background: rgba(20,25,30,0.8); flex-wrap: wrap; gap: 15px;
+    }
+    .header-left { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+    .back-btn {
+      background: transparent; border: 1px solid #3a5060;
+      color: #b0c7d6; padding: 8px 15px;
+      font-family: inherit; font-size: 0.9rem; letter-spacing: 2px;
+      cursor: pointer; transition: all 0.2s; text-decoration: none;
+      white-space: nowrap;
+    }
+    .back-btn:hover { border-color: #00c8ff; color: #fff; box-shadow: 0 0 10px rgba(0,200,255,0.3); }
+    .title {
+      font-size: 2.2rem; font-weight: 700; letter-spacing: 8px;
+      color: #fff; text-shadow: 0 0 15px #00a3ff; text-transform: uppercase;
+    }
+    .subtitle { display: block; font-size: 0.8rem; letter-spacing: 4px; color: #5e7a8c; }
+
+    .crisis-level { display: flex; align-items: baseline; gap: 15px; }
+    .level-label { font-size: 1.2rem; color: #7a8b9a; letter-spacing: 2px; }
+    .level-value {
+      font-size: 3.5rem; font-weight: 700; color: #ff6a00;
+      text-shadow: 0 0 20px #ff6a00; line-height: 1;
+    }
+
+    .btn-action {
+      background: transparent; border: 1px solid #3a5060;
+      color: #b0c7d6; padding: 10px 25px;
+      font-family: inherit; font-size: 1rem; letter-spacing: 2px;
+      cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .btn-action:hover { border-color: #00c8ff; color: #fff; box-shadow: 0 0 15px rgba(0,200,255,0.3); }
+    .btn-leaderboard {
+      background: transparent; border: 1px solid #ff6a00;
+      color: #ff6a00; padding: 10px 20px;
+      font-family: inherit; font-size: 1rem; letter-spacing: 2px;
+      cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .btn-leaderboard:hover { background: rgba(255,106,0,0.2); box-shadow: 0 0 15px rgba(255,106,0,0.4); }
+
+    .main-content { display: flex; height: 500px; }
+
+    .contracts-section {
+      flex: 2; padding: 20px; display: flex; flex-direction: row;
+      overflow: hidden; border-right: 1px solid #2a3340; gap: 20px;
+    }
+    .tabs {
+      display: flex; flex-direction: column; gap: 8px;
+      align-items: stretch; width: 120px; flex-shrink: 0;
+    }
+    .tab {
+      background: transparent; border: 1px solid #2a3340;
+      color: #8a9aa8; padding: 10px 12px;
+      font-family: inherit; font-size: 0.95rem; letter-spacing: 2px;
+      cursor: pointer; transition: 0.2s; text-align: left;
+      display: flex; flex-direction: column; align-items: stretch; width: 100%;
+    }
+    .tab-text { margin-bottom: 6px; font-weight: 600; }
+    .tab-progress { height: 4px; background: #1f2a33; border-radius: 2px; overflow: hidden; width: 100%; }
+    .tab-progress-fill { height: 100%; background: #ff9999; width: 0%; transition: width 0.3s ease; }
+    .tab.active, .tab:hover {
+      border-color: #00c8ff; color: #00c8ff;
+      background: rgba(0,200,255,0.05); box-shadow: inset 0 0 8px rgba(0,200,255,0.2);
+    }
+
+    .grid-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; }
+    .contract-grid { display: flex; flex-direction: row; flex-wrap: nowrap; gap: 20px; align-items: flex-start; }
+    .series-column { display: flex; flex-direction: column; align-items: center; gap: 0; flex-shrink: 0; }
+
+    .contract-card {
+      width: 130px; height: 130px; padding: 10px;
+      display: flex; flex-direction: row; align-items: center;
+      background: rgba(20,26,33,0.9); border: 1px solid #2e3b47;
+      cursor: pointer; transition: all 0.2s ease; position: relative;
+    }
+    .contract-card::before {
+      content: ''; position: absolute; top: -1px; left: -1px;
+      width: 12px; height: 12px;
+      border-top: 2px solid #3a4a5a; border-left: 2px solid #3a4a5a;
+    }
+    .contract-card:hover { border-color: #5e7a8c; background: rgba(30,40,50,0.9); }
+    .contract-card.selected {
+      border-color: #ff6a00; box-shadow: 0 0 15px rgba(255,106,0,0.4);
+      background: rgba(40,20,10,0.8); animation: pulse 0.35s ease-out;
+    }
+    .contract-card.selected::before { border-color: #ff6a00; }
+
+    @keyframes pulse {
+      0% { transform: scale(1); box-shadow: 0 0 0 rgba(255,106,0,0); }
+      50% { transform: scale(1.05); box-shadow: 0 0 25px rgba(255,106,0,0.7); }
+      100% { transform: scale(1); box-shadow: 0 0 15px rgba(255,106,0,0.4); }
+    }
+
+    .card-level-badge {
+      width: 28px; height: 28px; background: #1f2a33;
+      color: #ff6a00; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-right: 10px; flex-shrink: 0;
+    }
+    .card-content { overflow: hidden; }
+    .contract-name { font-size: 0.9rem; font-weight: 600; color: #f0f4f8; margin-bottom: 4px; }
+    .contract-desc { font-size: 0.7rem; color: #7a8b9a; }
+    .series-connector { width: 2px; height: 24px; background: #ff6a00; opacity: 0.8; }
+
+    .selected-panel {
+      flex: 1; padding: 20px; background: rgba(10,14,19,0.7);
+      display: flex; flex-direction: column; overflow-y: auto;
+    }
+    .panel-title {
+      font-size: 1.3rem; letter-spacing: 3px; color: #00c8ff;
+      border-bottom: 1px solid #2a3340; padding-bottom: 10px; margin-bottom: 15px;
+    }
+    .selected-list { flex: 1; }
+    .placeholder { color: #4a5a6a; text-align: center; margin-top: 50px; }
+
+    @keyframes itemPulse {
+      0% { transform: scale(0.9); opacity: 0; background: rgba(255,106,0,0.3); }
+      50% { transform: scale(1.03); }
+      100% { transform: scale(1); opacity: 1; background: transparent; }
+    }
+    .selected-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 5px; border-bottom: 1px solid #1f2a33;
+      animation: itemPulse 0.4s ease-out;
+    }
+    .selected-item.active {
+      background: rgba(255,106,0,0.15);
+      box-shadow: inset 0 0 8px rgba(255,106,0,0.4);
+      border-left: 3px solid #ff6a00;
+    }
+    .selected-info { flex: 1; }
+    .selected-name { font-weight: 600; color: #f0f4f8; margin-bottom: 4px; }
+    .selected-desc-big { font-size: 1.1rem; color: #d0dae4; }
+    .remove-btn {
+      background: none; border: none; color: #ff5a5a;
+      font-size: 1.2rem; cursor: pointer; margin-left: 10px;
+    }
+    .remove-btn:hover { color: #ff0000; text-shadow: 0 0 8px red; }
+
+    .panel-summary {
+      border-top: 1px solid #2a3340; padding-top: 15px;
+      display: flex; justify-content: space-between; color: #8a9aa8;
+    }
+
+    .record-badge {
+      position: absolute; bottom: 15px; right: 15px;
+      background: rgba(10,14,19,0.9); border: 1px solid #ff6a00;
+      padding: 8px 16px; display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 0 15px rgba(255,106,0,0.3); z-index: 10;
+    }
+    .record-label { font-size: 0.85rem; color: #b0c7d6; }
+    .record-value {
+      font-size: 1.6rem; font-weight: 700; color: #ff6a00;
+      text-shadow: 0 0 10px #ff6a00;
+    }
+
+    /* 排行榜模态框 */
+    .modal {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100;
+    }
+    .modal-content {
+      background: #13171c; border: 1px solid #2a3340; padding: 30px;
+      width: 400px; max-width: 90%; max-height: 80vh; overflow-y: auto;
+      box-shadow: 0 0 30px rgba(0,160,255,0.3);
+    }
+    .modal-content h3 { margin-bottom: 20px; color: #ff6a00; letter-spacing: 2px; }
+    .leaderboard-table {
+      width: 100%; border-collapse: collapse; color: #d0dae4;
+    }
+    .leaderboard-table th, .leaderboard-table td {
+      padding: 8px; border-bottom: 1px solid #1f2a33;
+    }
+    .close-btn {
+      background: #3a5060; border: none; color: #fff; padding: 8px 15px;
+      cursor: pointer; margin-top: 15px; font-family: inherit;
+    }
+    .close-btn:hover { background: #5e7a8c; }
+
+    /* 移动端适配 */
+    @media (max-width: 768px) {
+      .container { max-width: 100%; margin: 10px; }
+      .header { padding: 15px; }
+      .title { font-size: 1.8rem; letter-spacing: 4px; }
+      .level-value { font-size: 2.5rem; }
+      .main-content { flex-direction: column; height: auto; }
+      .contracts-section { flex: none; flex-direction: column; border-right: none; padding: 10px; gap: 10px; }
+      .tabs { flex-direction: row; width: 100%; overflow-x: auto; padding-bottom: 5px; }
+      .tab { flex-shrink: 0; min-width: 80px; font-size: 0.8rem; padding: 8px 10px; }
+      .grid-scroll { max-height: 50vh; }
+      .contract-card { width: 110px; height: 110px; padding: 6px; }
+      .card-level-badge { width: 24px; height: 24px; font-size: 0.8rem; margin-right: 6px; }
+      .contract-name { font-size: 0.75rem; }
+      .contract-desc { font-size: 0.65rem; }
+      .series-connector { height: 16px; }
+      .selected-panel { flex: none; max-height: 40vh; border-top: 1px solid #2a3340; }
+      .record-badge { bottom: 10px; right: 10px; padding: 5px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="header-left">
+        <a href="index.html" class="back-btn">← 返回</a>
+        <div>
+          <h1 class="title">星河杯</h1>
+          <span class="subtitle">UNITED EARTH GOVNMENT 3 YEARS</span>
+        </div>
+      </div>
+      <div class="header-center">
+        <div class="crisis-level">
+          <span class="level-label">指标等级</span>
+          <span class="level-value" id="crisisLevel">0</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="btn-action" id="resetBtn">重置指标</button>
+        <button class="btn-leaderboard" id="leaderboardBtn">🏆 排行榜</button>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section class="contracts-section">
+        <nav class="tabs" id="tabNav">
+          <button class="tab active" data-category="改写">改写</button>
+          <button class="tab" data-category="缺失">缺失</button>
+          <button class="tab" data-category="重压">重压</button>
+          <button class="tab" data-category="应变">应变</button>
+        </nav>
+        <div class="grid-scroll">
+          <div class="contract-grid" id="contractGrid"></div>
+        </div>
+      </section>
+
+      <aside class="selected-panel">
+        <h2 class="panel-title">已选指标</h2>
+        <div class="selected-list" id="selectedList">
+          <p class="placeholder">未选择任何指标</p>
+        </div>
+        <div class="panel-summary">
+          <span>指标总数：<strong id="selectedCount">0</strong></span>
+          <span>指标等级：<strong id="selectedTotalLevel">0</strong></span>
+        </div>
+      </aside>
+    </main>
+
+    <div class="record-badge">
+      <span class="record-label">最高记录</span>
+      <span class="record-value" id="recordValue">0</span>
+    </div>
+
+    <!-- 排行榜模态框 -->
+    <div class="modal" id="leaderboardModal">
+      <div class="modal-content">
+        <h3>星河杯排行榜</h3>
+        <table class="leaderboard-table">
+          <thead><tr><th>排名</th><th>用户名</th><th>最高记录</th></tr></thead>
+          <tbody id="leaderboardBody"></tbody>
+        </table>
+        <button class="close-btn" onclick="closeLeaderboard()">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ========== 合约数据（保持不变） ==========
+    const contracts = [
+      // ---- 改写 ----
+      { id: 'rewrite_limit_1', category: '改写', name: '限制I', level: 1, desc: '舰队限港口值600', series: 'limit_port' },
+      { id: 'rewrite_limit_2', category: '改写', name: '限制II', level: 2, desc: '舰队限港口值500', series: 'limit_port' },
+      { id: 'rewrite_limit_3', category: '改写', name: '限制III', level: 3, desc: '舰队限港口值410', series: 'limit_port' },
+      { id: 'rewrite_carrier_1', category: '改写', name: '航母I', level: 1, desc: '舰队中总共只能携带6艘', series: 'carrier' },
+      { id: 'rewrite_carrier_2', category: '改写', name: '航母II', level: 2, desc: '舰队中总共只能携带5艘', series: 'carrier' },
+      { id: 'rewrite_bc_1', category: '改写', name: '战巡I', level: 1, desc: '舰队中总共只能携带8艘', series: 'battlecruiser' },
+      { id: 'rewrite_bc_2', category: '改写', name: '战巡II', level: 2, desc: '舰队中总共只能携带7艘', series: 'battlecruiser' },
+      { id: 'rewrite_bc_3', category: '改写', name: '战巡III', level: 3, desc: '舰队中总共只能携带5艘', series: 'battlecruiser' },
+      { id: 'rewrite_cruiser_1', category: '改写', name: '巡洋I', level: 1, desc: '舰队中总共只能携带15艘', series: 'cruiser' },
+      { id: 'rewrite_cruiser_2', category: '改写', name: '巡洋II', level: 2, desc: '舰队中总共只能携带13艘', series: 'cruiser' },
+      { id: 'rewrite_cruiser_3', category: '改写', name: '巡洋III', level: 3, desc: '舰队中总共只能携带12艘', series: 'cruiser' },
+      { id: 'rewrite_dd_1', category: '改写', name: '驱逐I', level: 1, desc: '舰队中总共只能携27艘', series: 'destroyer' },
+      { id: 'rewrite_dd_2', category: '改写', name: '驱逐II', level: 2, desc: '舰队中总共只能携带25艘', series: 'destroyer' },
+      { id: 'rewrite_dd_3', category: '改写', name: '驱逐III', level: 3, desc: '舰队中总共只能携带23艘', series: 'destroyer' },
+      { id: 'rewrite_ffg_1', category: '改写', name: '护卫I', level: 1, desc: '舰队中总共只能携带22艘', series: 'frigate' },
+      { id: 'rewrite_ffg_2', category: '改写', name: '护卫II', level: 2, desc: '舰队中总共只能携带17艘', series: 'frigate' },
+      { id: 'rewrite_ffg_3', category: '改写', name: '护卫III', level: 3, desc: '舰队中总共只能携带13艘', series: 'frigate' },
+      { id: 'rewrite_supercap_1', category: '改写', name: '超主力I', level: 1, desc: '舰队中超主力舰技术值为2.50', series: 'super_capital_tech' },
+      { id: 'rewrite_supercap_2', category: '改写', name: '超主力II', level: 2, desc: '舰队中超主力舰技术值为2.30', series: 'super_capital_tech' },
+      { id: 'rewrite_supercap_3', category: '改写', name: '超主力III', level: 3, desc: '舰队中超主力舰技术值为2.00', series: 'super_capital_tech' },
+      { id: 'rewrite_capital_1', category: '改写', name: '主力I', level: 1, desc: '舰队中主力舰技术值为2.10', series: 'capital_tech' },
+      { id: 'rewrite_capital_3', category: '改写', name: '主力III', level: 3, desc: '舰队中主力舰技术值为1.90', series: 'capital_tech' },
+      { id: 'rewrite_aircraft_1', category: '改写', name: '舰载机I', level: 1, desc: '技术值为1.90', series: 'aircraft_tech' },
+      { id: 'rewrite_aircraft_2', category: '改写', name: '舰载机II', level: 2, desc: '技术值为1.80', series: 'aircraft_tech' },
+      { id: 'rewrite_corvette_1', category: '改写', name: '护航艇I', level: 1, desc: '技术值为1.90', series: 'corvette_tech' },
+      { id: 'rewrite_corvette_2', category: '改写', name: '护航艇II', level: 2, desc: '技术值为1.80', series: 'corvette_tech' },
+
+      // ---- 缺失 ----
+      { id: 'miss_sunwhale_1', category: '缺失', name: '太阳鲸I', level: 1, desc: '舰队中限部署数量为4', series: 'sunwhale' },
+      { id: 'miss_sunwhale_2', category: '缺失', name: '太阳鲸II', level: 2, desc: '舰队中限部署数量为3', series: 'sunwhale' },
+      { id: 'miss_sunwhale_3', category: '缺失', name: '太阳鲸III', level: 3, desc: '舰队中禁止部署', series: 'sunwhale' },
+      { id: 'miss_scross_1', category: '缺失', name: '南十字I', level: 1, desc: '舰队中限部署数量为3', series: 'southern_cross' },
+      { id: 'miss_scross_2', category: '缺失', name: '南十字II', level: 2, desc: '舰队中限部署数量为2', series: 'southern_cross' },
+      { id: 'miss_scross_3', category: '缺失', name: '南十字III', level: 3, desc: '舰队中禁止部署', series: 'southern_cross' },
+      { id: 'miss_tianshu_3', category: '缺失', name: '天枢III', level: 3, desc: '舰队中禁止部署', series: 'tianshu' },
+      { id: 'miss_sky_1', category: '缺失', name: '苍穹I', level: 1, desc: '舰队中限部署数量为3', series: 'sky' },
+      { id: 'miss_sky_3', category: '缺失', name: '苍穹III', level: 3, desc: '舰队中禁止部署', series: 'sky' },
+      { id: 'miss_cv3000_1', category: '缺失', name: 'cv3000I', level: 1, desc: '舰队中限部署数量为4', series: 'cv3000' },
+      { id: 'miss_cv3000_2', category: '缺失', name: 'cv3000II', level: 2, desc: '舰队中限部署数量为3', series: 'cv3000' },
+      { id: 'miss_bigshield_1', category: '缺失', name: '大盾I', level: 1, desc: '舰队中限部署数量为3', series: 'big_shield' },
+      { id: 'miss_bigshield_2', category: '缺失', name: '大盾II', level: 2, desc: '禁用旗舰', series: 'big_shield' },
+      { id: 'miss_bigshield_3', category: '缺失', name: '大盾III', level: 3, desc: '舰队中禁止部署', series: 'big_shield' },
+      { id: 'miss_spear_1', category: '缺失', name: '大矛I', level: 1, desc: '舰队中限部署数量为4', series: 'spear' },
+      { id: 'miss_spear_2', category: '缺失', name: '大矛II', level: 2, desc: '舰队中限部署数量为3', series: 'spear' },
+      { id: 'miss_spear_3', category: '缺失', name: '大矛III', level: 3, desc: '舰队中禁止部署，禁用旗舰', series: 'spear' },
+      { id: 'miss_thunder_3', category: '缺失', name: '雷火III', level: 3, desc: '舰队中禁止部署', series: 'thunder_fire' },
+      { id: 'miss_emperor_1', category: '缺失', name: '大帝I', level: 1, desc: '舰队中限部署数量为3', series: 'emperor' },
+      { id: 'miss_emperor_2', category: '缺失', name: '大帝II', level: 2, desc: '舰队中禁止部署', series: 'emperor' },
+      { id: 'miss_storm_1', category: '缺失', name: '风暴I', level: 1, desc: '舰队中限部署数量为3', series: 'storm' },
+      { id: 'miss_storm_2', category: '缺失', name: '风暴II', level: 2, desc: '舰队中限部署数量为2', series: 'storm' },
+      { id: 'miss_storm_3', category: '缺失', name: '风暴III', level: 3, desc: '舰队中禁止部署', series: 'storm' },
+      { id: 'miss_bigsword_2', category: '缺失', name: '大剑II', level: 2, desc: '舰队中禁止部署', series: 'big_sword' },
+      { id: 'miss_tianquan_2', category: '缺失', name: '天权II', level: 2, desc: '舰队中禁止部署', series: 'tianquan' },
+      { id: 'miss_st59_1', category: '缺失', name: 'st59I', level: 1, desc: '舰队中限部署数量为3', series: 'st59' },
+      { id: 'miss_st59_2', category: '缺失', name: 'st59II', level: 2, desc: '舰队中限部署数量为2', series: 'st59' },
+      { id: 'miss_st59_3', category: '缺失', name: 'st59III', level: 3, desc: '舰队中禁止部署', series: 'st59' },
+      { id: 'miss_support_1', category: '缺失', name: '支援舰I', level: 1, desc: '舰队中禁止部署', series: 'support_ship' },
+      { id: 'miss_066_1', category: '缺失', name: '066支援型I', level: 1, desc: '舰队中限部署数量为10', series: '066_support' },
+      { id: 'miss_066_2', category: '缺失', name: '066支援型II', level: 2, desc: '舰队中限部署数量为8', series: '066_support' },
+      { id: 'miss_066_3', category: '缺失', name: '066支援型III', level: 3, desc: '舰队中限部署数量为6', series: '066_support' },
+      { id: 'miss_ac720_2', category: '缺失', name: 'AC720II', level: 2, desc: '舰队中禁止部署', series: 'ac720' },
+
+      // ---- 重压 ----
+      { id: 'pres_target_1', category: '重压', name: '目标I', level: 1, desc: '进攻目标变为4级据点', series: 'target' },
+      { id: 'pres_target_2', category: '重压', name: '目标II', level: 2, desc: '进攻目标变为5级据点', series: 'target' },
+      { id: 'pres_bombing_2', category: '重压', name: '轰炸II', level: 2, desc: '禁止使用', series: 'bombing' },
+      { id: 'pres_blockade_2', category: '重压', name: '封锁II', level: 2, desc: '禁止使用', series: 'blockade' },
+      { id: 'pres_escort_3', category: '重压', name: '护航III', level: 3, desc: '禁止使用', series: 'escort' },
+      { id: 'pres_supportf_1', category: '重压', name: '支援I', level: 1, desc: '支援舰队的船为5', series: 'support_fleet' },
+      { id: 'pres_supportf_2', category: '重压', name: '支援II', level: 2, desc: '支援舰队的船为3', series: 'support_fleet' },
+      { id: 'pres_supportf_3', category: '重压', name: '支援III', level: 3, desc: '禁止使用', series: 'support_fleet' },
+      { id: 'pres_tactical_2', category: '重压', name: '战术道具II', level: 2, desc: '禁止使用', series: 'tactical_item' },
+
+      // ---- 应变 ----
+      { id: 'str_sunwhale_1', category: '应变', name: '太阳鲸I', level: 1, desc: '禁用A2，B2，C2模块', series: 'sunwhale' },
+      { id: 'str_sunwhale_2', category: '应变', name: '太阳鲸II', level: 2, desc: 'B系统原装，C系统禁用', series: 'sunwhale' },
+      { id: 'str_sunwhale_3', category: '应变', name: '太阳鲸III', level: 3, desc: 'A系统，B系统原装，C系统禁用', series: 'sunwhale' },
+      { id: 'str_scross_1', category: '应变', name: '南十字I', level: 1, desc: 'B系统原装', series: 'southern_cross' },
+      { id: 'str_scross_2', category: '应变', name: '南十字II', level: 2, desc: 'B系统原装，C系统禁用', series: 'southern_cross' },
+      { id: 'str_scross_3', category: '应变', name: '南十字III', level: 3, desc: 'A系统，B系统原装，C系统禁用', series: 'southern_cross' },
+      { id: 'str_cv3000_2', category: '应变', name: 'cv3000II', level: 2, desc: 'M，A系统原装，B系统禁用', series: 'cv3000' },
+      { id: 'str_sky_2', category: '应变', name: '苍穹II', level: 2, desc: 'M，A系统原装，B，C系统禁用', series: 'sky' },
+      { id: 'str_tianshu_2', category: '应变', name: '天枢II', level: 2, desc: 'M，A系统原装，B，C，D系统禁用', series: 'tianshu' },
+      { id: 'str_bigsword_1', category: '应变', name: '大剑I', level: 1, desc: 'M，A系统原装，其余系统禁用', series: 'big_sword' },
+      { id: 'str_tianquan_1', category: '应变', name: '天权I', level: 1, desc: '白板配置', series: 'tianquan' },
+      { id: 'str_emperor_1', category: '应变', name: '大帝I', level: 1, desc: 'B，D系统禁用', series: 'emperor' },
+      { id: 'str_emperor_2', category: '应变', name: '大帝II', level: 2, desc: 'B，C，D系统禁用', series: 'emperor' },
+      { id: 'str_thunder_1', category: '应变', name: '雷火I', level: 1, desc: '白板配置', series: 'thunder_fire' },
+      { id: 'str_spear_1', category: '应变', name: '大矛I', level: 1, desc: 'M，A系统原装', series: 'spear' },
+      { id: 'str_spear_2a', category: '应变', name: '大矛II', level: 2, desc: 'M，A系统原装，B系统禁用', series: 'spear' },
+      { id: 'str_spear_2b', category: '应变', name: '大矛II', level: 2, desc: 'M，A系统原装，C系统禁用', series: 'spear' },
+      { id: 'str_spear_3', category: '应变', name: '大矛III', level: 3, desc: '白板配置', series: 'spear' },
+      { id: 'str_storm_1', category: '应变', name: '风暴I', level: 1, desc: 'B，D系统禁用', series: 'storm' },
+      { id: 'str_storm_2', category: '应变', name: '风暴II', level: 2, desc: 'B，C，D系统禁用', series: 'storm' },
+      { id: 'str_storm_3', category: '应变', name: '风暴III', level: 3, desc: '白板配置', series: 'storm' },
+      { id: 'str_bigshield_1', category: '应变', name: '大盾I', level: 1, desc: 'C系统禁用', series: 'big_shield' },
+      { id: 'str_bigshield_2', category: '应变', name: '大盾II', level: 2, desc: 'B，C系统禁用', series: 'big_shield' },
+      { id: 'str_bigshield_3', category: '应变', name: '大盾III', level: 3, desc: '白板配置', series: 'big_shield' },
+      { id: 'str_st59_1', category: '应变', name: 'st59I', level: 1, desc: 'B，C系统禁用', series: 'st59' },
+      { id: 'str_st59_2', category: '应变', name: 'st59II', level: 2, desc: '白板配置', series: 'st59' },
+      { id: 'str_support_2', category: '应变', name: '支援舰II', level: 2, desc: '白板配置', series: 'support_ship' }
+    ];
+// ========== 用户与排行榜逻辑 ==========
+    const CURRENT_USER_KEY = 'ueg_current_user';
+    const USERS_KEY = 'ueg_users';
+
+    function getCurrentUser() {
+      const cu = localStorage.getItem(CURRENT_USER_KEY);
+      return cu ? JSON.parse(cu) : null;
+    }
+
+    function getUsers() {
+      return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+    }
+
+    function loadHighestRecord() {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        document.getElementById('recordValue').textContent = currentUser.highestRecord || 0;
+      } else {
+        document.getElementById('recordValue').textContent = '0';
+      }
+    }
+
+    // ========== 排行榜弹窗 ==========
+    document.getElementById('leaderboardBtn').addEventListener('click', () => {
+      const users = getUsers();
+      // 按最高记录降序排列
+      users.sort((a, b) => (b.highestRecord || 0) - (a.highestRecord || 0));
+      let html = '';
+      users.forEach((u, index) => {
+        html += `<tr>
+          <td>${index + 1}</td>
+          <td>${u.username}</td>
+          <td>${u.highestRecord || 0}</td>
+        </tr>`;
+      });
+      document.getElementById('leaderboardBody').innerHTML = html;
+      document.getElementById('leaderboardModal').style.display = 'flex';
+    });
+
+    window.closeLeaderboard = function() {
+      document.getElementById('leaderboardModal').style.display = 'none';
+    };
+
+    // ========== 原有星河杯逻辑 ==========
+    let currentCategory = '改写';
+    let selectedContracts = new Set();
+    let lastSelectedId = null;
+
+    const tabNav = document.getElementById('tabNav');
+    const contractGrid = document.getElementById('contractGrid');
+    const selectedList = document.getElementById('selectedList');
+    const crisisLevelEl = document.getElementById('crisisLevel');
+    const selectedCountEl = document.getElementById('selectedCount');
+    const selectedTotalLevelEl = document.getElementById('selectedTotalLevel');
+    const resetBtn = document.getElementById('resetBtn');
+    const recordValueEl = document.getElementById('recordValue');
+
+    function initTabs() {
+      document.querySelectorAll('.tab').forEach(tab => {
+        const text = tab.textContent.trim();
+        tab.innerHTML = `<span class="tab-text">${text}</span><div class="tab-progress"><div class="tab-progress-fill" style="width:0%"></div></div>`;
+      });
+    }
+
+    function toggleContract(id) {
+      const contract = contracts.find(c => c.id === id);
+      if (!contract) return;
+      if (selectedContracts.has(id)) {
+        selectedContracts.delete(id);
+        if (lastSelectedId === id) lastSelectedId = null;
+      } else {
+        const sameSeriesIds = Array.from(selectedContracts).filter(sid => {
+          const s = contracts.find(c => c.id === sid);
+          return s && s.category === contract.category && s.series === contract.series;
+        });
+        sameSeriesIds.forEach(sid => { selectedContracts.delete(sid); if (lastSelectedId === sid) lastSelectedId = null; });
+        selectedContracts.add(id);
+        lastSelectedId = id;
+      }
+      updateUI();
+    }
+
+    function toggleFillCategory(category) {
+      const catContracts = contracts.filter(c => c.category === category);
+      const seriesMax = {};
+      catContracts.forEach(c => { if (!seriesMax[c.series] || c.level > seriesMax[c.series].level) seriesMax[c.series] = c; });
+      const seriesNames = Object.keys(seriesMax);
+      let isFull = seriesNames.every(s => selectedContracts.has(seriesMax[s].id));
+
+      const toRemove = [];
+      selectedContracts.forEach(id => { const con = contracts.find(c => c.id === id); if (con && con.category === category) toRemove.push(id); });
+      toRemove.forEach(id => { selectedContracts.delete(id); if (lastSelectedId === id) lastSelectedId = null; });
+
+      if (!isFull) {
+        const sorted = seriesNames.sort();
+        sorted.forEach(s => selectedContracts.add(seriesMax[s].id));
+        lastSelectedId = sorted.length > 0 ? seriesMax[sorted[0]].id : null;
+      } else {
+        lastSelectedId = null;
+      }
+      updateUI();
+    }
+
+    function renderContracts() {
+      const filtered = contracts.filter(c => c.category === currentCategory);
+      const seriesMap = new Map();
+      filtered.forEach(c => { if (!seriesMap.has(c.series)) seriesMap.set(c.series, []); seriesMap.get(c.series).push(c); });
+      for (let list of seriesMap.values()) list.sort((a,b) => a.level - b.level);
+
+      let html = '';
+      for (let [series, list] of seriesMap) {
+        html += '<div class="series-column">';
+        for (let i = 0; i < list.length; i++) {
+          const c = list[i];
+          if (i > 0) html += '<div class="series-connector"></div>';
+          html += `<div class="contract-card ${selectedContracts.has(c.id) ? 'selected' : ''}" data-id="${c.id}">
+            <div class="card-level-badge">${c.level}</div>
+            <div class="card-content"><div class="contract-name">${c.name}</div><div class="contract-desc">${c.desc}</div></div>
+          </div>`;
+        }
+        html += '</div>';
+      }
+      contractGrid.innerHTML = html;
+      document.querySelectorAll('.contract-card').forEach(card => card.addEventListener('click', () => toggleContract(card.dataset.id)));
+    }
+
+    function updateTabProgress() {
+      const categoryMaxLevel = {};
+      contracts.forEach(c => { if (!categoryMaxLevel[c.category]) categoryMaxLevel[c.category] = {}; if (!categoryMaxLevel[c.category][c.series] || c.level > categoryMaxLevel[c.category][c.series]) categoryMaxLevel[c.category][c.series] = c.level; });
+      const categorySelectedLevel = {};
+      selectedContracts.forEach(id => { const c = contracts.find(con => con.id === id); if (c) { if (!categorySelectedLevel[c.category]) categorySelectedLevel[c.category] = {}; categorySelectedLevel[c.category][c.series] = c.level; } });
+      document.querySelectorAll('.tab').forEach(tab => {
+        const cat = tab.dataset.category;
+        const map = categoryMaxLevel[cat] || {};
+        const names = Object.keys(map);
+        if (names.length === 0) return;
+        let total = 0;
+        names.forEach(s => { const max = map[s]; const sel = (categorySelectedLevel[cat] && categorySelectedLevel[cat][s]) || 0; total += Math.min(sel/max, 1); });
+        const pct = (total / names.length) * 100;
+        const fill = tab.querySelector('.tab-progress-fill');
+        if (fill) fill.style.width = pct + '%';
+      });
+    }
+
+    function updateUI() {
+      document.querySelectorAll('.contract-card').forEach(card => card.classList.toggle('selected', selectedContracts.has(card.dataset.id)));
+      const selectedArray = Array.from(selectedContracts).map(id => contracts.find(c => c.id === id)).filter(Boolean);
+      if (selectedArray.length === 0) {
+        selectedList.innerHTML = '<p class="placeholder">未选择任何指标</p>';
+        lastSelectedId = null;
+      } else {
+        selectedList.innerHTML = selectedArray.map(c => `<div class="selected-item${c.id === lastSelectedId ? ' active' : ''}" data-id="${c.id}"><div class="selected-info"><div class="selected-name">${c.name}</div><div class="selected-desc-big">${c.desc}</div></div><button class="remove-btn" data-id="${c.id}">✕</button></div>`).join('');
+        document.querySelectorAll('.remove-btn').forEach(btn => btn.addEventListener('click', (e) => { e.stopPropagation(); const id = btn.dataset.id; if (lastSelectedId === id) lastSelectedId = null; selectedContracts.delete(id); updateUI(); }));
+      }
+      const totalLevel = selectedArray.reduce((sum, c) => sum + c.level, 0);
+      crisisLevelEl.textContent = totalLevel;
+      selectedCountEl.textContent = selectedArray.length;
+      selectedTotalLevelEl.textContent = totalLevel;
+      updateTabProgress();
+      // 不再自动更新最高记录，只显示当前用户被管理员设置的记录
+      loadHighestRecord();
+    }
+
+    tabNav.addEventListener('click', (e) => {
+      const tab = e.target.closest('.tab');
+      if (!tab) return;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentCategory = tab.dataset.category;
+      renderContracts();
+    });
+    tabNav.addEventListener('dblclick', (e) => {
+      const tab = e.target.closest('.tab');
+      if (!tab) return;
+      toggleFillCategory(tab.dataset.category);
+    });
+    resetBtn.addEventListener('click', () => { selectedContracts.clear(); lastSelectedId = null; updateUI(); });
+
+    (function init() {
+      initTabs();
+      renderContracts();
+      updateUI();
+    })();
+  </script>
+</body>
+</html>
+</html>

@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>色块拼图 · 移动端适配 · 无限关卡</title>
+    <style>
+        :root {
+            --cell-size: 48px;
+            --grid-size: 4;
+            --bg: #1a1a2e;
+            --panel-bg: #16213e;
+            --grid-bg: #0f0f1a;
+            --red-base: #e85d6f;
+            --blue-base: #5b9bd5;
+            --green-base: #4caf84;
+            --red-light: #ff7b8a;
+            --blue-light: #7dbef5;
+            --green-light: #64e8a0;
+            --hint-bar-width: 10px;
+            --hint-bar-height: 10px;
+            --hint-gap: 2px;
+            --gold: #f0c040;
+            --warning: #ff9f43;
+            --gap-sm: 1px;
+            --padding-grid: 3px;
+            --corner-width: 48px;
+            --corner-height: 44px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: var(--bg);
+            background-image: radial-gradient(ellipse at 50% 30%, rgba(100, 140, 220, 0.08) 0%, transparent 70%), radial-gradient(ellipse at 70% 60%, rgba(200, 120, 80, 0.05) 0%, transparent 60%);
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Helvetica Neue', sans-serif;
+            flex-direction: column;
+            gap: 8px;
+            padding: 6px;
+            padding-top: max(6px, env(safe-area-inset-top));
+            padding-bottom: max(6px, env(safe-area-inset-bottom));
+            padding-left: max(6px, env(safe-area-inset-left));
+            padding-right: max(6px, env(safe-area-inset-right));
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .top-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--panel-bg);
+            border-radius: 22px;
+            padding: 8px 16px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            z-index: 10;
+            flex-wrap: wrap;
+            justify-content: center;
+            flex-shrink: 0;
+            max-width: 100%;
+        }
+        .level-badge {
+            background: rgba(240, 192, 64, 0.15);
+            border: 1px solid rgba(240, 192, 64, 0.4);
+            border-radius: 12px;
+            padding: 4px 12px;
+            color: var(--gold);
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            white-space: nowrap;
+        }
+        .timer-display {
+            font-size: 14px;
+            font-weight: 600;
+            color: #ccc;
+            letter-spacing: 1px;
+            font-family: 'SF Mono', 'Consolas', 'Menlo', monospace;
+            transition: color 0.5s;
+            white-space: nowrap;
+        }
+        .timer-display.warning {
+            color: var(--warning);
+            animation: pulse-warning 1s infinite;
+        }
+        @keyframes pulse-warning {
+            0%,
+            100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+        .hint-banner {
+            display: none;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255, 159, 67, 0.15);
+            border: 1px solid rgba(255, 159, 67, 0.4);
+            border-radius: 14px;
+            padding: 4px 10px;
+            color: var(--warning);
+            font-size: 11px;
+            animation: fadeInSlide 0.5s ease;
+            white-space: nowrap;
+        }
+        .hint-banner.visible {
+            display: flex;
+        }
+        @keyframes fadeInSlide {
+            from {
+                opacity: 0;
+                transform: translateY(-4px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .game-container {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: var(--panel-bg);
+            border-radius: 18px;
+            padding: 16px 14px;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.05);
+            flex-shrink: 0;
+            max-width: 100%;
+        }
+
+        .grid-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .grid-with-hints {
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+        .grid-top-row {
+            display: flex;
+            align-items: stretch;
+            flex-shrink: 0;
+        }
+        .corner-spacer {
+            width: var(--corner-width);
+            min-width: var(--corner-width);
+            height: var(--corner-height);
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 2px;
+            flex-shrink: 0;
+        }
+        .corner-spacer span {
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.25);
+            letter-spacing: 1px;
+        }
+        .column-hints-container {
+            display: flex;
+            gap: 0;
+            height: var(--corner-height);
+            align-items: flex-end;
+            padding-bottom: 1px;
+            flex-shrink: 0;
+        }
+        .column-hint {
+            width: var(--cell-size);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            gap: var(--hint-gap);
+            padding-bottom: 1px;
+            position: relative;
+            flex-shrink: 0;
+        }
+        .grid-body-row {
+            display: flex;
+            align-items: stretch;
+            flex-shrink: 0;
+        }
+        .row-hints-container {
+            display: flex;
+            flex-direction: column;
+            width: var(--corner-width);
+            min-width: var(--corner-width);
+            align-items: flex-end;
+            padding-right: 4px;
+            gap: 0;
+            flex-shrink: 0;
+        }
+        .row-hint {
+            height: var(--cell-size);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: var(--hint-gap);
+            padding-right: 2px;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .hint-bar {
+            border-radius: 2px;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1.2);
+        }
+        .col-bar {
+            width: var(--cell-size);
+            height: var(--hint-bar-height);
+        }
+        .row-bar {
+            width: var(--hint-bar-width);
+            height: var(--cell-size);
+        }
+        .hint-bar[data-target-color="red"] {
+            background: rgba(232, 93, 111, 0.4);
+        }
+        .hint-bar[data-target-color="blue"] {
+            background: rgba(91, 155, 213, 0.4);
+        }
+        .hint-bar[data-target-color="green"] {
+            background: rgba(76, 175, 132, 0.4);
+        }
+        .hint-bar.lit {
+            box-shadow: 0 0 10px 3px var(--glow-color);
+            transform: scale(1.04);
+        }
+        .hint-bar.lit-red {
+            background: var(--red-light);
+            --glow-color: rgba(255, 120, 135, 0.8);
+        }
+        .hint-bar.lit-blue {
+            background: var(--blue-light);
+            --glow-color: rgba(120, 185, 245, 0.8);
+        }
+        .hint-bar.lit-green {
+            background: var(--green-light);
+            --glow-color: rgba(100, 225, 160, 0.8);
+        }
+
+        .extra-bar {
+            display: none;
+            border-radius: 2px;
+            overflow: hidden;
+            box-shadow: 0 0 8px 2px rgba(255, 70, 70, 0.5);
+            animation: extra-appear 0.3s ease;
+            background-color: #555;
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255, 255, 255, 0.3) 2px, rgba(255, 255, 255, 0.3) 4px);
+        }
+        @keyframes extra-appear {
+            from {
+                transform: scale(0);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        .extra-bar.col-extra {
+            width: var(--cell-size);
+            height: var(--hint-bar-height);
+        }
+        .extra-bar.row-extra {
+            width: var(--hint-bar-width);
+            height: var(--cell-size);
+        }
+        .extra-bar.red-extra {
+            background-color: var(--red-base);
+        }
+        .extra-bar.blue-extra {
+            background-color: var(--blue-base);
+        }
+        .extra-bar.green-extra {
+            background-color: var(--green-base);
+        }
+
+        .grid-wrapper {
+            position: relative;
+            background: var(--grid-bg);
+            border-radius: 8px;
+            box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(255, 255, 255, 0.07);
+            padding: var(--padding-grid);
+            flex-shrink: 0;
+        }
+        .grid {
+            display: grid;
+            gap: var(--gap-sm);
+            position: relative;
+            z-index: 2;
+        }
+        .grid-cell {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            background: #1a1a28;
+            border-radius: 3px;
+            transition: background-color 0.25s, box-shadow 0.25s;
+            cursor: default;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+        }
+        .grid-cell.occupied-red {
+            background: #e85d6f;
+            box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.18), 0 0 5px rgba(232, 93, 111, 0.35);
+        }
+        .grid-cell.occupied-blue {
+            background: #5b9bd5;
+            box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.18), 0 0 5px rgba(91, 155, 213, 0.35);
+        }
+        .grid-cell.occupied-green {
+            background: #4caf84;
+            box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.18), 0 0 5px rgba(76, 175, 132, 0.35);
+        }
+        .grid-cell.highlight-valid {
+            box-shadow: 0 0 0 3px rgba(100, 220, 150, 0.7), 0 0 14px rgba(100, 220, 150, 0.35) !important;
+            z-index: 5;
+        }
+        .grid-cell.highlight-invalid {
+            box-shadow: 0 0 0 3px rgba(255, 100, 100, 0.7), 0 0 14px rgba(255, 100, 100, 0.35) !important;
+            z-index: 5;
+        }
+        .grid-cell.hint-target {
+            animation: hint-pulse 2s infinite;
+        }
+        .grid-cell.hint-target-red {
+            background: rgba(232, 93, 111, 0.3) !important;
+            border-color: rgba(232, 93, 111, 0.5) !important;
+        }
+        .grid-cell.hint-target-blue {
+            background: rgba(91, 155, 213, 0.3) !important;
+            border-color: rgba(91, 155, 213, 0.5) !important;
+        }
+        .grid-cell.hint-target-green {
+            background: rgba(76, 175, 132, 0.3) !important;
+            border-color: rgba(76, 175, 132, 0.5) !important;
+        }
+        @keyframes hint-pulse {
+            0%,
+            100% {
+                opacity: 0.5;
+            }
+            50% {
+                opacity: 0.85;
+            }
+        }
+
+        .pieces-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 14px;
+            padding: 14px 10px;
+            min-width: 100px;
+            align-items: center;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            flex-shrink: 0;
+        }
+        .pieces-panel h3 {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 11px;
+            letter-spacing: 1.5px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .piece-card {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+        }
+        .piece-holder {
+            cursor: grab;
+            transition: transform 0.2s, opacity 0.3s;
+            padding: 4px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px dashed rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 36px;
+            min-height: 36px;
+            touch-action: none;
+        }
+        .piece-holder:hover {
+            transform: scale(1.04);
+            background: rgba(255, 255, 255, 0.04);
+            border-color: rgba(255, 255, 255, 0.22);
+        }
+        .piece-holder:active {
+            cursor: grabbing;
+            transform: scale(0.94);
+        }
+        .piece-holder.used {
+            opacity: 0.2;
+            pointer-events: none;
+            filter: grayscale(0.7);
+        }
+        .piece-holder .mini-grid {
+            display: grid;
+            gap: 1px;
+            pointer-events: none;
+        }
+        .mini-cell {
+            border-radius: 2px;
+            pointer-events: none;
+        }
+        .mini-cell.filled-red {
+            background: #e85d6f;
+        }
+        .mini-cell.filled-blue {
+            background: #5b9bd5;
+        }
+        .mini-cell.filled-green {
+            background: #4caf84;
+        }
+        .mini-cell.empty {
+            background: transparent;
+        }
+        .piece-label {
+            font-size: 8px;
+            color: rgba(255, 255, 255, 0.35);
+            text-align: center;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        .rotate-btn {
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            min-height: 34px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.04);
+            color: #ccc;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .rotate-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 255, 255, 0.35);
+            color: #fff;
+            transform: rotate(90deg);
+        }
+        .rotate-btn:active {
+            transform: rotate(180deg) scale(0.9);
+            transition: transform 0.1s;
+        }
+        .rotate-btn.disabled {
+            opacity: 0.2;
+            pointer-events: none;
+        }
+
+        .drag-preview {
+            position: fixed;
+            pointer-events: none;
+            z-index: 1000;
+            display: grid;
+            gap: var(--gap-sm);
+            opacity: 0.8;
+            filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.55));
+            transition: none;
+        }
+        .drag-preview .drag-cell {
+            border-radius: 3px;
+            box-shadow: inset 0 0 5px rgba(255, 255, 255, 0.2);
+            width: var(--cell-size);
+            height: var(--cell-size);
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .btn {
+            padding: 10px 18px;
+            min-height: 40px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(255, 255, 255, 0.04);
+            color: #ccc;
+            cursor: pointer;
+            font-size: 12px;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+            font-family: inherit;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            white-space: nowrap;
+        }
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.28);
+            color: #fff;
+        }
+        .btn:active {
+            transform: scale(0.95);
+            transition: transform 0.1s;
+        }
+
+        .win-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.78);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.35s ease;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+        .win-dialog {
+            background: #1e2a3a;
+            border-radius: 18px;
+            padding: 28px 22px;
+            text-align: center;
+            box-shadow: 0 24px 48px rgba(0, 0, 0, 0.55), 0 0 0 2px rgba(255, 215, 60, 0.35);
+            animation: popIn 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            max-width: 90vw;
+            margin: 0 16px;
+        }
+        @keyframes popIn {
+            from {
+                transform: scale(0.7);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        .win-dialog .trophy {
+            font-size: 48px;
+            animation: bounce 0.8s ease infinite alternate;
+        }
+        @keyframes bounce {
+            from {
+                transform: translateY(0);
+            }
+            to {
+                transform: translateY(-10px);
+            }
+        }
+        .win-dialog h2 {
+            color: #f0c040;
+            font-size: 22px;
+            margin: 4px 0;
+            letter-spacing: 1px;
+        }
+        .win-dialog p {
+            color: #bbb;
+            margin: 3px 0 12px;
+            font-size: 12px;
+        }
+        .win-dialog button {
+            padding: 12px 28px;
+            min-height: 44px;
+            border-radius: 22px;
+            border: none;
+            background: linear-gradient(135deg, #f0c040, #e0a030);
+            color: #1a1a2e;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            font-family: inherit;
+            box-shadow: 0 5px 18px rgba(240, 192, 64, 0.28);
+            touch-action: manipulation;
+        }
+        .win-dialog button:hover {
+            transform: scale(1.04);
+        }
+        .win-dialog button:active {
+            transform: scale(0.95);
+        }
+
+        /* ========== 响应式布局 ========== */
+        @media (max-width: 620px) {
+            .game-container {
+                flex-direction: column;
+                gap: 12px;
+                padding: 12px 8px;
+                border-radius: 14px;
+            }
+            .pieces-panel {
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 8px;
+                min-width: auto;
+                justify-content: center;
+                padding: 10px 8px;
+                border-radius: 12px;
+                width: 100%;
+            }
+            .pieces-panel h3 {
+                width: 100%;
+                text-align: center;
+                font-size: 10px;
+                margin-bottom: 0;
+            }
+            .piece-card {
+                gap: 2px;
+            }
+            .btn {
+                padding: 8px 14px;
+                min-height: 36px;
+                font-size: 11px;
+                border-radius: 16px;
+            }
+            .top-bar {
+                padding: 6px 10px;
+                gap: 5px;
+                border-radius: 16px;
+            }
+            .level-badge {
+                font-size: 11px;
+                padding: 3px 10px;
+            }
+            .timer-display {
+                font-size: 12px;
+            }
+            .hint-banner {
+                font-size: 10px;
+                padding: 3px 8px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .game-container {
+                gap: 8px;
+                padding: 8px 4px;
+                border-radius: 10px;
+            }
+            .pieces-panel {
+                gap: 5px;
+                padding: 8px 4px;
+            }
+            .btn {
+                padding: 7px 10px;
+                min-height: 32px;
+                font-size: 10px;
+                border-radius: 14px;
+                letter-spacing: 0.5px;
+            }
+            .top-bar {
+                padding: 5px 8px;
+                gap: 3px;
+                border-radius: 12px;
+            }
+            .level-badge {
+                font-size: 10px;
+                padding: 2px 8px;
+                border-radius: 10px;
+            }
+            .timer-display {
+                font-size: 11px;
+            }
+            .hint-banner {
+                font-size: 9px;
+                padding: 2px 6px;
+                border-radius: 10px;
+            }
+            .rotate-btn {
+                width: 28px;
+                height: 28px;
+                min-width: 28px;
+                min-height: 28px;
+                font-size: 12px;
+            }
+            .piece-holder {
+                min-width: 28px;
+                min-height: 28px;
+                padding: 3px;
+            }
+            .win-dialog {
+                padding: 20px 16px;
+                border-radius: 14px;
+            }
+            .win-dialog .trophy {
+                font-size: 36px;
+            }
+            .win-dialog h2 {
+                font-size: 18px;
+            }
+            .win-dialog button {
+                padding: 10px 20px;
+                min-height: 38px;
+                font-size: 13px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="top-bar" id="topBar">
+        <span class="level-badge" id="levelBadge">第 1 关</span>
+        <span class="timer-display" id="timerDisplay">⏱️ 00:00</span>
+        <div class="hint-banner" id="hintBanner"><span>💡</span> 提示：观察行列色块，试试旋转图形！</div>
+    </div>
+
+    <div class="game-container" id="gameContainer">
+        <div class="grid-area">
+            <div class="grid-with-hints">
+                <div class="grid-top-row">
+                    <div class="corner-spacer"><span>列→</span></div>
+                    <div class="column-hints-container" id="columnHints"></div>
+                </div>
+                <div class="grid-body-row">
+                    <div class="row-hints-container" id="rowHints"></div>
+                    <div class="grid-wrapper" id="gridWrapper"><div class="grid" id="grid"></div></div>
+                </div>
+            </div>
+        </div>
+        <div class="pieces-panel" id="piecesPanel">
+            <h3>🧩 拼图块</h3>
+            <div id="piecesList" style="display:flex;flex-direction:row;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;"></div>
+            <div class="btn-row">
+                <button class="btn" id="btnReset">🔄 重置</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="win-overlay" id="winOverlay" style="display:none;">
+        <div class="win-dialog">
+            <div class="trophy">🏆</div>
+            <h2>恭喜通关！</h2>
+            <p id="winMessage"></p>
+            <button id="btnPlayAgain">▶ 下一关</button>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const COLORS = { red: '#e85d6f', blue: '#5b9bd5', green: '#4caf84' };
+            const COLOR_CLASS_MAP = { 'red': 'red', 'blue': 'blue', 'green': 'green' };
+            const HINT_TIMEOUT_SEC = 120;
+            const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+            const BASIC_SHAPES = [
+                { offsets: [
+                        [0, 0],
+                        [0, 1],
+                        [1, 0],
+                        [1, 1]
+                    ], rows: 2, cols: 2 },
+                { offsets: [
+                        [0, 0],
+                        [1, 0],
+                        [1, 1]
+                    ], rows: 2, cols: 2 },
+                { offsets: [
+                        [0, 0],
+                        [0, 1],
+                        [0, 2]
+                    ], rows: 1, cols: 3 },
+                { offsets: [
+                        [0, 0],
+                        [1, 0],
+                        [2, 0]
+                    ], rows: 3, cols: 1 },
+                { offsets: [
+                        [0, 0],
+                        [0, 1]
+                    ], rows: 1, cols: 2 },
+                { offsets: [
+                        [0, 0],
+                        [1, 0]
+                    ], rows: 2, cols: 1 },
+                { offsets: [
+                        [0, 0]
+                    ], rows: 1, cols: 1 },
+            ];
+
+            function rotateShape(shape, rot) {
+                rot = ((rot % 4) + 4) % 4;
+                let offsets = shape.offsets.map(([r, c]) => [r, c]);
+                let rows = shape.rows,
+                    cols = shape.cols;
+                for (let i = 0; i < rot; i++) {
+                    const newOff = offsets.map(([r, c]) => [c, rows - 1 - r]);
+                    [rows, cols] = [cols, rows];
+                    offsets = newOff;
+                }
+                const minR = Math.min(...offsets.map(o => o[0]));
+                const minC = Math.min(...offsets.map(o => o[1]));
+                offsets = offsets.map(([r, c]) => [r - minR, c - minC]);
+                const maxR = Math.max(...offsets.map(o => o[0]));
+                const maxC = Math.max(...offsets.map(o => o[1]));
+                return { offsets, rows: maxR + 1, cols: maxC + 1 };
+            }
+
+            function generateLevel(levelNumber) {
+                const gridSize = 4 + Math.min(Math.floor((levelNumber - 1) / 5), 4);
+                const pieceCount = 4 + Math.min(Math.floor((levelNumber - 1) / 2), 4);
+                const colors = ['red', 'blue', 'green'];
+                for (let attempt = 0; attempt < 800; attempt++) {
+                    const grid = Array.from({ length: gridSize }, () => Array(gridSize).fill(null));
+                    const pieces = [];
+                    let success = true;
+                    for (let i = 0; i < pieceCount; i++) {
+                        const base = BASIC_SHAPES[Math.floor(Math.random() * BASIC_SHAPES.length)];
+                        const rot = Math.floor(Math.random() * 4);
+                        const eff = rotateShape(base, rot);
+                        const color = colors[Math.floor(Math.random() * colors.length)];
+                        let placed = false;
+                        for (let tryPos = 0; tryPos < 200; tryPos++) {
+                            const ar = Math.floor(Math.random() * (gridSize - eff.rows + 1));
+                            const ac = Math.floor(Math.random() * (gridSize - eff.cols + 1));
+                            const cells = eff.offsets.map(([dr, dc]) => [ar + dr, ac + dc]);
+                            if (cells.every(([r, c]) => r >= 0 && r < gridSize && c >= 0 && c < gridSize && grid[r][c] ===
+                                    null)) {
+                                cells.forEach(([r, c]) => { grid[r][c] = color; });
+                                pieces.push({ id: `p${i}`, name: `拼图${i+1}`, color, shapeOffsets: base.offsets,
+                                    gridCols: base.cols, gridRows: base.rows });
+                                placed = true;
+                                break;
+                            }
+                        }
+                        if (!placed) { success = false; break; }
+                    }
+                    if (success) return { gridSize, targetPattern: grid, pieces };
+                }
+                return {
+                    gridSize: 4,
+                    targetPattern: [
+                        ['red', 'red', null, null],
+                        ['red', 'red', null, null],
+                        [null, null, 'blue', 'blue'],
+                        [null, null, 'blue', 'blue']
+                    ],
+                    pieces: [
+                        { id: 'p1', name: '红块', color: 'red', shapeOffsets: [
+                                [0, 0],
+                                [0, 1],
+                                [1, 0],
+                                [1, 1]
+                            ], gridCols: 2, gridRows: 2 },
+                        { id: 'p2', name: '蓝块', color: 'blue', shapeOffsets: [
+                                [0, 0],
+                                [0, 1],
+                                [1, 0],
+                                [1, 1]
+                            ], gridCols: 2, gridRows: 2 }
+                    ]
+                };
+            }
+
+            let currentLevelNumber = 1;
+            let levelData = generateLevel(currentLevelNumber);
+            let GRID_SIZE = levelData.gridSize;
+            let TARGET_PATTERN = levelData.targetPattern;
+            let PIECE_DEFINITIONS_RAW = levelData.pieces;
+            let pieceRotations = new Map();
+            PIECE_DEFINITIONS_RAW.forEach(p => pieceRotations.set(p.id, 0));
+            let gridState = [];
+            let placedPieces = [];
+            let availablePieceIds = new Set(PIECE_DEFINITIONS_RAW.map(p => p.id));
+            let timerStartTime = null,
+                timerInterval = null,
+                hintShown = false,
+                gameWon = false;
+
+            const gridEl = document.getElementById('grid');
+            const columnHintsEl = document.getElementById('columnHints');
+            const rowHintsEl = document.getElementById('rowHints');
+            const piecesListEl = document.getElementById('piecesList');
+            const winOverlayEl = document.getElementById('winOverlay');
+            const timerDisplay = document.getElementById('timerDisplay');
+            const hintBanner = document.getElementById('hintBanner');
+            const winMessageEl = document.getElementById('winMessage');
+            const piecesPanelEl = document.getElementById('piecesPanel');
+            const levelBadge = document.getElementById('levelBadge');
+            const gridWrapperEl = document.getElementById('gridWrapper');
+            const rootEl = document.documentElement;
+
+            function calculateCellSize() {
+                const vw = window.innerWidth;
+                const isMobile = vw < 620;
+                let maxAvailable;
+                if (isMobile) {
+                    maxAvailable = vw - 16 - (GRID_SIZE > 6 ? 30 : 40);
+                } else {
+                    maxAvailable = vw - 200;
+                }
+                const gapTotal = (GRID_SIZE - 1) * 1;
+                let cellSize = Math.floor((maxAvailable - gapTotal) / GRID_SIZE);
+                cellSize = Math.max(24, Math.min(50, cellSize));
+                return cellSize;
+            }
+
+            function applyCellSize() {
+                const cs = calculateCellSize();
+                rootEl.style.setProperty('--cell-size', cs + 'px');
+                const hintBarW = Math.max(5, Math.floor(cs * 0.22));
+                const hintBarH = Math.max(5, Math.floor(cs * 0.22));
+                rootEl.style.setProperty('--hint-bar-width', hintBarW + 'px');
+                rootEl.style.setProperty('--hint-bar-height', hintBarH + 'px');
+                rootEl.style.setProperty('--hint-gap', Math.max(1, Math.floor(cs * 0.05)) + 'px');
+                const cornerW = Math.max(28, Math.floor(cs * 0.85));
+                const cornerH = Math.max(24, Math.floor(cs * 0.75));
+                rootEl.style.setProperty('--corner-width', cornerW + 'px');
+                rootEl.style.setProperty('--corner-height', cornerH + 'px');
+                rootEl.style.setProperty('--padding-grid', Math.max(2, Math.floor(cs * 0.07)) + 'px');
+                rootEl.style.setProperty('--gap-sm', Math.max(1, Math.floor(cs * 0.03)) + 'px');
+            }
+
+            function buildGrid() {
+                rootEl.style.setProperty('--grid-size', GRID_SIZE);
+                applyCellSize();
+                gridEl.style.gridTemplateColumns = `repeat(${GRID_SIZE}, var(--cell-size))`;
+                gridEl.style.gridTemplateRows = `repeat(${GRID_SIZE}, var(--cell-size))`;
+                gridEl.innerHTML = '';
+                for (let r = 0; r < GRID_SIZE; r++)
+                    for (let c = 0; c < GRID_SIZE; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'grid-cell';
+                        cell.dataset.row = r;
+                        cell.dataset.col = c;
+                        gridEl.appendChild(cell);
+                    }
+            }
+
+            let rowHintsData, colHintsData;
+
+            function refreshHintsData() {
+                rowHintsData = [];
+                colHintsData = [];
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    const hints = [];
+                    for (let c = 0; c < GRID_SIZE; c++)
+                        if (TARGET_PATTERN[r][c] !== null) hints.push({ color: TARGET_PATTERN[r][c] });
+                    rowHintsData.push(hints);
+                }
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const hints = [];
+                    for (let r = 0; r < GRID_SIZE; r++)
+                        if (TARGET_PATTERN[r][c] !== null) hints.push({ color: TARGET_PATTERN[r][c] });
+                    colHintsData.push(hints);
+                }
+            }
+
+            function renderAllHints() {
+                columnHintsEl.innerHTML = '';
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const hintDiv = document.createElement('div');
+                    hintDiv.className = 'column-hint';
+                    colHintsData[c].forEach((hint, idx) => {
+                        const bar = document.createElement('div');
+                        bar.className = 'hint-bar col-bar';
+                        bar.dataset.col = c;
+                        bar.dataset.idx = idx;
+                        bar.dataset.targetColor = hint.color;
+                        hintDiv.appendChild(bar);
+                    });
+                    const extra = document.createElement('div');
+                    extra.className = 'extra-bar col-extra';
+                    extra.dataset.col = c;
+                    extra.style.display = 'none';
+                    hintDiv.appendChild(extra);
+                    columnHintsEl.appendChild(hintDiv);
+                }
+                rowHintsEl.innerHTML = '';
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    const hintDiv = document.createElement('div');
+                    hintDiv.className = 'row-hint';
+                    rowHintsData[r].forEach((hint, idx) => {
+                        const bar = document.createElement('div');
+                        bar.className = 'hint-bar row-bar';
+                        bar.dataset.row = r;
+                        bar.dataset.idx = idx;
+                        bar.dataset.targetColor = hint.color;
+                        hintDiv.appendChild(bar);
+                    });
+                    const extra = document.createElement('div');
+                    extra.className = 'extra-bar row-extra';
+                    extra.dataset.row = r;
+                    extra.style.display = 'none';
+                    hintDiv.appendChild(extra);
+                    rowHintsEl.appendChild(hintDiv);
+                }
+            }
+
+            function updateAllHints() {
+                for (let c = 0; c < GRID_SIZE; c++) {
+                    const targetColors = colHintsData[c].map(h => h.color);
+                    const actualColors = [];
+                    for (let r = 0; r < GRID_SIZE; r++)
+                        if (gridState[r] && gridState[r][c] !== null) actualColors.push(gridState[r][c]);
+                    const remainingActual = [...actualColors];
+                    const bars = columnHintsEl.querySelectorAll(`.col-bar[data-col="${c}"]`);
+                    bars.forEach(bar => {
+                        const targetColor = bar.dataset.targetColor;
+                        bar.classList.remove('lit', 'lit-red', 'lit-blue', 'lit-green');
+                        const matchIdx = remainingActual.indexOf(targetColor);
+                        if (matchIdx > -1) {
+                            bar.classList.add('lit', 'lit-' + COLOR_CLASS_MAP[targetColor]);
+                            remainingActual.splice(matchIdx, 1);
+                        }
+                    });
+                    const extraBar = columnHintsEl.querySelector(`.extra-bar.col-extra[data-col="${c}"]`);
+                    if (extraBar) {
+                        extraBar.style.display = 'none';
+                        extraBar.className = extraBar.className.replace(/ (red|blue|green)-extra/g, '');
+                        if (remainingActual.length > 0) {
+                            extraBar.style.display = 'block';
+                            extraBar.classList.add(remainingActual[0] + '-extra');
+                        }
+                    }
+                }
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    const targetColors = rowHintsData[r].map(h => h.color);
+                    const actualColors = [];
+                    for (let c = 0; c < GRID_SIZE; c++)
+                        if (gridState[r] && gridState[r][c] !== null) actualColors.push(gridState[r][c]);
+                    const remainingActual = [...actualColors];
+                    const bars = rowHintsEl.querySelectorAll(`.row-bar[data-row="${r}"]`);
+                    bars.forEach(bar => {
+                        const targetColor = bar.dataset.targetColor;
+                        bar.classList.remove('lit', 'lit-red', 'lit-blue', 'lit-green');
+                        const matchIdx = remainingActual.indexOf(targetColor);
+                        if (matchIdx > -1) {
+                            bar.classList.add('lit', 'lit-' + COLOR_CLASS_MAP[targetColor]);
+                            remainingActual.splice(matchIdx, 1);
+                        }
+                    });
+                    const extraBar = rowHintsEl.querySelector(`.extra-bar.row-extra[data-row="${r}"]`);
+                    if (extraBar) {
+                        extraBar.style.display = 'none';
+                        extraBar.className = extraBar.className.replace(/ (red|blue|green)-extra/g, '');
+                        if (remainingActual.length > 0) {
+                            extraBar.style.display = 'block';
+                            extraBar.classList.add(remainingActual[0] + '-extra');
+                        }
+                    }
+                }
+            }
+
+            function updateGridDisplay() {
+                gridEl.querySelectorAll('.grid-cell').forEach(cell => {
+                    const r = parseInt(cell.dataset.row),
+                        c = parseInt(cell.dataset.col);
+                    const color = gridState[r] ? gridState[r][c] : null;
+                    cell.classList.remove('occupied-red', 'occupied-blue', 'occupied-green', 'highlight-valid',
+                        'highlight-invalid', 'hint-target', 'hint-target-red', 'hint-target-blue', 'hint-target-green');
+                    if (color) cell.classList.add('occupied-' + COLOR_CLASS_MAP[color]);
+                });
+                if (hintShown && !gameWon) applyHintGlow();
+                updateAllHints();
+                if (!gameWon) checkWin();
+            }
+
+            function applyHintGlow() {
+                gridEl.querySelectorAll('.grid-cell').forEach(cell => {
+                    const r = parseInt(cell.dataset.row),
+                        c = parseInt(cell.dataset.col);
+                    if (gridState[r] && gridState[r][c] === null && TARGET_PATTERN[r][c] !== null)
+                        cell.classList.add('hint-target', 'hint-target-' + COLOR_CLASS_MAP[TARGET_PATTERN[r][c]]);
+                });
+            }
+
+            function removeHintGlow() {
+                gridEl.querySelectorAll('.grid-cell').forEach(c => c.classList.remove('hint-target', 'hint-target-red',
+                    'hint-target-blue', 'hint-target-green'));
+            }
+
+            function renderPieceHolders() {
+                piecesListEl.innerHTML = '';
+                PIECE_DEFINITIONS_RAW.forEach(rawDef => {
+                    const pieceId = rawDef.id;
+                    const rotation = pieceRotations.get(pieceId) || 0;
+                    const effective = rotateShape({ offsets: rawDef.shapeOffsets, rows: rawDef.gridRows, cols: rawDef
+                            .gridCols }, rotation);
+                    const isAvail = availablePieceIds.has(pieceId);
+                    const card = document.createElement('div');
+                    card.className = 'piece-card';
+                    const holder = document.createElement('div');
+                    holder.className = 'piece-holder';
+                    holder.dataset.pieceId = pieceId;
+                    if (!isAvail) holder.classList.add('used');
+                    const miniGrid = document.createElement('div');
+                    miniGrid.className = 'mini-grid';
+                    const s = Math.max(12, Math.floor(parseFloat(getComputedStyle(rootEl).getPropertyValue(
+                        '--cell-size')) * 0.38));
+                    miniGrid.style.gridTemplateColumns = `repeat(${effective.cols}, ${s}px)`;
+                    miniGrid.style.gridTemplateRows = `repeat(${effective.rows}, ${s}px)`;
+                    const shapeSet = new Set(effective.offsets.map(o => `${o[0]},${o[1]}`));
+                    for (let r = 0; r < effective.rows; r++)
+                        for (let c = 0; c < effective.cols; c++) {
+                            const mc = document.createElement('div');
+                            mc.className = 'mini-cell';
+                            mc.style.width = s + 'px';
+                            mc.style.height = s + 'px';
+                            if (shapeSet.has(`${r},${c}`)) mc.classList.add('filled-' + COLOR_CLASS_MAP[rawDef.color]);
+                            else mc.classList.add('empty');
+                            miniGrid.appendChild(mc);
+                        }
+                    holder.appendChild(miniGrid);
+                    const label = document.createElement('div');
+                    label.className = 'piece-label';
+                    label.textContent = rawDef.name + (rotation > 0 ? ` ↻${rotation}` : '');
+                    holder.appendChild(label);
+                    const rotateBtn = document.createElement('button');
+                    rotateBtn.className = 'rotate-btn';
+                    rotateBtn.textContent = '↻';
+                    if (!isAvail) rotateBtn.classList.add('disabled');
+                    rotateBtn.addEventListener('pointerdown', e => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        if (!availablePieceIds.has(pieceId)) return;
+                        pieceRotations.set(pieceId, ((pieceRotations.get(pieceId) || 0) + 1) % 4);
+                        renderPieceHolders();
+                    });
+                    card.appendChild(rotateBtn);
+                    card.appendChild(holder);
+                    holder.addEventListener('pointerdown', e => startDragFromPanel(e, rawDef, pieceId));
+                    piecesListEl.appendChild(card);
+                });
+            }
+
+            function refreshPieceHolders() {
+                piecesListEl.querySelectorAll('.piece-card').forEach(card => {
+                    const pid = card.querySelector('.piece-holder')?.dataset.pieceId;
+                    if (!pid) return;
+                    const isAvail = availablePieceIds.has(pid);
+                    const holder = card.querySelector('.piece-holder');
+                    const rb = card.querySelector('.rotate-btn');
+                    holder.classList.toggle('used', !isAvail);
+                    holder.style.pointerEvents = isAvail ? 'auto' : 'none';
+                    if (rb) rb.classList.toggle('disabled', !isAvail);
+                });
+            }
+
+            let dragState = null;
+
+            function getCellSizeVal() { return parseFloat(getComputedStyle(rootEl).getPropertyValue('--cell-size')); }
+
+            function getGridOffset() {
+                const r = gridWrapperEl.getBoundingClientRect();
+                const pad = parseFloat(getComputedStyle(rootEl).getPropertyValue('--padding-grid'));
+                return { left: r.left + pad, top: r.top + pad, cellSize: getCellSizeVal(), gap: parseFloat(
+                        getComputedStyle(rootEl).getPropertyValue('--gap-sm')) };
+            }
+
+            function clientToGrid(cx, cy) { const o = getGridOffset(); const s = o.cellSize + o.gap; return { row: Math.round(
+                        (cy - o.top) / s), col: Math.round((cx - o.left) / s) }; }
+
+            function getEffectiveShape(rawDef, rot) { return rotateShape({ offsets: rawDef.shapeOffsets, rows: rawDef.gridRows,
+                    cols: rawDef.gridCols }, rot); }
+
+            function isValidPlacement(shape, ar, ac, excludeId = null) {
+                const cells = shape.offsets.map(([dr, dc]) => ({ row: ar + dr, col: ac + dc }));
+                if (cells.some(c => c.row < 0 || c.row >= GRID_SIZE || c.col < 0 || c.col >= GRID_SIZE)) return false;
+                for (const c of cells) {
+                    if (gridState[c.row] && gridState[c.row][c.col] !== null) {
+                        if (!excludeId) return false;
+                        const occ = placedPieces.find(p => p.pieceId === excludeId && getEffectiveShape(p.rawDef, p.rotation)
+                            .offsets.some(([dr, dc]) => p.anchorRow + dr === c.row && p.anchorCol + dc === c.col));
+                        if (!occ) return false;
+                    }
+                }
+                return true;
+            }
+
+            function createDragPreview(shape, color) {
+                const el = document.createElement('div');
+                el.className = 'drag-preview';
+                const cs = getCellSizeVal();
+                el.style.gridTemplateColumns = `repeat(${shape.cols}, ${cs}px)`;
+                el.style.gridTemplateRows = `repeat(${shape.rows}, ${cs}px)`;
+                const set = new Set(shape.offsets.map(o => `${o[0]},${o[1]}`));
+                for (let r = 0; r < shape.rows; r++)
+                    for (let c = 0; c < shape.cols; c++) {
+                        const dc = document.createElement('div');
+                        dc.className = 'drag-cell';
+                        dc.style.width = cs + 'px';
+                        dc.style.height = cs + 'px';
+                        dc.style.background = set.has(`${r},${c}`) ? COLORS[color] : 'transparent';
+                        el.appendChild(dc);
+                    }
+                document.body.appendChild(el);
+                return el;
+            }
+
+            function snapAndUpdate(cx, cy) {
+                if (!dragState) return;
+                const { row, col } = clientToGrid(cx, cy);
+                dragState.currentAnchorRow = row;
+                dragState.currentAnchorCol = col;
+                dragState.isValidPlacement = isValidPlacement(dragState.effectiveShape, row, col, dragState.sourceType ===
+                    'grid' ? dragState.pieceId : null);
+                const off = getGridOffset();
+                const step = off.cellSize + off.gap;
+                let previewTop = off.top + row * step;
+                if (IS_TOUCH_DEVICE && dragState.previewEl) {
+                    previewTop -= off.cellSize * 1.6;
+                }
+                dragState.previewEl.style.left = (off.left + col * step) + 'px';
+                dragState.previewEl.style.top = previewTop + 'px';
+                dragState.previewEl.style.opacity = dragState.isValidPlacement ? '0.82' : '0.45';
+                gridEl.querySelectorAll('.grid-cell').forEach(c => c.classList.remove('highlight-valid',
+                    'highlight-invalid'));
+                if (dragState) {
+                    const cls = dragState.isValidPlacement ? 'highlight-valid' : 'highlight-invalid';
+                    dragState.effectiveShape.offsets.forEach(([dr, dc]) => {
+                        const cell = gridEl.querySelector(
+                            `.grid-cell[data-row="${row+dr}"][data-col="${col+dc}"]`);
+                        if (cell) cell.classList.add(cls);
+                    });
+                }
+            }
+
+            function removeDragPreview() { if (dragState?.previewEl) { dragState.previewEl.remove();
+                    dragState.previewEl = null; } gridEl.querySelectorAll('.grid-cell').forEach(c => c.classList.remove(
+                    'highlight-valid', 'highlight-invalid')); }
+
+            function placePiece(pid, rawDef, rot, shape, ar, ac) {
+                shape.offsets.forEach(([dr, dc]) => { if (gridState[ar + dr]) gridState[ar + dr][ac + dc] = rawDef
+                    .color; });
+                placedPieces.push({ pieceId: pid, rawDef, anchorRow: ar, anchorCol: ac, rotation: rot });
+                availablePieceIds.delete(pid);
+            }
+
+            function removePiece(pid) {
+                const idx = placedPieces.findIndex(p => p.pieceId === pid);
+                if (idx >= 0) {
+                    const pp = placedPieces[idx];
+                    getEffectiveShape(pp.rawDef, pp.rotation).offsets.forEach(([dr, dc]) => { if (gridState[pp.anchorRow + dr])
+                            gridState[pp.anchorRow + dr][pp.anchorCol + dc] = null; });
+                    placedPieces.splice(idx, 1);
+                    availablePieceIds.add(pid);
+                }
+            }
+
+            function findPieceAt(row, col) { return placedPieces.find(pp => getEffectiveShape(pp.rawDef, pp.rotation).offsets
+                    .some(([dr, dc]) => pp.anchorRow + dr === row && pp.anchorCol + dc === col)); }
+
+            function isPointInPanel(cx, cy) { const r = piecesPanelEl.getBoundingClientRect(); return cx >= r.left && cx <= r
+                    .right && cy >= r.top && cy <= r.bottom; }
+
+            function startDragFromPanel(e, rawDef, pid) {
+                if (!availablePieceIds.has(pid)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                beginDrag(pid, rawDef, pieceRotations.get(pid) || 0, null, null, e.clientX, e.clientY);
+            }
+
+            function startDragFromGrid(e, pid, rawDef, rot, ar, ac) {
+                e.preventDefault();
+                e.stopPropagation();
+                beginDrag(pid, rawDef, rot, ar, ac, e.clientX, e.clientY);
+            }
+
+            function beginDrag(pid, rawDef, rot, origRow, origCol, cx, cy) {
+                if (origRow !== null) removePiece(pid);
+                else availablePieceIds.delete(pid);
+                pieceRotations.set(pid, rot);
+                const shape = getEffectiveShape(rawDef, rot);
+                const preview = createDragPreview(shape, rawDef.color);
+                dragState = { pieceId: pid, rawDef, rotation: rot, effectiveShape: shape, sourceType: origRow !== null ?
+                        'grid' : 'panel', originalAnchorRow: origRow, originalAnchorCol: origCol, previewEl: preview,
+                    currentAnchorRow: 0, currentAnchorCol: 0, isValidPlacement: false };
+                snapAndUpdate(cx, cy);
+                refreshPieceHolders();
+                updateGridDisplay();
+            }
+
+            function finishDrag(cx, cy) {
+                if (!dragState) return;
+                const { pieceId, rawDef, rotation, effectiveShape, originalAnchorRow, originalAnchorCol } = dragState;
+                const row = dragState.currentAnchorRow,
+                    col = dragState.currentAnchorCol;
+                const valid = dragState.isValidPlacement;
+                removeDragPreview();
+                const st = dragState;
+                dragState = null;
+                if (isPointInPanel(cx, cy)) { availablePieceIds.add(pieceId); } else if (valid) { placePiece(pieceId, rawDef,
+                        rotation, effectiveShape, row, col); } else if (originalAnchorRow !== null) { const origShape =
+                        getEffectiveShape(rawDef, rotation); if (isValidPlacement(origShape, originalAnchorRow,
+                        originalAnchorCol)) placePiece(pieceId, rawDef, rotation, origShape, originalAnchorRow,
+                        originalAnchorCol);
+                    else availablePieceIds.add(pieceId); } else { availablePieceIds.add(pieceId); }
+                updateGridDisplay();
+                refreshPieceHolders();
+            }
+
+            function checkWin() {
+                if (placedPieces.length !== PIECE_DEFINITIONS_RAW.length) return;
+                if (!TARGET_PATTERN.every((rowArr, r) => rowArr.every((col, c) => gridState[r] && gridState[r][c] === col)))
+                    return;
+                if (gameWon) return;
+                gameWon = true;
+                stopTimer();
+                removeHintGlow();
+                hintBanner.classList.remove('visible');
+                timerDisplay.classList.remove('warning');
+                const elapsed = timerStartTime ? Math.floor((Date.now() - timerStartTime) / 1000) : 0;
+                winMessageEl.textContent =
+                    `第 ${currentLevelNumber} 关完成！用时 ${Math.floor(elapsed/60)}分${(elapsed%60).toString().padStart(2,'0')}秒`;
+                winOverlayEl.style.display = 'flex';
+            }
+
+            function startTimer() {
+                timerStartTime = Date.now();
+                hintShown = false;
+                gameWon = false;
+                removeHintGlow();
+                hintBanner.classList.remove('visible');
+                timerDisplay.classList.remove('warning');
+                if (timerInterval) clearInterval(timerInterval);
+                timerInterval = setInterval(() => {
+                    if (!timerStartTime || gameWon) return;
+                    const e = Math.floor((Date.now() - timerStartTime) / 1000);
+                    timerDisplay.textContent = '⏱️ ' + Math.floor(e / 60).toString().padStart(2, '0') + ':' + (e % 60)
+                        .toString().padStart(2, '0');
+                    if (currentLevelNumber <= 15 && e >= HINT_TIMEOUT_SEC && !hintShown && !gameWon) {
+                        hintShown = true;
+                        hintBanner.classList.add('visible');
+                        timerDisplay.classList.add('warning');
+                        applyHintGlow();
+                    }
+                }, 500);
+            }
+
+            function stopTimer() { if (timerInterval) { clearInterval(timerInterval);
+                    timerInterval = null; } }
+
+            function loadLevel(levelNum) {
+                currentLevelNumber = levelNum;
+                levelData = generateLevel(levelNum);
+                GRID_SIZE = levelData.gridSize;
+                TARGET_PATTERN = levelData.targetPattern;
+                PIECE_DEFINITIONS_RAW = levelData.pieces;
+                pieceRotations = new Map();
+                PIECE_DEFINITIONS_RAW.forEach(p => pieceRotations.set(p.id, 0));
+                gridState = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
+                placedPieces = [];
+                availablePieceIds = new Set(PIECE_DEFINITIONS_RAW.map(p => p.id));
+                buildGrid();
+                refreshHintsData();
+                renderAllHints();
+                renderPieceHolders();
+                updateGridDisplay();
+                levelBadge.textContent = `第 ${levelNum} 关`;
+                winOverlayEl.style.display = 'none';
+                hintBanner.classList.remove('visible');
+                timerDisplay.classList.remove('warning');
+                gameWon = false;
+                hintShown = false;
+                removeHintGlow();
+            }
+
+            function softReset() {
+                if (dragState) { removeDragPreview();
+                    dragState = null; }
+                gridState = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(null));
+                placedPieces = [];
+                availablePieceIds = new Set(PIECE_DEFINITIONS_RAW.map(p => p.id));
+                pieceRotations = new Map();
+                PIECE_DEFINITIONS_RAW.forEach(p => pieceRotations.set(p.id, 0));
+                updateGridDisplay();
+                renderPieceHolders();
+                winOverlayEl.style.display = 'none';
+                hintBanner.classList.remove('visible');
+                timerDisplay.classList.remove('warning');
+                gameWon = false;
+                hintShown = false;
+            }
+
+            function nextLevel() { stopTimer();
+                loadLevel(currentLevelNumber + 1);
+                startTimer(); }
+
+            // 全局事件（使用pointer事件统一处理鼠标和触摸）
+            document.addEventListener('pointermove', e => {
+                if (dragState) {
+                    e.preventDefault();
+                    snapAndUpdate(e.clientX, e.clientY);
+                }
+            }, { passive: false });
+            document.addEventListener('pointerup', e => {
+                if (dragState) finishDrag(e.clientX, e.clientY);
+            });
+            document.addEventListener('pointercancel', e => {
+                if (dragState) finishDrag(e.clientX, e.clientY);
+            });
+            document.addEventListener('pointerleave', e => {
+                if (dragState && e.pointerType === 'touch') finishDrag(e.clientX, e.clientY);
+            });
+
+            gridEl.addEventListener('pointerdown', e => {
+                const cell = e.target.closest('.grid-cell');
+                if (!cell || dragState) return;
+                const r = parseInt(cell.dataset.row),
+                    c = parseInt(cell.dataset.col);
+                const pp = findPieceAt(r, c);
+                if (pp) startDragFromGrid(e, pp.pieceId, pp.rawDef, pp.rotation, pp.anchorRow, pp.anchorCol);
+            });
+
+            document.getElementById('btnReset').addEventListener('click', softReset);
+            document.getElementById('btnPlayAgain').addEventListener('click', () => { winOverlayEl.style.display = 'none';
+                nextLevel(); });
+
+            // 窗口大小变化时重新计算
+            let resizeDebounce;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeDebounce);
+                resizeDebounce = setTimeout(() => {
+                    applyCellSize();
+                    buildGrid();
+                    refreshHintsData();
+                    renderAllHints();
+                    renderPieceHolders();
+                    updateGridDisplay();
+                }, 300);
+            });
+
+            // 阻止双击缩放
+            document.addEventListener('dblclick', e => {
+                if (e.target.closest('.grid-cell') || e.target.closest('.piece-holder') || e.target.closest(
+                        '.rotate-btn') || e.target.closest('button')) {
+                    e.preventDefault();
+                }
+            }, { passive: false });
+
+            function initGame() { loadLevel(currentLevelNumber);
+                startTimer(); }
+            initGame();
+        })();
+    </script>
+</body>
+</html>
