@@ -2,22 +2,22 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>星河杯 - 指标选择</title>
   <style>
-    /* 原样式不变，仅添加排行榜相关样式 */
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background: #0a0c0f; color: #e0e8f0;
       font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
       min-height: 100vh; display: flex; justify-content: center; align-items: center;
+      margin: 0; padding: 10px;
     }
     .container {
-      width: 1100px; max-width: 95%;
+      width: 100%; max-width: 1100px;
       background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
       border: 1px solid #2a3340;
       box-shadow: 0 0 30px rgba(0,160,255,0.1);
-      position: relative; overflow: hidden; min-height: 600px; margin: 20px auto;
+      position: relative; overflow: hidden; min-height: 600px; margin: 0 auto;
     }
     .container::before {
       content: ''; position: absolute; top: 0; left: 0;
@@ -30,205 +30,214 @@
       border-bottom: 2px solid #00c8ff; border-right: 2px solid #00c8ff;
     }
 
+    /* 头部 */
     .header {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 20px 30px; border-bottom: 1px solid #2a3340;
-      background: rgba(20,25,30,0.8); flex-wrap: wrap; gap: 15px;
+      padding: 15px 20px; border-bottom: 1px solid #2a3340;
+      background: rgba(20,25,30,0.8); flex-wrap: wrap; gap: 10px;
     }
-    .header-left { display: flex; align-items: center; gap: 15px; flex-wrap: wrap; }
+    .header-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .back-btn {
       background: transparent; border: 1px solid #3a5060;
-      color: #b0c7d6; padding: 8px 15px;
-      font-family: inherit; font-size: 0.9rem; letter-spacing: 2px;
-      cursor: pointer; transition: all 0.2s; text-decoration: none;
-      white-space: nowrap;
+      color: #b0c7d6; padding: 6px 12px; font-family: inherit;
+      font-size: 0.9rem; letter-spacing: 2px; cursor: pointer;
+      transition: all 0.2s; text-decoration: none; white-space: nowrap;
     }
-    .back-btn:hover { border-color: #00c8ff; color: #fff; box-shadow: 0 0 10px rgba(0,200,255,0.3); }
+    .back-btn:hover { border-color: #00c8ff; color: #fff; }
     .title {
-      font-size: 2.2rem; font-weight: 700; letter-spacing: 8px;
+      font-size: 2rem; font-weight: 700; letter-spacing: 6px;
       color: #fff; text-shadow: 0 0 15px #00a3ff; text-transform: uppercase;
     }
-    .subtitle { display: block; font-size: 0.8rem; letter-spacing: 4px; color: #5e7a8c; }
+    .subtitle { display: block; font-size: 0.7rem; letter-spacing: 3px; color: #5e7a8c; }
 
-    .crisis-level { display: flex; align-items: baseline; gap: 15px; }
-    .level-label { font-size: 1.2rem; color: #7a8b9a; letter-spacing: 2px; }
+    .header-center {
+      display: flex; align-items: center;
+    }
+    .crisis-level { display: flex; align-items: baseline; gap: 10px; }
+    .level-label { font-size: 1rem; color: #7a8b9a; letter-spacing: 1px; }
     .level-value {
-      font-size: 3.5rem; font-weight: 700; color: #ff6a00;
-      text-shadow: 0 0 20px #ff6a00; line-height: 1;
+      font-size: 2.8rem; font-weight: 700; color: #ff6a00;
+      text-shadow: 0 0 15px #ff6a00; line-height: 1;
     }
 
+    .header-right {
+      display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    }
     .btn-action {
       background: transparent; border: 1px solid #3a5060;
-      color: #b0c7d6; padding: 10px 25px;
-      font-family: inherit; font-size: 1rem; letter-spacing: 2px;
-      cursor: pointer; transition: all 0.2s; white-space: nowrap;
+      color: #b0c7d6; padding: 8px 14px; font-family: inherit;
+      font-size: 0.9rem; letter-spacing: 1px; cursor: pointer;
+      transition: all 0.2s; white-space: nowrap;
     }
-    .btn-action:hover { border-color: #00c8ff; color: #fff; box-shadow: 0 0 15px rgba(0,200,255,0.3); }
+    .btn-action:hover { border-color: #00c8ff; color: #fff; }
     .btn-leaderboard {
       background: transparent; border: 1px solid #ff6a00;
-      color: #ff6a00; padding: 10px 20px;
-      font-family: inherit; font-size: 1rem; letter-spacing: 2px;
-      cursor: pointer; transition: all 0.2s; white-space: nowrap;
+      color: #ff6a00; padding: 8px 14px; font-family: inherit;
+      font-size: 0.9rem; letter-spacing: 1px; cursor: pointer;
+      transition: all 0.2s; white-space: nowrap;
     }
-    .btn-leaderboard:hover { background: rgba(255,106,0,0.2); box-shadow: 0 0 15px rgba(255,106,0,0.4); }
+    .btn-leaderboard:hover { background: rgba(255,106,0,0.2); }
 
-    .main-content { display: flex; height: 500px; }
+    /* 主内容区 */
+    .main-content {
+      display: flex; height: 500px;
+    }
 
     .contracts-section {
-      flex: 2; padding: 20px; display: flex; flex-direction: row;
-      overflow: hidden; border-right: 1px solid #2a3340; gap: 20px;
+      flex: 2; padding: 15px; display: flex; flex-direction: row;
+      overflow: hidden; border-right: 1px solid #2a3340; gap: 15px;
     }
+
     .tabs {
-      display: flex; flex-direction: column; gap: 8px;
-      align-items: stretch; width: 120px; flex-shrink: 0;
+      display: flex; flex-direction: column; gap: 6px;
+      width: 100px; flex-shrink: 0;
     }
     .tab {
       background: transparent; border: 1px solid #2a3340;
-      color: #8a9aa8; padding: 10px 12px;
-      font-family: inherit; font-size: 0.95rem; letter-spacing: 2px;
-      cursor: pointer; transition: 0.2s; text-align: left;
-      display: flex; flex-direction: column; align-items: stretch; width: 100%;
+      color: #8a9aa8; padding: 8px 10px; font-family: inherit;
+      font-size: 0.9rem; letter-spacing: 1px; cursor: pointer;
+      transition: 0.2s; text-align: left;
+      display: flex; flex-direction: column; align-items: stretch;
     }
-    .tab-text { margin-bottom: 6px; font-weight: 600; }
-    .tab-progress { height: 4px; background: #1f2a33; border-radius: 2px; overflow: hidden; width: 100%; }
-    .tab-progress-fill { height: 100%; background: #ff9999; width: 0%; transition: width 0.3s ease; }
+    .tab-text { margin-bottom: 4px; font-weight: 600; }
+    .tab-progress { height: 3px; background: #1f2a33; border-radius: 2px; overflow: hidden; }
+    .tab-progress-fill { height: 100%; background: #ff9999; width: 0%; transition: width 0.3s; }
     .tab.active, .tab:hover {
       border-color: #00c8ff; color: #00c8ff;
-      background: rgba(0,200,255,0.05); box-shadow: inset 0 0 8px rgba(0,200,255,0.2);
+      background: rgba(0,200,255,0.05);
     }
 
-    .grid-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; padding-bottom: 8px; }
-    .contract-grid { display: flex; flex-direction: row; flex-wrap: nowrap; gap: 20px; align-items: flex-start; }
+    .grid-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; padding-bottom: 6px; }
+    .contract-grid { display: flex; flex-direction: row; flex-wrap: nowrap; gap: 15px; align-items: flex-start; }
     .series-column { display: flex; flex-direction: column; align-items: center; gap: 0; flex-shrink: 0; }
 
     .contract-card {
-      width: 130px; height: 130px; padding: 10px;
+      width: 120px; height: 120px; padding: 8px;
       display: flex; flex-direction: row; align-items: center;
       background: rgba(20,26,33,0.9); border: 1px solid #2e3b47;
-      cursor: pointer; transition: all 0.2s ease; position: relative;
+      cursor: pointer; transition: all 0.2s; position: relative;
     }
     .contract-card::before {
       content: ''; position: absolute; top: -1px; left: -1px;
-      width: 12px; height: 12px;
+      width: 10px; height: 10px;
       border-top: 2px solid #3a4a5a; border-left: 2px solid #3a4a5a;
     }
     .contract-card:hover { border-color: #5e7a8c; background: rgba(30,40,50,0.9); }
     .contract-card.selected {
-      border-color: #ff6a00; box-shadow: 0 0 15px rgba(255,106,0,0.4);
+      border-color: #ff6a00; box-shadow: 0 0 12px rgba(255,106,0,0.4);
       background: rgba(40,20,10,0.8); animation: pulse 0.35s ease-out;
     }
-    .contract-card.selected::before { border-color: #ff6a00; }
 
     @keyframes pulse {
-      0% { transform: scale(1); box-shadow: 0 0 0 rgba(255,106,0,0); }
-      50% { transform: scale(1.05); box-shadow: 0 0 25px rgba(255,106,0,0.7); }
-      100% { transform: scale(1); box-shadow: 0 0 15px rgba(255,106,0,0.4); }
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
     }
 
     .card-level-badge {
-      width: 28px; height: 28px; background: #1f2a33;
-      color: #ff6a00; font-weight: 700;
+      width: 24px; height: 24px; background: #1f2a33;
+      color: #ff6a00; font-weight: 700; font-size: 0.8rem;
       display: flex; align-items: center; justify-content: center;
-      margin-right: 10px; flex-shrink: 0;
+      margin-right: 8px; flex-shrink: 0; border-radius: 2px;
     }
     .card-content { overflow: hidden; }
-    .contract-name { font-size: 0.9rem; font-weight: 600; color: #f0f4f8; margin-bottom: 4px; }
-    .contract-desc { font-size: 0.7rem; color: #7a8b9a; }
-    .series-connector { width: 2px; height: 24px; background: #ff6a00; opacity: 0.8; }
+    .contract-name { font-size: 0.85rem; font-weight: 600; color: #f0f4f8; margin-bottom: 3px; }
+    .contract-desc { font-size: 0.65rem; color: #7a8b9a; line-height: 1.2; }
+    .series-connector { width: 2px; height: 18px; background: #ff6a00; opacity: 0.8; }
 
+    /* 右侧面板 */
     .selected-panel {
-      flex: 1; padding: 20px; background: rgba(10,14,19,0.7);
+      flex: 1; padding: 15px; background: rgba(10,14,19,0.7);
       display: flex; flex-direction: column; overflow-y: auto;
     }
     .panel-title {
-      font-size: 1.3rem; letter-spacing: 3px; color: #00c8ff;
-      border-bottom: 1px solid #2a3340; padding-bottom: 10px; margin-bottom: 15px;
+      font-size: 1.2rem; letter-spacing: 2px; color: #00c8ff;
+      border-bottom: 1px solid #2a3340; padding-bottom: 10px; margin-bottom: 12px;
     }
     .selected-list { flex: 1; }
-    .placeholder { color: #4a5a6a; text-align: center; margin-top: 50px; }
+    .placeholder { color: #4a5a6a; text-align: center; margin-top: 40px; }
 
-    @keyframes itemPulse {
-      0% { transform: scale(0.9); opacity: 0; background: rgba(255,106,0,0.3); }
-      50% { transform: scale(1.03); }
-      100% { transform: scale(1); opacity: 1; background: transparent; }
-    }
     .selected-item {
       display: flex; justify-content: space-between; align-items: center;
-      padding: 10px 5px; border-bottom: 1px solid #1f2a33;
+      padding: 8px 4px; border-bottom: 1px solid #1f2a33;
       animation: itemPulse 0.4s ease-out;
     }
     .selected-item.active {
       background: rgba(255,106,0,0.15);
-      box-shadow: inset 0 0 8px rgba(255,106,0,0.4);
+      box-shadow: inset 0 0 6px rgba(255,106,0,0.4);
       border-left: 3px solid #ff6a00;
     }
     .selected-info { flex: 1; }
-    .selected-name { font-weight: 600; color: #f0f4f8; margin-bottom: 4px; }
-    .selected-desc-big { font-size: 1.1rem; color: #d0dae4; }
+    .selected-name { font-weight: 600; color: #f0f4f8; font-size: 0.9rem; margin-bottom: 2px; }
+    .selected-desc-big { font-size: 0.95rem; color: #d0dae4; }
     .remove-btn {
-      background: none; border: none; color: #ff5a5a;
-      font-size: 1.2rem; cursor: pointer; margin-left: 10px;
+      background: none; border: none; color: #ff5a5a; font-size: 1.1rem;
+      cursor: pointer; margin-left: 8px;
     }
-    .remove-btn:hover { color: #ff0000; text-shadow: 0 0 8px red; }
 
     .panel-summary {
-      border-top: 1px solid #2a3340; padding-top: 15px;
-      display: flex; justify-content: space-between; color: #8a9aa8;
+      border-top: 1px solid #2a3340; padding-top: 10px;
+      display: flex; justify-content: space-between; color: #8a9aa8; font-size: 0.9rem;
     }
 
     .record-badge {
-      position: absolute; bottom: 15px; right: 15px;
+      position: absolute; bottom: 10px; right: 10px;
       background: rgba(10,14,19,0.9); border: 1px solid #ff6a00;
-      padding: 8px 16px; display: flex; align-items: center; gap: 10px;
-      box-shadow: 0 0 15px rgba(255,106,0,0.3); z-index: 10;
+      padding: 5px 12px; display: flex; align-items: center; gap: 8px;
+      box-shadow: 0 0 10px rgba(255,106,0,0.3); z-index: 10;
     }
-    .record-label { font-size: 0.85rem; color: #b0c7d6; }
+    .record-label { font-size: 0.8rem; color: #b0c7d6; }
     .record-value {
-      font-size: 1.6rem; font-weight: 700; color: #ff6a00;
-      text-shadow: 0 0 10px #ff6a00;
+      font-size: 1.4rem; font-weight: 700; color: #ff6a00;
+      text-shadow: 0 0 8px #ff6a00;
     }
 
-    /* 排行榜模态框 */
+    /* 弹窗 */
     .modal {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 100;
+      background: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 100;
     }
     .modal-content {
-      background: #13171c; border: 1px solid #2a3340; padding: 30px;
-      width: 400px; max-width: 90%; max-height: 80vh; overflow-y: auto;
+      background: #13171c; border: 1px solid #2a3340; padding: 25px;
+      width: 90%; max-width: 400px; max-height: 80vh; overflow-y: auto;
       box-shadow: 0 0 30px rgba(0,160,255,0.3);
     }
-    .modal-content h3 { margin-bottom: 20px; color: #ff6a00; letter-spacing: 2px; }
-    .leaderboard-table {
-      width: 100%; border-collapse: collapse; color: #d0dae4;
+    .modal-content h3 { margin-bottom: 15px; color: #ff6a00; letter-spacing: 2px; text-align: center; }
+    .modal-input {
+      width: 100%; background: #1a1e24; border: 1px solid #3a5060;
+      color: #fff; padding: 10px; margin-bottom: 12px; font-family: inherit;
+      resize: vertical; min-height: 80px;
     }
-    .leaderboard-table th, .leaderboard-table td {
-      padding: 8px; border-bottom: 1px solid #1f2a33;
+    .modal-btn-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    .modal-btn {
+      background: #00c8ff; border: none; color: #000; padding: 10px 18px;
+      cursor: pointer; font-weight: bold; font-family: inherit; letter-spacing: 1px;
     }
-    .close-btn {
-      background: #3a5060; border: none; color: #fff; padding: 8px 15px;
-      cursor: pointer; margin-top: 15px; font-family: inherit;
-    }
-    .close-btn:hover { background: #5e7a8c; }
+    .copy-btn { background: #ffaa00; }
+    .copy-btn:hover { background: #ff8c00; }
 
-    /* 移动端适配 */
+    /* 移动端增强 */
     @media (max-width: 768px) {
-      .container { max-width: 100%; margin: 10px; }
-      .header { padding: 15px; }
-      .title { font-size: 1.8rem; letter-spacing: 4px; }
-      .level-value { font-size: 2.5rem; }
+      body { padding: 5px; }
+      .container { min-height: auto; }
+      .header { padding: 10px; }
+      .title { font-size: 1.6rem; }
+      .level-value { font-size: 2.2rem; }
       .main-content { flex-direction: column; height: auto; }
-      .contracts-section { flex: none; flex-direction: column; border-right: none; padding: 10px; gap: 10px; }
+      .contracts-section { flex: none; flex-direction: column; border-right: none; padding: 10px; gap: 8px; }
       .tabs { flex-direction: row; width: 100%; overflow-x: auto; padding-bottom: 5px; }
-      .tab { flex-shrink: 0; min-width: 80px; font-size: 0.8rem; padding: 8px 10px; }
+      .tab { white-space: nowrap; padding: 6px 12px; }
       .grid-scroll { max-height: 50vh; }
-      .contract-card { width: 110px; height: 110px; padding: 6px; }
-      .card-level-badge { width: 24px; height: 24px; font-size: 0.8rem; margin-right: 6px; }
-      .contract-name { font-size: 0.75rem; }
-      .contract-desc { font-size: 0.65rem; }
-      .series-connector { height: 16px; }
-      .selected-panel { flex: none; max-height: 40vh; border-top: 1px solid #2a3340; }
-      .record-badge { bottom: 10px; right: 10px; padding: 5px 12px; }
+      .selected-panel { flex: none; max-height: 35vh; border-top: 1px solid #2a3340; }
+      .btn-action, .btn-leaderboard { padding: 6px 10px; font-size: 0.8rem; }
+      .record-badge { bottom: 8px; right: 8px; padding: 4px 10px; }
+    }
+
+    @media (max-width: 400px) {
+      .contract-card { width: 100px; height: 100px; padding: 6px; }
+      .card-level-badge { width: 20px; height: 20px; font-size: 0.7rem; margin-right: 6px; }
+      .contract-name { font-size: 0.7rem; }
+      .contract-desc { font-size: 0.6rem; }
     }
   </style>
 </head>
@@ -249,8 +258,10 @@
         </div>
       </div>
       <div class="header-right">
-        <button class="btn-action" id="resetBtn">重置指标</button>
-        <button class="btn-leaderboard" id="leaderboardBtn">🏆 排行榜</button>
+        <button class="btn-action" id="shareBtn">📤 分享</button>
+        <button class="btn-action" id="importBtn">📥 导入</button>
+        <button class="btn-action" id="resetBtn">重置</button>
+        <button class="btn-leaderboard" id="leaderboardBtn">🏆</button>
       </div>
     </header>
 
@@ -273,8 +284,8 @@
           <p class="placeholder">未选择任何指标</p>
         </div>
         <div class="panel-summary">
-          <span>指标总数：<strong id="selectedCount">0</strong></span>
-          <span>指标等级：<strong id="selectedTotalLevel">0</strong></span>
+          <span>总数：<strong id="selectedCount">0</strong></span>
+          <span>等级：<strong id="selectedTotalLevel">0</strong></span>
         </div>
       </aside>
     </main>
@@ -284,21 +295,44 @@
       <span class="record-value" id="recordValue">0</span>
     </div>
 
-    <!-- 排行榜模态框 -->
+    <!-- 分享弹窗 -->
+    <div class="modal" id="shareModal">
+      <div class="modal-content">
+        <h3>分享指标</h3>
+        <textarea id="shareCode" class="modal-input" rows="3" readonly></textarea>
+        <div class="modal-btn-row">
+          <button class="modal-btn copy-btn" id="copyBtn">复制码</button>
+          <button class="modal-btn" onclick="closeShareModal()">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 导入弹窗 -->
+    <div class="modal" id="importModal">
+      <div class="modal-content">
+        <h3>导入指标</h3>
+        <textarea id="importCode" class="modal-input" rows="3" placeholder="粘贴指标码..."></textarea>
+        <div class="modal-btn-row">
+          <button class="modal-btn" id="confirmImport">导入</button>
+          <button class="modal-btn" onclick="closeImportModal()" style="background:#3a5060; color:#fff;">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 排行榜弹窗 -->
     <div class="modal" id="leaderboardModal">
       <div class="modal-content">
-        <h3>星河杯排行榜</h3>
-        <table class="leaderboard-table">
-          <thead><tr><th>排名</th><th>用户名</th><th>最高记录</th></tr></thead>
-          <tbody id="leaderboardBody"></tbody>
-        </table>
-        <button class="close-btn" onclick="closeLeaderboard()">关闭</button>
+        <h3>🏆 排行榜</h3>
+        <div id="leaderboardContent" style="max-height: 300px; overflow-y: auto;"></div>
+        <div class="modal-btn-row" style="margin-top: 15px;">
+          <button class="modal-btn" onclick="closeLeaderboard()">关闭</button>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
-    // ========== 合约数据（保持不变） ==========
+    // ========== 合约数据（与之前完全一致） ==========
     const contracts = [
       // ---- 改写 ----
       { id: 'rewrite_limit_1', category: '改写', name: '限制I', level: 1, desc: '舰队限港口值600', series: 'limit_port' },
@@ -403,51 +437,8 @@
       { id: 'str_st59_2', category: '应变', name: 'st59II', level: 2, desc: '白板配置', series: 'st59' },
       { id: 'str_support_2', category: '应变', name: '支援舰II', level: 2, desc: '白板配置', series: 'support_ship' }
     ];
-// ========== 用户与排行榜逻辑 ==========
-    const CURRENT_USER_KEY = 'ueg_current_user';
-    const USERS_KEY = 'ueg_users';
 
-    function getCurrentUser() {
-      const cu = localStorage.getItem(CURRENT_USER_KEY);
-      return cu ? JSON.parse(cu) : null;
-    }
-
-    function getUsers() {
-      return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    }
-
-    function loadHighestRecord() {
-      const currentUser = getCurrentUser();
-      if (currentUser) {
-        document.getElementById('recordValue').textContent = currentUser.highestRecord || 0;
-      } else {
-        document.getElementById('recordValue').textContent = '0';
-      }
-    }
-
-    // ========== 排行榜弹窗 ==========
-    document.getElementById('leaderboardBtn').addEventListener('click', () => {
-      const users = getUsers();
-      // 按最高记录降序排列
-      users.sort((a, b) => (b.highestRecord || 0) - (a.highestRecord || 0));
-      let html = '';
-      users.forEach((u, index) => {
-        html += `<tr>
-          <td>${index + 1}</td>
-          <td>${u.username}</td>
-          <td>${u.highestRecord || 0}</td>
-        </tr>`;
-      });
-      document.getElementById('leaderboardBody').innerHTML = html;
-      document.getElementById('leaderboardModal').style.display = 'flex';
-    });
-
-    window.closeLeaderboard = function() {
-      document.getElementById('leaderboardModal').style.display = 'none';
-    };
-
-    // ========== 原有星河杯逻辑 ==========
-    let currentCategory = '改写';
+   let currentCategory = '改写';
     let selectedContracts = new Set();
     let lastSelectedId = null;
 
@@ -459,6 +450,15 @@
     const selectedTotalLevelEl = document.getElementById('selectedTotalLevel');
     const resetBtn = document.getElementById('resetBtn');
     const recordValueEl = document.getElementById('recordValue');
+
+    function getCurrentUser() {
+      const cu = localStorage.getItem('ueg_current_user');
+      return cu ? JSON.parse(cu) : null;
+    }
+    function loadHighestRecord() {
+      const user = getCurrentUser();
+      recordValueEl.textContent = user ? user.highestRecord || 0 : '0';
+    }
 
     function initTabs() {
       document.querySelectorAll('.tab').forEach(tab => {
@@ -491,18 +491,14 @@
       catContracts.forEach(c => { if (!seriesMax[c.series] || c.level > seriesMax[c.series].level) seriesMax[c.series] = c; });
       const seriesNames = Object.keys(seriesMax);
       let isFull = seriesNames.every(s => selectedContracts.has(seriesMax[s].id));
-
       const toRemove = [];
       selectedContracts.forEach(id => { const con = contracts.find(c => c.id === id); if (con && con.category === category) toRemove.push(id); });
       toRemove.forEach(id => { selectedContracts.delete(id); if (lastSelectedId === id) lastSelectedId = null; });
-
       if (!isFull) {
         const sorted = seriesNames.sort();
         sorted.forEach(s => selectedContracts.add(seriesMax[s].id));
         lastSelectedId = sorted.length > 0 ? seriesMax[sorted[0]].id : null;
-      } else {
-        lastSelectedId = null;
-      }
+      } else { lastSelectedId = null; }
       updateUI();
     }
 
@@ -511,7 +507,6 @@
       const seriesMap = new Map();
       filtered.forEach(c => { if (!seriesMap.has(c.series)) seriesMap.set(c.series, []); seriesMap.get(c.series).push(c); });
       for (let list of seriesMap.values()) list.sort((a,b) => a.level - b.level);
-
       let html = '';
       for (let [series, list] of seriesMap) {
         html += '<div class="series-column">';
@@ -562,9 +557,77 @@
       selectedCountEl.textContent = selectedArray.length;
       selectedTotalLevelEl.textContent = totalLevel;
       updateTabProgress();
-      // 不再自动更新最高记录，只显示当前用户被管理员设置的记录
       loadHighestRecord();
     }
+
+    // 分享功能
+    function generateShareCode() {
+      const ids = Array.from(selectedContracts);
+      return ids.length ? btoa(JSON.stringify(ids)) : null;
+    }
+    function importFromCode(code) {
+      try {
+        const ids = JSON.parse(atob(code));
+        if (!Array.isArray(ids)) throw new Error();
+        selectedContracts.clear();
+        lastSelectedId = null;
+        ids.forEach(id => {
+          const contract = contracts.find(c => c.id === id);
+          if (!contract) return;
+          const sameSeriesIds = Array.from(selectedContracts).filter(sid => {
+            const s = contracts.find(c => c.id === sid);
+            return s && s.category === contract.category && s.series === contract.series;
+          });
+          sameSeriesIds.forEach(sid => selectedContracts.delete(sid));
+          selectedContracts.add(id);
+        });
+        updateUI();
+        return true;
+      } catch (e) {
+        alert('指标码无效，请检查是否完整复制。');
+        return false;
+      }
+    }
+
+    document.getElementById('shareBtn').addEventListener('click', () => {
+      const code = generateShareCode();
+      if (!code) { alert('请先选择至少一个指标'); return; }
+      document.getElementById('shareCode').value = code;
+      document.getElementById('shareModal').style.display = 'flex';
+    });
+    document.getElementById('copyBtn').addEventListener('click', () => {
+      const ta = document.getElementById('shareCode');
+      ta.select(); document.execCommand('copy'); alert('已复制！');
+    });
+    window.closeShareModal = () => document.getElementById('shareModal').style.display = 'none';
+
+    document.getElementById('importBtn').addEventListener('click', () => {
+      document.getElementById('importCode').value = '';
+      document.getElementById('importModal').style.display = 'flex';
+    });
+    window.closeImportModal = () => document.getElementById('importModal').style.display = 'none';
+    document.getElementById('confirmImport').addEventListener('click', () => {
+      const code = document.getElementById('importCode').value.trim();
+      if (code && importFromCode(code)) closeImportModal();
+    });
+
+    // 排行榜（改用弹窗）
+    document.getElementById('leaderboardBtn').addEventListener('click', () => {
+      const users = JSON.parse(localStorage.getItem('ueg_users') || '[]');
+      users.sort((a, b) => (b.highestRecord || 0) - (a.highestRecord || 0));
+      let html = '';
+      if (users.length === 0) html = '<p style="color:#7a8b9a; text-align:center;">暂无数据</p>';
+      else {
+        html = '<table style="width:100%; color:#d0dae4;">';
+        users.forEach((u, i) => {
+          html += `<tr><td>${i+1}</td><td>${u.username}</td><td style="text-align:right;">${u.highestRecord || 0}</td></tr>`;
+        });
+        html += '</table>';
+      }
+      document.getElementById('leaderboardContent').innerHTML = html;
+      document.getElementById('leaderboardModal').style.display = 'flex';
+    });
+    window.closeLeaderboard = () => document.getElementById('leaderboardModal').style.display = 'none';
 
     tabNav.addEventListener('click', (e) => {
       const tab = e.target.closest('.tab');
@@ -588,5 +651,4 @@
     })();
   </script>
 </body>
-</html>
 </html>
