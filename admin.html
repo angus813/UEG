@@ -143,7 +143,7 @@
       <a href="index.html" class="back-link">← 返回主页</a>
     </div>
 
-    <!-- 非管理员提示（默认隐藏） -->
+    <!-- 非管理员提示 -->
     <div id="unauthorized" style="display:none;">
       <div class="error-message">⚠️ 您没有管理员权限，无法访问此页面。</div>
       <div style="text-align:center; margin-top:20px;">
@@ -151,7 +151,7 @@
       </div>
     </div>
 
-    <!-- 管理表格（默认隐藏） -->
+    <!-- 管理表格 -->
     <div id="adminContent" style="display:none;">
       <table class="admin-table">
         <thead>
@@ -182,7 +182,6 @@
       return cu ? JSON.parse(cu) : null;
     }
 
-    // 权限检查
     function checkAdmin() {
       const currentUser = getCurrentUser();
       if (!currentUser || !currentUser.isAdmin) {
@@ -195,7 +194,6 @@
       return true;
     }
 
-    // 渲染用户表格
     function renderTable() {
       const users = getUsers();
       const tbody = document.getElementById('userTableBody');
@@ -206,7 +204,6 @@
           <td>${user.isAdmin ? '是' : '否'}</td>
           <td>${user.highestRecord || 0}</td>
           <td>
-            <button class="btn-small" onclick="toggleAdmin('${user.username}')">${user.isAdmin ? '取消管理' : '设为管理'}</button>
             <input type="number" class="record-input" id="record-${user.username}" placeholder="等级" value="${user.highestRecord || ''}">
             <button class="btn-small" onclick="setRecord('${user.username}')">保存</button>
           </td>
@@ -215,29 +212,6 @@
       tbody.innerHTML = html;
     }
 
-    // 切换管理员权限
-    window.toggleAdmin = function(username) {
-      const users = getUsers();
-      const user = users.find(u => u.username === username);
-      if (!user) return;
-      user.isAdmin = !user.isAdmin;
-      saveUsers(users);
-      // 如果修改的是当前登录用户，更新 session
-      const currentUser = getCurrentUser();
-      if (currentUser && currentUser.username === username) {
-        currentUser.isAdmin = user.isAdmin;
-        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUser));
-        // 如果取消了自己的管理员权限，刷新页面后会失去访问权限，重新检查
-        if (!user.isAdmin) {
-          alert('你已取消自己的管理员权限，即将跳转回主页。');
-          window.location.href = 'index.html';
-          return;
-        }
-      }
-      renderTable();
-    };
-
-    // 设置最高记录
     window.setRecord = function(username) {
       const input = document.getElementById(`record-${username}`);
       const record = parseInt(input.value);
@@ -250,7 +224,7 @@
       if (user) {
         user.highestRecord = record;
         saveUsers(users);
-        // 更新当前用户 session
+        // 如果修改的是当前登录用户，同步更新 session
         const currentUser = getCurrentUser();
         if (currentUser && currentUser.username === username) {
           currentUser.highestRecord = record;
@@ -260,7 +234,6 @@
       }
     };
 
-    // 初始化
     if (checkAdmin()) {
       renderTable();
     }

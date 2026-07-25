@@ -50,10 +50,11 @@
       font-size: 1rem; letter-spacing: 4px; color: #5e7a8c; margin-bottom: 50px; text-align: center;
     }
     .menu-options {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
       gap: 30px;
-      justify-items: center;
+      max-width: 800px;
     }
     .menu-card {
       width: 200px; height: 200px;
@@ -97,71 +98,10 @@
     }
     .modal-btn:hover { background: #00a3ff; }
 
-    /* 个人中心 - 修改密码区域 */
-    .password-change {
-      margin-top: 15px;
-      padding-top: 15px;
-      border-top: 1px solid #1f2a33;
-    }
-    .btn-change-pw {
-      background: transparent;
-      border: 1px solid #3a5060;
-      color: #b0c7d6;
-      padding: 10px;
-      width: 100%;
-      font-family: inherit;
-      font-size: 1rem;
-      letter-spacing: 2px;
-      cursor: pointer;
-      transition: 0.2s;
-      margin-bottom: 15px;
-    }
-    .btn-change-pw:hover {
-      border-color: #ffaa00;
-      color: #ffaa00;
-      box-shadow: 0 0 10px rgba(255,170,0,0.3);
-    }
-    .pw-form {
-      display: none;
-      margin-bottom: 15px;
-    }
-    .pw-form input {
-      width: 100%;
-      background: #1a1e24;
-      border: 1px solid #3a5060;
-      color: #fff;
-      padding: 8px;
-      margin-bottom: 10px;
-      font-family: inherit;
-    }
-    .pw-form .form-actions {
-      display: flex;
-      gap: 10px;
-    }
-    .pw-form .btn {
-      flex: 1;
-      padding: 10px;
-      border: none;
-      font-family: inherit;
-      font-weight: bold;
-      cursor: pointer;
-      letter-spacing: 1px;
-    }
-    .btn-save-pw {
-      background: #ffaa00;
-      color: #000;
-    }
-    .btn-cancel-pw {
-      background: #3a5060;
-      color: #fff;
-    }
-
-    /* 移动端适配 */
     @media (max-width: 600px) {
       .container { max-width: 100%; margin: 10px; min-height: auto; }
       .menu-title { font-size: 2rem; letter-spacing: 6px; }
       .menu-subtitle { font-size: 0.8rem; margin-bottom: 40px; }
-      .menu-options { grid-template-columns: 1fr; gap: 20px; }
       .menu-card { width: 150px; height: 150px; }
       .menu-card-icon { font-size: 2.5rem; margin-bottom: 12px; }
       .menu-card-text { font-size: 1.4rem; }
@@ -203,10 +143,16 @@
           <div class="menu-card-text">纪念堂</div>
           <div class="menu-card-desc">历史记录与成就</div>
         </div>
+        <!-- 新增公会卡片 -->
+        <div class="menu-card" onclick="alert('公会功能即将上线')">
+          <div class="menu-card-icon">🏰</div>
+          <div class="menu-card-text">公会</div>
+          <div class="menu-card-desc">组织与协作</div>
+        </div>
       </div>
     </div>
 
-    <!-- 登录/注册模态框 -->
+    <!-- 登录/注册模态框（保留） -->
     <div class="modal" id="modal">
       <div class="modal-content">
         <h3 id="modalTitle">登录</h3>
@@ -215,48 +161,6 @@
         <div>
           <button class="modal-btn" id="modalConfirm">确定</button>
           <button class="modal-btn" onclick="closeModal()" style="background:#3a5060; color:#fff;">取消</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 个人中心模态框 -->
-    <div class="profile-modal" id="profileModal">
-      <div class="profile-modal-content">
-        <div class="profile-header">
-          <div class="profile-avatar">👤</div>
-          <div class="profile-username" id="profileUsername">用户名</div>
-        </div>
-        <div class="profile-info">
-          <div class="profile-row">
-            <span class="profile-label">星河杯最高记录</span>
-            <span class="profile-value" id="profileRecord">0</span>
-          </div>
-        </div>
-
-        <!-- 管理员入口按钮（仅管理员可见） -->
-        <div id="adminEntry" style="display:none; margin-bottom: 20px;">
-          <button class="btn-profile" onclick="window.location.href='admin.html'" style="background: #ff6a00; border-color: #ff6a00; color: #000;">
-            🛡️ 管理用户
-          </button>
-        </div>
-
-        <!-- 修改密码区域 -->
-        <div class="password-change">
-          <button class="btn-change-pw" id="btnShowPasswordForm">修改密码</button>
-          <div class="pw-form" id="pwForm">
-            <input type="password" id="oldPassword" placeholder="旧密码">
-            <input type="password" id="newPassword" placeholder="新密码">
-            <input type="password" id="confirmPassword" placeholder="确认新密码">
-            <div class="form-actions">
-              <button class="btn btn-save-pw" id="btnSavePassword">保存</button>
-              <button class="btn btn-cancel-pw" id="btnCancelPassword">取消</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="profile-actions">
-          <button class="btn-profile btn-delete-account" id="btnDeleteAccount">彻底注销账号</button>
-          <button class="btn-profile btn-close-profile" onclick="closeProfile()">关闭</button>
         </div>
       </div>
     </div>
@@ -301,21 +205,6 @@
     const passwordInput = document.getElementById('passwordInput');
     const modalConfirm = document.getElementById('modalConfirm');
 
-    const profileModal = document.getElementById('profileModal');
-    const profileUsername = document.getElementById('profileUsername');
-    const profileRecord = document.getElementById('profileRecord');
-    const btnDeleteAccount = document.getElementById('btnDeleteAccount');
-    const adminEntry = document.getElementById('adminEntry');
-
-    // 密码修改相关元素
-    const btnShowPasswordForm = document.getElementById('btnShowPasswordForm');
-    const pwForm = document.getElementById('pwForm');
-    const oldPasswordInput = document.getElementById('oldPassword');
-    const newPasswordInput = document.getElementById('newPassword');
-    const confirmPasswordInput = document.getElementById('confirmPassword');
-    const btnSavePassword = document.getElementById('btnSavePassword');
-    const btnCancelPassword = document.getElementById('btnCancelPassword');
-
     let modalMode = 'login';
 
     function updateUI() {
@@ -335,94 +224,11 @@
       }
     }
 
-    function openProfile() {
-      const currentUser = getCurrentUser();
-      if (!currentUser) return;
-      profileUsername.textContent = currentUser.username;
-      profileRecord.textContent = currentUser.highestRecord || 0;
-      adminEntry.style.display = currentUser.isAdmin ? 'block' : 'none';
-      // 重置密码表单
-      pwForm.style.display = 'none';
-      oldPasswordInput.value = '';
-      newPasswordInput.value = '';
-      confirmPasswordInput.value = '';
-      profileModal.style.display = 'flex';
-    }
-
-    window.closeProfile = function() {
-      profileModal.style.display = 'none';
-    };
-
-    // 显示/隐藏密码表单
-    btnShowPasswordForm.addEventListener('click', () => {
-      pwForm.style.display = 'block';
+    // 个人中心跳转到独立页面
+    btnProfile.addEventListener('click', () => {
+      window.location.href = 'profile.html';
     });
 
-    btnCancelPassword.addEventListener('click', () => {
-      pwForm.style.display = 'none';
-      oldPasswordInput.value = '';
-      newPasswordInput.value = '';
-      confirmPasswordInput.value = '';
-    });
-
-    // 修改密码逻辑
-    btnSavePassword.addEventListener('click', () => {
-      const currentUser = getCurrentUser();
-      if (!currentUser) {
-        alert('请先登录');
-        return;
-      }
-      const oldPw = oldPasswordInput.value;
-      const newPw = newPasswordInput.value;
-      const confirmPw = confirmPasswordInput.value;
-
-      if (!oldPw || !newPw || !confirmPw) {
-        alert('请填写完整信息');
-        return;
-      }
-      if (newPw !== confirmPw) {
-        alert('两次输入的新密码不一致');
-        return;
-      }
-      if (oldPw !== currentUser.password) {
-        alert('旧密码错误');
-        return;
-      }
-
-      const users = getUsers();
-      const user = users.find(u => u.username === currentUser.username);
-      if (user) {
-        user.password = newPw;
-        saveUsers(users);
-        // 更新当前登录用户信息
-        currentUser.password = newPw;
-        setCurrentUser(currentUser);
-        alert('密码修改成功！');
-        pwForm.style.display = 'none';
-        oldPasswordInput.value = '';
-        newPasswordInput.value = '';
-        confirmPasswordInput.value = '';
-      } else {
-        alert('发生错误，请重新登录');
-      }
-    });
-
-    // 注销账号
-    btnDeleteAccount.addEventListener('click', () => {
-      if (!confirm('⚠️ 确定要彻底删除你的账号吗？此操作不可恢复！')) return;
-      const currentUser = getCurrentUser();
-      if (!currentUser) return;
-      let users = getUsers();
-      users = users.filter(u => u.username !== currentUser.username);
-      saveUsers(users);
-      setCurrentUser(null);
-      updateUI();
-      closeProfile();
-    });
-
-    btnProfile.addEventListener('click', openProfile);
-
-    // 登录/注册模态框
     function openModal(mode) {
       modalMode = mode;
       modalTitle.textContent = mode === 'login' ? '登录' : '注册';

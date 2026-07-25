@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人中心 - UEG小网站</title>
+  <link rel="stylesheet" href="admin.css">
+  <style>
+    body {
+      background: #0a0c0f;
+      color: #e0e8f0;
+      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 0;
+    }
+    .profile-page {
+      width: 500px;
+      max-width: 95%;
+      background: linear-gradient(135deg, #1a1f27, #0f1318);
+      border: 1px solid #2a3340;
+      box-shadow: 0 0 40px rgba(0, 160, 255, 0.3);
+      position: relative;
+      overflow: hidden;
+      padding: 40px 30px;
+    }
+    .profile-page::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 60px; height: 60px;
+      border-top: 2px solid #00c8ff;
+      border-left: 2px solid #00c8ff;
+    }
+    .profile-page::after {
+      content: '';
+      position: absolute;
+      bottom: 0; right: 0;
+      width: 60px; height: 60px;
+      border-bottom: 2px solid #00c8ff;
+      border-right: 2px solid #00c8ff;
+    }
+
+    .profile-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .profile-avatar {
+      width: 90px;
+      height: 90px;
+      background: rgba(0, 200, 255, 0.1);
+      border: 2px solid #00c8ff;
+      border-radius: 50%;
+      margin: 0 auto 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.8rem;
+    }
+    .profile-username {
+      font-size: 2rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 3px;
+      text-shadow: 0 0 10px #00a3ff;
+    }
+
+    .info-card {
+      background: rgba(10, 14, 19, 0.7);
+      border: 1px solid #2a3340;
+      padding: 20px;
+      margin-bottom: 25px;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid #1f2a33;
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      color: #7a8b9a;
+      font-size: 1rem;
+      letter-spacing: 1px;
+    }
+    .info-value {
+      color: #ff6a00;
+      font-weight: 700;
+      font-size: 1.3rem;
+      text-shadow: 0 0 8px rgba(255, 106, 0, 0.4);
+    }
+
+    .admin-zone {
+      margin-bottom: 25px;
+    }
+    .btn-admin {
+      display: block;
+      width: 100%;
+      background: #ff6a00;
+      border: 1px solid #ff6a00;
+      color: #000;
+      padding: 14px;
+      font-family: inherit;
+      font-size: 1.2rem;
+      font-weight: bold;
+      letter-spacing: 3px;
+      cursor: pointer;
+      transition: 0.2s;
+      text-decoration: none;
+      text-align: center;
+    }
+    .btn-admin:hover {
+      background: #ff8c33;
+      box-shadow: 0 0 20px rgba(255,106,0,0.6);
+    }
+
+    .password-section {
+      margin-bottom: 25px;
+    }
+    .btn-toggle-pw {
+      width: 100%;
+      background: transparent;
+      border: 1px solid #3a5060;
+      color: #b0c7d6;
+      padding: 12px;
+      font-family: inherit;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-toggle-pw:hover {
+      border-color: #ffaa00;
+      color: #ffaa00;
+      box-shadow: 0 0 10px rgba(255,170,0,0.3);
+    }
+    .pw-form {
+      display: none;
+      margin-top: 15px;
+    }
+    .pw-form input {
+      width: 100%;
+      background: #1a1e24;
+      border: 1px solid #3a5060;
+      color: #fff;
+      padding: 10px;
+      margin-bottom: 10px;
+      font-family: inherit;
+    }
+    .form-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .btn-save {
+      flex: 1;
+      background: #ffaa00;
+      border: none;
+      color: #000;
+      font-weight: bold;
+      padding: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: 1px;
+    }
+    .btn-cancel {
+      flex: 1;
+      background: #3a5060;
+      border: none;
+      color: #fff;
+      padding: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: 1px;
+    }
+
+    .danger-zone {
+      margin-bottom: 25px;
+    }
+    .btn-delete {
+      width: 100%;
+      background: rgba(255, 50, 50, 0.1);
+      border: 1px solid #ff4444;
+      color: #ff6666;
+      padding: 14px;
+      font-family: inherit;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-delete:hover {
+      background: rgba(255, 50, 50, 0.25);
+      box-shadow: 0 0 20px rgba(255, 0, 0, 0.4);
+    }
+
+    .back-link {
+      display: block;
+      text-align: center;
+      color: #00c8ff;
+      text-decoration: none;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      padding: 10px;
+      border: 1px solid #00c8ff;
+      transition: 0.3s;
+      margin-top: 10px;
+    }
+    .back-link:hover {
+      background: rgba(0,200,255,0.1);
+      box-shadow: 0 0 15px rgba(0,200,255,0.4);
+    }
+  </style>
+</head>
+<body>
+  <div class="profile-page">
+    <div class="profile-header">
+      <div class="profile-avatar">👤</div>
+      <div class="profile-username" id="profileUsername">用户名</div>
+    </div>
+
+    <div class="info-card">
+      <div class="info-row">
+        <span class="info-label">星河杯最高记录</span>
+        <span class="info-value" id="profileRecord">0</span>
+      </div>
+    </div>
+
+    <!-- 管理员入口（动态显示） -->
+    <div class="admin-zone" id="adminEntry" style="display: none;">
+      <a href="admin.html" class="btn-admin">🛡️ 管理用户</a>
+    </div>
+
+    <!-- 修改密码 -->
+    <div class="password-section">
+      <button class="btn-toggle-pw" id="btnTogglePassword">修改密码</button>
+      <div class="pw-form" id="pwForm">
+        <input type="password" id="oldPassword" placeholder="旧密码">
+        <input type="password" id="newPassword" placeholder="新密码">
+        <input type="password" id="confirmPassword" placeholder="确认新密码">
+        <div class="form-actions">
+          <button class="btn-save" id="btnSavePassword">保存</button>
+          <button class="btn-cancel" id="btnCancelPassword">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 注销账号 -->
+    <div class="danger-zone">
+      <button class="btn-delete" id="btnDeleteAccount">彻底注销账号</button>
+    </div>
+
+    <a href="index.html" class="back-link">← 返回主页</a>
+  </div>
+
+  <script>
+    const USERS_KEY = 'ueg_users';
+    const CURRENT_USER_KEY = 'ueg_current_user';
+
+    function getUsers() {
+      return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+    }
+    function saveUsers(users) {
+      localStorage.setItem(USERS_KEY, JSON.stringify(users));
+    }
+    function getCurrentUser() {
+      const cu = localStorage.getItem(CURRENT_USER_KEY);
+      return cu ? JSON.parse(cu) : null;
+    }
+    function setCurrentUser(user) {
+      if (user) localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+      else localStorage.removeItem(CURRENT_USER_KEY);
+    }
+
+    // 权限检查与渲染
+    function loadProfile() {
+      const currentUser = getCurrentUser();
+      if (!currentUser) {
+        alert('请先登录');
+        window.location.href = 'index.html';
+        return;
+      }
+      document.getElementById('profileUsername').textContent = currentUser.username;
+      document.getElementById('profileRecord').textContent = currentUser.highestRecord || 0;
+      if (currentUser.isAdmin) {
+        document.getElementById('adminEntry').style.display = 'block';
+      }
+    }
+
+    // 密码修改逻辑
+    const pwForm = document.getElementById('pwForm');
+    document.getElementById('btnTogglePassword').addEventListener('click', () => {
+      pwForm.style.display = 'block';
+    });
+    document.getElementById('btnCancelPassword').addEventListener('click', () => {
+      pwForm.style.display = 'none';
+      document.getElementById('oldPassword').value = '';
+      document.getElementById('newPassword').value = '';
+      document.getElementById('confirmPassword').value = '';
+    });
+    document.getElementById('btnSavePassword').addEventListener('click', () => {
+      const currentUser = getCurrentUser();
+      if (!currentUser) return;
+      const oldPw = document.getElementById('oldPassword').value;
+      const newPw = document.getElementById('newPassword').value;
+      const confirmPw = document.getElementById('confirmPassword').value;
+      if (!oldPw || !newPw || !confirmPw) { alert('请填写完整'); return; }
+      if (newPw !== confirmPw) { alert('两次输入的新密码不一致'); return; }
+      if (oldPw !== currentUser.password) { alert('旧密码错误'); return; }
+      const users = getUsers();
+      const user = users.find(u => u.username === currentUser.username);
+      if (user) {
+        user.password = newPw;
+        saveUsers(users);
+        currentUser.password = newPw;
+        setCurrentUser(currentUser);
+        alert('密码修改成功！');
+        pwForm.style.display = 'none';
+        document.getElementById('oldPassword').value = '';
+        document.getElementById('newPassword').value = '';
+        document.getElementById('confirmPassword').value = '';
+      }
+    });
+
+    // 注销账号
+    document.getElementById('btnDeleteAccount').addEventListener('click', () => {
+      if (!confirm('⚠️ 确定要彻底删除你的账号吗？此操作不可恢复！')) return;
+      const currentUser = getCurrentUser();
+      if (!currentUser) return;
+      let users = getUsers();
+      users = users.filter(u => u.username !== currentUser.username);
+      saveUsers(users);
+      setCurrentUser(null);
+      alert('账号已注销');
+      window.location.href = 'index.html';
+    });
+
+    loadProfile();
+  </script>
+</body>
+</html>
