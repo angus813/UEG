@@ -170,7 +170,8 @@ const ShapeGenerator = {
       }
       return p;
     }
-    if (type === 'text' || type === 'verticalText' || type === 'city') {
+    // 文本框、城市、框架、断裂框架、空心弧使用矩形包围盒
+    if (type === 'text' || type === 'verticalText' || type === 'city' || type === 'frame' || type === 'brokenFrame' || type === 'arc') {
       p.rect(x, y, w, h);
       return p;
     }
@@ -189,7 +190,6 @@ const ShapeGenerator = {
       case 'star': drawStar(p, cx, cy, Math.min(w,h)/2, Math.min(w,h)/4, 5); break;
       case 'cross': drawCross(p, x, y, w, h); break;
       case 'plus': drawPlus(p, cx, cy, w/2, h/2); break;
-      case 'lightning': drawLightning(p, x, y, w, h); break;
       case 'freehand': if (shape.points) { p.moveTo(shape.points[0].x, shape.points[0].y); shape.points.forEach(pt => p.lineTo(pt.x, pt.y)); } break;
       default: p.rect(x, y, w, h);
     }
@@ -223,9 +223,23 @@ function drawRegularPolygon(p, cx,cy,r, sides) { let ang=-Math.PI/2; p.moveTo(cx
 function drawStar(p, cx,cy,outerR,innerR,points) { let ang=-Math.PI/2; p.moveTo(cx+outerR*Math.cos(ang), cy+outerR*Math.sin(ang)); for(let i=0;i<points*2;i++){ let r=i%2===0? innerR: outerR; ang+=Math.PI/points; p.lineTo(cx+r*Math.cos(ang), cy+r*Math.sin(ang)); } p.closePath(); }
 function drawCross(p, x,y,w,h) { p.moveTo(x+w*0.35, y); p.lineTo(x+w*0.65, y); p.lineTo(x+w*0.65, y+h*0.35); p.lineTo(x+w, y+h*0.35); p.lineTo(x+w, y+h*0.65); p.lineTo(x+w*0.65, y+h*0.65); p.lineTo(x+w*0.65, y+h); p.lineTo(x+w*0.35, y+h); p.lineTo(x+w*0.35, y+h*0.65); p.lineTo(x, y+h*0.65); p.lineTo(x, y+h*0.35); p.lineTo(x+w*0.35, y+h*0.35); p.closePath(); }
 function drawPlus(p, cx,cy,armW,armH) { p.moveTo(cx-armW*0.3, cy-armH); p.lineTo(cx+armW*0.3, cy-armH); p.lineTo(cx+armW*0.3, cy-armW*0.3); p.lineTo(cx+armW, cy-armW*0.3); p.lineTo(cx+armW, cy+armW*0.3); p.lineTo(cx+armW*0.3, cy+armW*0.3); p.lineTo(cx+armW*0.3, cy+armH); p.lineTo(cx-armW*0.3, cy+armH); p.lineTo(cx-armW*0.3, cy+armW*0.3); p.lineTo(cx-armW, cy+armW*0.3); p.lineTo(cx-armW, cy-armW*0.3); p.lineTo(cx-armW*0.3, cy-armW*0.3); p.closePath(); }
-function drawLightning(p, x,y,w,h) { p.moveTo(x+w*0.6, y); p.lineTo(x+w*0.3, y+h*0.4); p.lineTo(x+w*0.5, y+h*0.4); p.lineTo(x+w*0.2, y+h); p.lineTo(x+w*0.7, y+h*0.5); p.lineTo(x+w*0.5, y+h*0.5); p.closePath(); }
 
-// ---------- 城市三层绘制（无描边，黄色初始）----------
+// ---------- 空心弧绘制（半圆，加粗） ----------
+function drawArcShape(ctx, shape) {
+  const { x, y, w, h, strokeColor, strokeWidth, opacity, startAngle = 0, endAngle = Math.PI } = shape; // 改为半圆
+  const cx = x + w/2, cy = y + h/2;
+  const radiusX = w/2, radiusY = h/2;
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = Math.max(1.5 / scale, (strokeWidth || 4) / scale); // 默认线宽改为4
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, radiusX, radiusY, 0, startAngle, endAngle);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- 城市三层绘制 ----------
 function drawCityShape(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const thickness = Math.max(w * 0.06, 1.5 / scale);
@@ -260,16 +274,71 @@ function drawCityShape(ctx, shape) {
   ctx.restore();
 }
 
-// ---------- 形状预设 ----------
+// ---------- 黄色方形边框 ----------
+function drawFrameShape(ctx, shape) {
+  const { x, y, w, h, strokeColor, strokeWidth, opacity } = shape;
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.strokeStyle = strokeColor || '#ffcc00';
+  ctx.lineWidth = Math.max(1.5 / scale, (strokeWidth || 4) / scale);
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- 左右断开方框 ----------
+function drawBrokenFrameShape(ctx, shape) {
+  const { x, y, w, h, strokeColor, strokeWidth, opacity } = shape;
+  const gapSize = Math.min(w, h) * 0.2;
+  const halfGap = gapSize / 2;
+  const cx = x + w/2;
+  const cy = y + h/2;
+
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.strokeStyle = strokeColor || '#ffcc00';
+  ctx.lineWidth = Math.max(1.5 / scale, (strokeWidth || 4) / scale);
+  ctx.beginPath();
+
+  // 上边完整
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + w, y);
+
+  // 右边上半段
+  ctx.lineTo(x + w, cy - halfGap);
+  ctx.moveTo(x + w, cy + halfGap);
+  // 右边下半段
+  ctx.lineTo(x + w, y + h);
+
+  // 下边完整
+  ctx.lineTo(x, y + h);
+
+  // 左边上半段
+  ctx.lineTo(x, cy + halfGap);
+  ctx.moveTo(x, cy - halfGap);
+  // 左边下半段
+  ctx.lineTo(x, y);
+
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- 形状预设（删除闪电，新增空心弧） ----------
 const shapePresets = [
   { category: '矩形', shapes: [{ type: 'rect', name: '矩形' }, { type: 'roundRect', name: '圆角矩形' }] },
   { category: '基本形状', shapes: [
     { type: 'ellipse', name: '椭圆' }, { type: 'triangle', name: '等腰三角' }, { type: 'rightTriangle', name: '直角三角' },
     { type: 'diamond', name: '菱形' }, { type: 'parallelogram', name: '平行四边形' }, { type: 'trapezoid', name: '梯形' },
     { type: 'pentagon', name: '正五边形' }, { type: 'hexagon', name: '六边形' }, { type: 'star', name: '星形' },
-    { type: 'cross', name: '十字形' }, { type: 'plus', name: '加号' }, { type: 'lightning', name: '闪电' },
-    { type: 'text', name: '文本框' },
-    { type: 'city', name: '城市' }
+    { type: 'cross', name: '十字形' }, { type: 'plus', name: '加号' },
+    { type: 'arc', name: '空心弧' },
+    { type: 'text', name: '文本框' }
+  ]},
+  { category: '设施', shapes: [
+    { type: 'city', name: '城市' },
+    { type: 'frame', name: '方形边框' },
+    { type: 'brokenFrame', name: '断开方框' }
   ]},
   { category: '箭头', shapes: [
     { type: 'arrowRight', name: '右箭头' }, { type: 'arrowLeft', name: '左箭头' }, { type: 'arrowUp', name: '上箭头' }, { type: 'arrowDown', name: '下箭头' }
@@ -308,6 +377,24 @@ function createShapeButtons() {
             fillColor: '#ffcc00',
             strokeColor: '#ffcc00'
           });
+        } else if (s.type === 'frame') {
+          newShape = createShape('frame', center.x-50, center.y-50, 100, 100, {
+            fill: 'none',
+            strokeColor: '#ffcc00',
+            strokeWidth: 4
+          });
+        } else if (s.type === 'brokenFrame') {
+          newShape = createShape('brokenFrame', center.x-50, center.y-50, 100, 100, {
+            fill: 'none',
+            strokeColor: '#ffcc00',
+            strokeWidth: 4
+          });
+        } else if (s.type === 'arc') {
+          newShape = createShape('arc', center.x-50, center.y-50, 100, 100, {
+            fill: 'none',
+            strokeColor: '#ffffff',
+            strokeWidth: 4  // 加粗
+          });
         } else {
           newShape = createShape(s.type, Math.max(0, center.x-50), Math.max(0, center.y-50), 100, 100);
         }
@@ -345,6 +432,38 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
     ctxIcon.restore();
     return;
   }
+  if (type === 'frame') {
+    ictx.strokeStyle = '#ffcc00';
+    ictx.lineWidth = 2;
+    ictx.strokeRect(x+2, y+2, w-4, h-4);
+    return;
+  }
+  if (type === 'brokenFrame') {
+    const gap = 4;
+    const cy = y + h/2;
+    ictx.strokeStyle = '#ffcc00';
+    ictx.lineWidth = 2;
+    ictx.beginPath();
+    ictx.moveTo(x+2, y+2);
+    ictx.lineTo(x+w-2, y+2);
+    ictx.lineTo(x+w-2, cy - gap);
+    ictx.moveTo(x+w-2, cy + gap);
+    ictx.lineTo(x+w-2, y+h-2);
+    ictx.lineTo(x+2, y+h-2);
+    ictx.lineTo(x+2, cy + gap);
+    ictx.moveTo(x+2, cy - gap);
+    ictx.lineTo(x+2, y+2);
+    ictx.stroke();
+    return;
+  }
+  if (type === 'arc') {
+    ictx.strokeStyle = '#ffffff';
+    ictx.lineWidth = 2.5; // 图标中稍粗
+    ictx.beginPath();
+    ictx.ellipse(x+w/2, y+h/2, w/2-2, h/2-2, 0, 0, Math.PI); // 改为半圆
+    ictx.stroke();
+    return;
+  }
   const p = ShapeGenerator.getPath(shape);
   ictx.fill(p); ictx.stroke(p);
   if (type === 'text') {
@@ -371,9 +490,18 @@ function createShape(type, x, y, w, h, props={}) {
     defaults.w = 120;
     defaults.h = 120;
   }
+  if (type === 'frame' || type === 'brokenFrame') {
+    defaults.fill = 'none';
+    defaults.strokeColor = '#ffcc00';
+    defaults.strokeWidth = 4;
+  }
+  if (type === 'arc') {
+    defaults.fill = 'none';
+    defaults.strokeColor = '#ffffff';
+    defaults.strokeWidth = 4; // 加粗
+  }
   return Object.assign(defaults, props);
 }
-
 // ---------- 复制粘贴功能 ----------
 function copyShape() {
   if (selectedShapeIndex === -1) {
@@ -444,7 +572,7 @@ function redraw() {
   ctx.translate(-offsetX * scale, -offsetY * scale);
   ctx.scale(scale, scale);
 
-  // 网格 - 提高亮度
+  // 网格
   ctx.strokeStyle = '#3a5060';
   ctx.lineWidth = 0.8 / scale;
   const step = 100;
@@ -482,10 +610,15 @@ function redraw() {
 
     const isText = (shape.type === 'text' || shape.type === 'verticalText');
     const isCity = (shape.type === 'city');
+    const isFrame = (shape.type === 'frame');
+    const isBrokenFrame = (shape.type === 'brokenFrame');
+    const isArc = (shape.type === 'arc');
     const path = ShapeGenerator.getPath(shape);
 
     ctx.globalAlpha = shape.opacity !== undefined ? shape.opacity : 1;
-    if (shape.fill !== 'none' && !isText) {
+
+    // 填充处理（框架、断开框架、空心弧默认不填充）
+    if (shape.fill !== 'none' && !isText && !isFrame && !isBrokenFrame && !isArc) {
       if (shape.fill === 'solid') ctx.fillStyle = shape.fillColor || '#00c8ff';
       else if (shape.fill === 'linear' || shape.fill === 'radial') {
         const grad = shape.fill === 'linear' ?
@@ -501,7 +634,16 @@ function redraw() {
       ctx.fill(path);
     }
 
-    if (!isCity) {
+    // 描边（特殊形状用自己的绘制函数）
+    if (isCity) {
+      // 城市已绘制完毕
+    } else if (isFrame) {
+      drawFrameShape(ctx, shape);
+    } else if (isBrokenFrame) {
+      drawBrokenFrameShape(ctx, shape);
+    } else if (isArc) {
+      drawArcShape(ctx, shape);
+    } else {
       ctx.globalAlpha = 1;
       if (!isText || shape.strokeWidth > 0) {
         ctx.strokeStyle = shape.strokeColor || '#ffffff';
