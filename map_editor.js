@@ -224,7 +224,7 @@ function drawStar(p, cx,cy,outerR,innerR,points) { let ang=-Math.PI/2; p.moveTo(
 function drawCross(p, x,y,w,h) { p.moveTo(x+w*0.35, y); p.lineTo(x+w*0.65, y); p.lineTo(x+w*0.65, y+h*0.35); p.lineTo(x+w, y+h*0.35); p.lineTo(x+w, y+h*0.65); p.lineTo(x+w*0.65, y+h*0.65); p.lineTo(x+w*0.65, y+h); p.lineTo(x+w*0.35, y+h); p.lineTo(x+w*0.35, y+h*0.65); p.lineTo(x, y+h*0.65); p.lineTo(x, y+h*0.35); p.lineTo(x+w*0.35, y+h*0.35); p.closePath(); }
 function drawPlus(p, cx,cy,armW,armH) { p.moveTo(cx-armW*0.3, cy-armH); p.lineTo(cx+armW*0.3, cy-armH); p.lineTo(cx+armW*0.3, cy-armW*0.3); p.lineTo(cx+armW, cy-armW*0.3); p.lineTo(cx+armW, cy+armW*0.3); p.lineTo(cx+armW*0.3, cy+armW*0.3); p.lineTo(cx+armW*0.3, cy+armH); p.lineTo(cx-armW*0.3, cy+armH); p.lineTo(cx-armW*0.3, cy+armW*0.3); p.lineTo(cx-armW, cy+armW*0.3); p.lineTo(cx-armW, cy-armW*0.3); p.lineTo(cx-armW*0.3, cy-armW*0.3); p.closePath(); }
 
-// ---------- 空心弧绘制（半圆，加粗） ----------
+// ---------- 空心弧绘制 ----------
 function drawArcShape(ctx, shape) {
   const { x, y, w, h, strokeColor, strokeWidth, opacity, startAngle = 0, endAngle = Math.PI } = shape;
   const cx = x + w/2, cy = y + h/2;
@@ -318,7 +318,7 @@ function drawBrokenFrameShape(ctx, shape) {
   ctx.restore();
 }
 
-// ---------- 形状预设（删除闪电，新增空心弧） ----------
+// ---------- 形状预设 ----------
 const shapePresets = [
   { category: '矩形', shapes: [{ type: 'rect', name: '矩形' }, { type: 'roundRect', name: '圆角矩形' }] },
   { category: '基本形状', shapes: [
@@ -363,7 +363,7 @@ function createShapeButtons() {
             fontSize: 20,
             fill: 'none',
             strokeColor: '#ffffff',
-            strokeWidth: 2
+            strokeWidth: 0   // 文本框无轮廓
           });
         } else if (s.type === 'city') {
           newShape = createShape('city', center.x-60, center.y-60, 120, 120, {
@@ -458,15 +458,17 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
     ictx.stroke();
     return;
   }
-  const p = ShapeGenerator.getPath(shape);
-  ictx.fill(p); ictx.stroke(p);
   if (type === 'text') {
+    // 图标不绘制轮廓，只绘制文字
     ictx.fillStyle = '#ffffff';
     ictx.font = '12px Rajdhani, sans-serif';
     ictx.textAlign = 'center';
     ictx.textBaseline = 'middle';
     ictx.fillText('T', x + w/2, y + h/2);
+    return;
   }
+  const p = ShapeGenerator.getPath(shape);
+  ictx.fill(p); ictx.stroke(p);
 }
 
 function createShape(type, x, y, w, h, props={}) {
@@ -477,6 +479,7 @@ function createShape(type, x, y, w, h, props={}) {
   };
   if (type === 'text' || type === 'verticalText') {
     defaults.fill = 'none';
+    defaults.strokeWidth = 0;   // 文本框默认无轮廓
   }
   if (type === 'city') {
     defaults.fillColor = '#ffcc00';
@@ -628,6 +631,7 @@ function redraw() {
       ctx.fill(path);
     }
 
+    // 描边：文本框不绘制轮廓
     if (isCity) {
       // 已绘制
     } else if (isFrame) {
@@ -638,7 +642,7 @@ function redraw() {
       drawArcShape(ctx, shape);
     } else {
       ctx.globalAlpha = 1;
-      if (!isText || shape.strokeWidth > 0) {
+      if (!isText) {  // ★ 文本框不描边
         ctx.strokeStyle = shape.strokeColor || '#ffffff';
         ctx.lineWidth = Math.max(1.5 / scale, (shape.strokeWidth || 2) / scale);
         ctx.stroke(path);
@@ -892,7 +896,7 @@ function hitHandle(shape, wx, wy) {
   return null;
 }
 
-// ★★★ 修复后的 isPointInShape（椭圆仅轮廓可选中，线宽容差正确） ★★★
+// ★★★ 椭圆仅轮廓可选中 ★★★
 function isPointInShape(wx, wy, shape) {
   if (shape.type === 'ellipse') {
     const cx = shape.x + shape.w/2;
@@ -910,16 +914,11 @@ function isPointInShape(wx, wy, shape) {
     }
     if (rx <= 0 || ry <= 0) return false;
     const norm = Math.sqrt((lx * lx) / (rx * rx) + (ly * ly) / (ry * ry));
-    // 描边线宽（世界单位）
     const strokeWidth = shape.strokeWidth || 2;
-    // 半线宽对应的归一化容差，加上最小容差 0.03 保证细线也可点
     const tolerance = (strokeWidth / 2) / Math.min(rx, ry) + 0.03;
-    if (Math.abs(norm - 1) < tolerance) {
-      return true;
-    }
+    if (Math.abs(norm - 1) < tolerance) return true;
     return false;
   }
-  // 其他形状沿用原有逻辑
   const path = ShapeGenerator.getPath(shape);
   ctx.save(); ctx.translate(0,canvas.height); ctx.scale(1,-1); ctx.translate(-offsetX*scale,-offsetY*scale); ctx.scale(scale,scale);
   const bounds=getShapeBounds(shape), b_cx=(bounds.minX+bounds.maxX)/2, b_cy=(bounds.minY+bounds.maxY)/2;
