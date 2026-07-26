@@ -226,13 +226,13 @@ function drawPlus(p, cx,cy,armW,armH) { p.moveTo(cx-armW*0.3, cy-armH); p.lineTo
 
 // ---------- 空心弧绘制（半圆，加粗） ----------
 function drawArcShape(ctx, shape) {
-  const { x, y, w, h, strokeColor, strokeWidth, opacity, startAngle = 0, endAngle = Math.PI } = shape; // 改为半圆
+  const { x, y, w, h, strokeColor, strokeWidth, opacity, startAngle = 0, endAngle = Math.PI } = shape;
   const cx = x + w/2, cy = y + h/2;
   const radiusX = w/2, radiusY = h/2;
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.strokeStyle = strokeColor || '#ffffff';
-  ctx.lineWidth = Math.max(1.5 / scale, (strokeWidth || 4) / scale); // 默认线宽改为4
+  ctx.lineWidth = Math.max(1.5 / scale, (strokeWidth || 4) / scale);
   ctx.beginPath();
   ctx.ellipse(cx, cy, radiusX, radiusY, 0, startAngle, endAngle);
   ctx.stroke();
@@ -301,23 +301,17 @@ function drawBrokenFrameShape(ctx, shape) {
   ctx.lineWidth = Math.max(1.5 / scale, (strokeWidth || 4) / scale);
   ctx.beginPath();
 
-  // 上边完整
   ctx.moveTo(x, y);
   ctx.lineTo(x + w, y);
 
-  // 右边上半段
   ctx.lineTo(x + w, cy - halfGap);
   ctx.moveTo(x + w, cy + halfGap);
-  // 右边下半段
   ctx.lineTo(x + w, y + h);
 
-  // 下边完整
   ctx.lineTo(x, y + h);
 
-  // 左边上半段
   ctx.lineTo(x, cy + halfGap);
   ctx.moveTo(x, cy - halfGap);
-  // 左边下半段
   ctx.lineTo(x, y);
 
   ctx.stroke();
@@ -393,7 +387,7 @@ function createShapeButtons() {
           newShape = createShape('arc', center.x-50, center.y-50, 100, 100, {
             fill: 'none',
             strokeColor: '#ffffff',
-            strokeWidth: 4  // 加粗
+            strokeWidth: 4
           });
         } else {
           newShape = createShape(s.type, Math.max(0, center.x-50), Math.max(0, center.y-50), 100, 100);
@@ -458,9 +452,9 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
   }
   if (type === 'arc') {
     ictx.strokeStyle = '#ffffff';
-    ictx.lineWidth = 2.5; // 图标中稍粗
+    ictx.lineWidth = 2.5;
     ictx.beginPath();
-    ictx.ellipse(x+w/2, y+h/2, w/2-2, h/2-2, 0, 0, Math.PI); // 改为半圆
+    ictx.ellipse(x+w/2, y+h/2, w/2-2, h/2-2, 0, 0, Math.PI);
     ictx.stroke();
     return;
   }
@@ -498,10 +492,11 @@ function createShape(type, x, y, w, h, props={}) {
   if (type === 'arc') {
     defaults.fill = 'none';
     defaults.strokeColor = '#ffffff';
-    defaults.strokeWidth = 4; // 加粗
+    defaults.strokeWidth = 4;
   }
   return Object.assign(defaults, props);
 }
+
 // ---------- 复制粘贴功能 ----------
 function copyShape() {
   if (selectedShapeIndex === -1) {
@@ -617,7 +612,6 @@ function redraw() {
 
     ctx.globalAlpha = shape.opacity !== undefined ? shape.opacity : 1;
 
-    // 填充处理（框架、断开框架、空心弧默认不填充）
     if (shape.fill !== 'none' && !isText && !isFrame && !isBrokenFrame && !isArc) {
       if (shape.fill === 'solid') ctx.fillStyle = shape.fillColor || '#00c8ff';
       else if (shape.fill === 'linear' || shape.fill === 'radial') {
@@ -634,9 +628,8 @@ function redraw() {
       ctx.fill(path);
     }
 
-    // 描边（特殊形状用自己的绘制函数）
     if (isCity) {
-      // 城市已绘制完毕
+      // 已绘制
     } else if (isFrame) {
       drawFrameShape(ctx, shape);
     } else if (isBrokenFrame) {
@@ -899,11 +892,40 @@ function hitHandle(shape, wx, wy) {
   return null;
 }
 
+// ★★★ 修改后的 isPointInShape（椭圆仅轮廓可选中） ★★★
 function isPointInShape(wx, wy, shape) {
+  // 对于椭圆（圆规），仅当点击在轮廓线上时才选中
+  if (shape.type === 'ellipse') {
+    const cx = shape.x + shape.w/2;
+    const cy = shape.y + shape.h/2;
+    const rx = shape.w/2;
+    const ry = shape.h/2;
+    // 处理旋转
+    let lx = wx - cx;
+    let ly = wy - cy;
+    if (shape.rotation) {
+      const cos = Math.cos(-shape.rotation);
+      const sin = Math.sin(-shape.rotation);
+      const dx = lx, dy = ly;
+      lx = dx * cos - dy * sin;
+      ly = dx * sin + dy * cos;
+    }
+    // 计算归一化距离
+    const norm = Math.sqrt((lx * lx) / (rx * rx) + (ly * ly) / (ry * ry));
+    // 线宽在世界坐标中的大小
+    const strokeWorld = Math.max((shape.strokeWidth || 2) / scale, 2 / scale);
+    // 容差为半线宽换算到归一化距离的变化量
+    const tolerance = strokeWorld / Math.min(rx, ry);
+    if (Math.abs(norm - 1) < tolerance) {
+      return true;
+    }
+    return false;
+  }
+  // 原有逻辑
   const path = ShapeGenerator.getPath(shape);
   ctx.save(); ctx.translate(0,canvas.height); ctx.scale(1,-1); ctx.translate(-offsetX*scale,-offsetY*scale); ctx.scale(scale,scale);
-  const bounds=getShapeBounds(shape), cx=(bounds.minX+bounds.maxX)/2, cy=(bounds.minY+bounds.maxY)/2;
-  if(shape.rotation){ ctx.translate(cx,cy); ctx.rotate(shape.rotation); ctx.translate(-cx,-cy); }
+  const bounds=getShapeBounds(shape), b_cx=(bounds.minX+bounds.maxX)/2, b_cy=(bounds.minY+bounds.maxY)/2;
+  if(shape.rotation){ ctx.translate(b_cx,b_cy); ctx.rotate(shape.rotation); ctx.translate(-b_cx,-b_cy); }
   const result = ctx.isPointInPath(path, wx, wy); ctx.restore();
   if(result) return true;
   return (wx>=bounds.minX&&wx<=bounds.maxX&&wy>=bounds.minY&&wy<=bounds.maxY);
