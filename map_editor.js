@@ -892,15 +892,13 @@ function hitHandle(shape, wx, wy) {
   return null;
 }
 
-// ★★★ 修改后的 isPointInShape（椭圆仅轮廓可选中） ★★★
+// ★★★ 修复后的 isPointInShape（椭圆仅轮廓可选中，线宽容差正确） ★★★
 function isPointInShape(wx, wy, shape) {
-  // 对于椭圆（圆规），仅当点击在轮廓线上时才选中
   if (shape.type === 'ellipse') {
     const cx = shape.x + shape.w/2;
     const cy = shape.y + shape.h/2;
     const rx = shape.w/2;
     const ry = shape.h/2;
-    // 处理旋转
     let lx = wx - cx;
     let ly = wy - cy;
     if (shape.rotation) {
@@ -910,18 +908,18 @@ function isPointInShape(wx, wy, shape) {
       lx = dx * cos - dy * sin;
       ly = dx * sin + dy * cos;
     }
-    // 计算归一化距离
+    if (rx <= 0 || ry <= 0) return false;
     const norm = Math.sqrt((lx * lx) / (rx * rx) + (ly * ly) / (ry * ry));
-    // 线宽在世界坐标中的大小
-    const strokeWorld = Math.max((shape.strokeWidth || 2) / scale, 2 / scale);
-    // 容差为半线宽换算到归一化距离的变化量
-    const tolerance = strokeWorld / Math.min(rx, ry);
+    // 描边线宽（世界单位）
+    const strokeWidth = shape.strokeWidth || 2;
+    // 半线宽对应的归一化容差，加上最小容差 0.03 保证细线也可点
+    const tolerance = (strokeWidth / 2) / Math.min(rx, ry) + 0.03;
     if (Math.abs(norm - 1) < tolerance) {
       return true;
     }
     return false;
   }
-  // 原有逻辑
+  // 其他形状沿用原有逻辑
   const path = ShapeGenerator.getPath(shape);
   ctx.save(); ctx.translate(0,canvas.height); ctx.scale(1,-1); ctx.translate(-offsetX*scale,-offsetY*scale); ctx.scale(scale,scale);
   const bounds=getShapeBounds(shape), b_cx=(bounds.minX+bounds.maxX)/2, b_cy=(bounds.minY+bounds.maxY)/2;
