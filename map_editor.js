@@ -381,8 +381,6 @@ function copyShape() {
     return;
   }
   clipboardShape = JSON.parse(JSON.stringify(shapes[selectedShapeIndex]));
-  // 提示
-  console.log('已复制形状');
 }
 
 function pasteShape() {
@@ -390,17 +388,13 @@ function pasteShape() {
     alert('剪贴板为空，请先复制一个形状');
     return;
   }
-  // 深拷贝并偏移位置
   const newShape = JSON.parse(JSON.stringify(clipboardShape));
-  // 偏移量：世界坐标 +50
   const offset = 50;
   if (newShape.x1 !== undefined) {
-    // 线条类型
     newShape.x1 += offset;
     newShape.y1 += offset;
     newShape.x2 += offset;
     newShape.y2 += offset;
-    // 同时调整 x,y,w,h 包围盒（如果有）
     if (newShape.x !== undefined) {
       newShape.x += offset;
       newShape.y += offset;
@@ -821,8 +815,8 @@ window.addEventListener('keydown', e => {
       e.preventDefault();
       pasteShape();
     }
-  } else if (e.key === 'Backspace' && selectedShapeIndex !== -1) {
-    shapes.splice(selectedShapeIndex,1);
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeIndex !== -1) {
+    shapes.splice(selectedShapeIndex, 1);
     selectedShapeIndex = -1;
     document.getElementById('propertiesSection').style.display = 'none';
     document.getElementById('textProps').style.display = 'none';
