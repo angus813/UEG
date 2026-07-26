@@ -957,7 +957,7 @@ window.addEventListener('keydown', e => {
       e.preventDefault();
       pasteShape();
     }
-  } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeIndex !== -1) {
+  } else if ((e.key === 'Delete') && selectedShapeIndex !== -1) {
     shapes.splice(selectedShapeIndex, 1);
     selectedShapeIndex = -1;
     document.getElementById('propertiesSection').style.display = 'none';
