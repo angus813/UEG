@@ -13,7 +13,7 @@
       min-height: 100vh;
       display: flex;
       justify-content: center;
-      align-items: center;
+      align-items: flex-start; /* 改为顶部对齐，避免内容被截断 */
       margin: 0;
       padding: 10px;
     }
@@ -24,11 +24,13 @@
       border: 1px solid #2a3340;
       box-shadow: 0 0 30px rgba(0,160,255,0.1);
       position: relative;
-      overflow: hidden;
-      min-height: 600px;
+      overflow-y: auto; /* 允许垂直滚动 */
+      min-height: auto; /* 移除固定最小高度 */
+      height: auto;
       padding: 25px 20px;
-      margin: 0 auto;
+      margin: 10px auto;
     }
+    /* 保留装饰角 */
     .container::before {
       content: ''; position: absolute; top: 0; left: 0;
       width: 60px; height: 60px;
@@ -274,11 +276,26 @@
       color: #fff;
     }
 
+    /* 移动端优化 */
     @media (max-width: 600px) {
-      .container { padding: 15px; }
+      body {
+        align-items: flex-start;
+      }
+      .container {
+        padding: 15px;
+        margin: 5px;
+        min-height: auto;
+        height: auto;
+        overflow-y: visible;
+      }
       .title { font-size: 1.6rem; }
-      .map-list { grid-template-columns: 1fr; }
+      .map-list {
+        grid-template-columns: 1fr;
+      }
       .protocol-option { flex: 1 1 calc(50% - 8px); }
+      .map-card {
+        padding: 15px;
+      }
     }
   </style>
 </head>
