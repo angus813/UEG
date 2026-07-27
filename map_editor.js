@@ -32,12 +32,16 @@ let targetMarker = null;
 // 剪贴板
 let clipboardShape = null;
 
+// 只读模式
+let isViewMode = false;
+
 // ---------- 撤回/回撤系统 ----------
 const MAX_HISTORY = 50;
 let history = [];
 let historyIndex = -1;
 
 function saveState() {
+  if (isViewMode) return;
   history = history.slice(0, historyIndex + 1);
   const snapshot = JSON.parse(JSON.stringify(shapes));
   history.push(snapshot);
@@ -49,6 +53,7 @@ function saveState() {
 }
 
 function undo() {
+  if (isViewMode) return;
   if (historyIndex <= 0) return;
   historyIndex--;
   shapes = JSON.parse(JSON.stringify(history[historyIndex]));
@@ -59,6 +64,7 @@ function undo() {
 }
 
 function redo() {
+  if (isViewMode) return;
   if (historyIndex >= history.length - 1) return;
   historyIndex++;
   shapes = JSON.parse(JSON.stringify(history[historyIndex]));
@@ -170,7 +176,6 @@ const ShapeGenerator = {
       }
       return p;
     }
-    // 文本框、城市、框架、断裂框架、空心弧使用矩形包围盒
     if (type === 'text' || type === 'verticalText' || type === 'city' || type === 'frame' || type === 'brokenFrame' || type === 'arc') {
       p.rect(x, y, w, h);
       return p;
@@ -341,6 +346,7 @@ const shapePresets = [
 
 const toolbar = document.getElementById('toolbar');
 function createShapeButtons() {
+  if (isViewMode) return;
   shapePresets.forEach(cat => {
     const section = document.createElement('div'); section.className = 'tool-section';
     section.innerHTML = `<div class="section-title" data-collapse="${cat.category}">${cat.category}</div><div class="section-content collapsed"></div>`;
@@ -363,7 +369,7 @@ function createShapeButtons() {
             fontSize: 20,
             fill: 'none',
             strokeColor: '#ffffff',
-            strokeWidth: 0   // 文本框无轮廓
+            strokeWidth: 0
           });
         } else if (s.type === 'city') {
           newShape = createShape('city', center.x-60, center.y-60, 120, 120, {
@@ -459,7 +465,6 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
     return;
   }
   if (type === 'text') {
-    // 图标不绘制轮廓，只绘制文字
     ictx.fillStyle = '#ffffff';
     ictx.font = '12px Rajdhani, sans-serif';
     ictx.textAlign = 'center';
@@ -479,7 +484,7 @@ function createShape(type, x, y, w, h, props={}) {
   };
   if (type === 'text' || type === 'verticalText') {
     defaults.fill = 'none';
-    defaults.strokeWidth = 0;   // 文本框默认无轮廓
+    defaults.strokeWidth = 0;
   }
   if (type === 'city') {
     defaults.fillColor = '#ffcc00';
@@ -502,6 +507,7 @@ function createShape(type, x, y, w, h, props={}) {
 
 // ---------- 复制粘贴功能 ----------
 function copyShape() {
+  if (isViewMode) return;
   if (selectedShapeIndex === -1) {
     alert('请先选择一个形状');
     return;
@@ -510,6 +516,7 @@ function copyShape() {
 }
 
 function pasteShape() {
+  if (isViewMode) return;
   if (!clipboardShape) {
     alert('剪贴板为空，请先复制一个形状');
     return;
@@ -642,7 +649,7 @@ function redraw() {
       drawArcShape(ctx, shape);
     } else {
       ctx.globalAlpha = 1;
-      if (!isText) {  // ★ 文本框不描边
+      if (!isText) {
         ctx.strokeStyle = shape.strokeColor || '#ffffff';
         ctx.lineWidth = Math.max(1.5 / scale, (shape.strokeWidth || 2) / scale);
         ctx.stroke(path);
@@ -651,7 +658,8 @@ function redraw() {
 
     ctx.restore();
     if (isText && shape.text) drawTextOnCanvas(shape);
-    if (index === selectedShapeIndex) drawSelectionHandles(shape);
+    // 只在编辑模式下显示选中手柄
+    if (!isViewMode && index === selectedShapeIndex) drawSelectionHandles(shape);
   });
 
   // 中心红点
@@ -719,6 +727,7 @@ function drawTextOnCanvas(shape) {
 }
 
 function drawSelectionHandles(shape) {
+  if (isViewMode) return;
   const bounds = getShapeBounds(shape);
   if (bounds.minX === Infinity) return;
   const { minX, minY, maxX, maxY } = bounds;
@@ -786,7 +795,23 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 function onPointerDown(e) {
   e.preventDefault();
-  const pos = getEventPos(e); const world = toWorld(pos.x, pos.y);
+  const pos = getEventPos(e);
+  if (isViewMode) {
+    // 只允许平移（左键、右键、双指）
+    if (e.button === 2 || (e.touches && e.touches.length === 2)) {
+      isPanning = true;
+      lastScreen = { x: pos.x, y: pos.y };
+      return;
+    }
+    if (e.button === 0 || (e.touches && e.touches.length === 1)) {
+      isPanning = true;
+      lastScreen = { x: pos.x, y: pos.y };
+      return;
+    }
+    return;
+  }
+  // 原有编辑逻辑
+  const world = toWorld(pos.x, pos.y);
   pointerDownPos = pos; isPointerDown = true;
   if(e.button===2 || (e.touches && e.touches.length===2)) { clearLongPress(); isPanning=true; isLongPressPan=false; lastScreen={x:pos.x,y:pos.y}; return; }
   clearLongPress();
@@ -830,7 +855,20 @@ function onPointerDown(e) {
 
 function onPointerMove(e) {
   e.preventDefault();
-  const pos = getEventPos(e); const world = toWorld(pos.x, pos.y);
+  const pos = getEventPos(e);
+  if (isViewMode) {
+    if (isPanning) {
+      const dx = pos.x - lastScreen.x;
+      const dy = pos.y - lastScreen.y;
+      offsetX -= dx / scale;
+      offsetY += dy / scale;
+      clampOffset();
+      lastScreen = { x: pos.x, y: pos.y };
+      redraw();
+    }
+    return;
+  }
+  const world = toWorld(pos.x, pos.y);
   if(isPointerDown && !isPanning && !isLongPressPan && !dragHandle && !isMovingShape && !isDrawing) {
     const dx=pos.x-pointerDownPos.x, dy=pos.y-pointerDownPos.y;
     if(Math.abs(dx)>20||Math.abs(dy)>20) clearLongPress();
@@ -857,7 +895,12 @@ function onPointerMove(e) {
 }
 
 function onPointerUp(e) {
-  e.preventDefault(); clearLongPress(); isPointerDown=false;
+  e.preventDefault();
+  if (isViewMode) {
+    isPanning = false;
+    return;
+  }
+  clearLongPress(); isPointerDown=false;
   if(isLongPressPan){ isLongPressPan=false; isPanning=false; canvas.style.cursor='crosshair'; return; }
   if(isPanning){ isPanning=false; return; }
   if(dragHandle||isMovingShape||(isDrawing&&tempShape)) saveState();
@@ -929,6 +972,7 @@ function isPointInShape(wx, wy, shape) {
 }
 
 function loadShapeProperties(shape) {
+  if (isViewMode) return;
   document.getElementById('fillColor').value=shape.fillColor||'#00c8ff';
   document.getElementById('fillType').value=shape.fill||'solid';
   document.getElementById('strokeColor').value=shape.strokeColor||'#ffffff';
@@ -946,47 +990,52 @@ container.addEventListener('wheel', e => {
   offsetX=world.x-sx/newScale; offsetY=world.y-(canvas.height-sy)/newScale; clampOffset(); scale=newScale; redraw();
 }, {passive:false});
 
-// UI 事件
-document.getElementById('fillType').addEventListener('change', e => { document.getElementById('textureUpload').style.display=e.target.value==='texture'?'block':'none'; if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].fill=e.target.value; redraw(); } });
-document.getElementById('fillColor').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].fillColor=e.target.value; redraw(); } });
-document.getElementById('strokeColor').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].strokeColor=e.target.value; redraw(); } });
-document.getElementById('strokeWidth').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].strokeWidth=parseInt(e.target.value); redraw(); } });
-document.getElementById('opacity').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].opacity=parseFloat(e.target.value); redraw(); } });
-document.getElementById('deleteShapeBtn').addEventListener('click', () => { if(selectedShapeIndex!==-1){ shapes.splice(selectedShapeIndex,1); selectedShapeIndex=-1; document.getElementById('propertiesSection').style.display='none'; document.getElementById('textProps').style.display='none'; saveState(); redraw(); } });
-document.getElementById('textureFile').addEventListener('change', e => { const file=e.target.files[0]; if(!file) return; const reader=new FileReader(); reader.onload=ev=>{ const img=new Image(); img.onload=()=>{ textureImage=img; if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].fill='texture'; redraw(); } }; img.src=ev.target.result; }; reader.readAsDataURL(file); });
-document.getElementById('textContent').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].text=e.target.value; redraw(); } });
-document.getElementById('textContent').addEventListener('blur', saveState);
-document.getElementById('fontSize').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].fontSize=parseInt(e.target.value); redraw(); } });
-document.getElementById('fontSize').addEventListener('change', saveState);
-document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => { btn.addEventListener('click', () => { document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); currentTool=btn.dataset.tool; }); });
-document.getElementById('btnUndo').addEventListener('click', undo);
-document.getElementById('btnRedo').addEventListener('click', redo);
-document.getElementById('btnCopy').addEventListener('click', copyShape);
-document.getElementById('btnPaste').addEventListener('click', pasteShape);
-document.getElementById('btnLocate').addEventListener('click', () => { const x=parseInt(document.getElementById('locateX').value), y=parseInt(document.getElementById('locateY').value); if(isNaN(x)||isNaN(y)){ alert('请输入有效的坐标'); return; } locateToPoint(x,y); });
-document.getElementById('saveBtn').addEventListener('click', () => { if(!currentMap) return; const maps=JSON.parse(localStorage.getItem(MAPS_KEY)||'[]'); const idx=maps.findIndex(m=>m.id===mapId); if(idx!==-1){ maps[idx].shapes=shapes; localStorage.setItem(MAPS_KEY,JSON.stringify(maps)); alert('保存成功'); } });
+// UI 事件（仅编辑模式可用）
+if (!isViewMode) {
+  document.getElementById('fillType').addEventListener('change', e => { document.getElementById('textureUpload').style.display=e.target.value==='texture'?'block':'none'; if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].fill=e.target.value; redraw(); } });
+  document.getElementById('fillColor').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].fillColor=e.target.value; redraw(); } });
+  document.getElementById('strokeColor').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].strokeColor=e.target.value; redraw(); } });
+  document.getElementById('strokeWidth').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].strokeWidth=parseInt(e.target.value); redraw(); } });
+  document.getElementById('opacity').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].opacity=parseFloat(e.target.value); redraw(); } });
+  document.getElementById('deleteShapeBtn').addEventListener('click', () => { if(selectedShapeIndex!==-1){ shapes.splice(selectedShapeIndex,1); selectedShapeIndex=-1; document.getElementById('propertiesSection').style.display='none'; document.getElementById('textProps').style.display='none'; saveState(); redraw(); } });
+  document.getElementById('textureFile').addEventListener('change', e => { const file=e.target.files[0]; if(!file) return; const reader=new FileReader(); reader.onload=ev=>{ const img=new Image(); img.onload=()=>{ textureImage=img; if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].fill='texture'; redraw(); } }; img.src=ev.target.result; }; reader.readAsDataURL(file); });
+  document.getElementById('textContent').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].text=e.target.value; redraw(); } });
+  document.getElementById('textContent').addEventListener('blur', saveState);
+  document.getElementById('fontSize').addEventListener('input', e => { if(selectedShapeIndex!==-1){ shapes[selectedShapeIndex].fontSize=parseInt(e.target.value); redraw(); } });
+  document.getElementById('fontSize').addEventListener('change', saveState);
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => { btn.addEventListener('click', () => { document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); currentTool=btn.dataset.tool; }); });
+  document.getElementById('btnUndo').addEventListener('click', undo);
+  document.getElementById('btnRedo').addEventListener('click', redo);
+  document.getElementById('btnCopy').addEventListener('click', copyShape);
+  document.getElementById('btnPaste').addEventListener('click', pasteShape);
+  document.getElementById('btnLocate').addEventListener('click', () => { const x=parseInt(document.getElementById('locateX').value), y=parseInt(document.getElementById('locateY').value); if(isNaN(x)||isNaN(y)){ alert('请输入有效的坐标'); return; } locateToPoint(x,y); });
+  document.getElementById('saveBtn').addEventListener('click', () => { if(!currentMap) return; const maps=JSON.parse(localStorage.getItem(MAPS_KEY)||'[]'); const idx=maps.findIndex(m=>m.id===mapId); if(idx!==-1){ maps[idx].shapes=shapes; localStorage.setItem(MAPS_KEY,JSON.stringify(maps)); alert('保存成功'); } });
+}
 
-// 键盘快捷键
-window.addEventListener('keydown', e => {
-  if (e.ctrlKey || e.metaKey) {
-    if (e.key === 'c' || e.key === 'C') {
-      e.preventDefault();
-      copyShape();
-    } else if (e.key === 'v' || e.key === 'V') {
-      e.preventDefault();
-      pasteShape();
+// 键盘快捷键（仅编辑模式）
+if (!isViewMode) {
+  window.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        copyShape();
+      } else if (e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        pasteShape();
+      }
+    } else if ((e.key === 'Delete') && selectedShapeIndex !== -1) {
+      shapes.splice(selectedShapeIndex, 1);
+      selectedShapeIndex = -1;
+      document.getElementById('propertiesSection').style.display = 'none';
+      document.getElementById('textProps').style.display = 'none';
+      saveState();
+      redraw();
     }
-  } else if ((e.key === 'Delete') && selectedShapeIndex !== -1) {
-    shapes.splice(selectedShapeIndex, 1);
-    selectedShapeIndex = -1;
-    document.getElementById('propertiesSection').style.display = 'none';
-    document.getElementById('textProps').style.display = 'none';
-    saveState();
-    redraw();
-  }
-});
+  });
+}
 
 toolbar.addEventListener('click', e => {
+  if (isViewMode) return;
   const title = e.target.closest('.section-title');
   if (!title) return;
   const content = title.nextElementSibling;
@@ -995,6 +1044,16 @@ toolbar.addEventListener('click', e => {
 
 // 初始化
 function init() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const mode = urlParams.get('mode') || 'edit';
+  isViewMode = (mode === 'view');
+
+  if (isViewMode) {
+    document.getElementById('toolbar').style.display = 'none';
+    document.getElementById('saveBtn').style.display = 'none';
+    // 也可以隐藏编辑工具按钮，但已经隐藏整个工具栏
+  }
+
   const maps=JSON.parse(localStorage.getItem(MAPS_KEY)||'[]');
   currentMap=maps.find(m=>m.id===mapId);
   if(!currentMap){ alert('地图不存在'); window.location.href='strategy_map.html'; return; }
@@ -1002,7 +1061,7 @@ function init() {
   shapes=currentMap.shapes||[];
   createShapeButtons();
   resizeCanvas();
-  initHistory();
+  if (!isViewMode) initHistory();
   redraw();
 }
 init();

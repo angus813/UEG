@@ -131,11 +131,35 @@
       line-height: 1;
       cursor: pointer;
       z-index: 5;
-      display: none; /* 默认隐藏，管理员可见 */
+      display: none;
       transition: 0.2s;
     }
     .delete-map-btn:hover {
       background: #ff0000;
+      transform: scale(1.2);
+    }
+    .edit-map-btn {
+      position: absolute;
+      top: 20px;
+      right: -8px;
+      background: #ffaa00;
+      color: #000;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 5;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      transition: 0.2s;
+    }
+    .edit-map-btn:hover {
+      background: #ff8c00;
       transform: scale(1.2);
     }
     .map-type {
@@ -343,14 +367,16 @@
         const typeLabel = map.type === 'template' ? '模板地图' : '星系地图';
         html += `
           <div class="map-card-wrapper">
-            <a href="map_editor.html?id=${map.id}" class="map-card">
+            <a href="map_editor.html?mode=view&id=${map.id}" class="map-card">
               <div class="map-type">${typeLabel}</div>
               <div class="map-name">${map.name}</div>
               ${map.protocol ? `<div class="map-protocol">协议：${map.protocol}</div>` : ''}
               <div class="map-info">创建者：${map.creator} · ${timeStr}</div>
             </a>
-            <button class="delete-map-btn" style="display:${admin ? 'block' : 'none'}" 
-              onclick="event.preventDefault(); event.stopPropagation(); deleteMap('${map.id}')">✕</button>
+            ${admin ? `
+              <button class="delete-map-btn" style="display:block;" onclick="event.preventDefault(); event.stopPropagation(); deleteMap('${map.id}')">✕</button>
+              <a href="map_editor.html?mode=edit&id=${map.id}" class="edit-map-btn" style="display:flex;" title="编辑地图">✎</a>
+            ` : ''}
           </div>
         `;
       });
