@@ -110,6 +110,12 @@
       color: #ff6666;
       font-size: 1.2rem;
     }
+    .loading-message {
+      text-align: center;
+      padding: 30px;
+      color: #7a8b9a;
+      font-size: 1.1rem;
+    }
     @media (max-width: 600px) {
       .admin-header {
         flex-direction: column;
@@ -137,19 +143,22 @@
   </style>
 </head>
 <body>
-  <div class="admin-container" id="adminContainer">
+  <div class="admin-container">
     <div class="admin-header">
-      <div class="admin-title">用户管理</div>
+      <div class="admin-title">👥 用户管理</div>
       <a href="index.html" class="back-link">← 返回主页</a>
     </div>
 
-    <!-- 非管理员提示 -->
+    <!-- 未授权提示 -->
     <div id="unauthorized" style="display:none;">
       <div class="error-message">⚠️ 您没有管理员权限，无法访问此页面。</div>
       <div style="text-align:center; margin-top:20px;">
         <a href="index.html" class="back-link">返回主页</a>
       </div>
     </div>
+
+    <!-- 加载中 -->
+    <div id="loadingIndicator" class="loading-message">加载用户数据...</div>
 
     <!-- 管理表格 -->
     <div id="adminContent" style="display:none;">
@@ -167,76 +176,136 @@
     </div>
   </div>
 
-  <script>
-    const USERS_KEY = 'ueg_users';
-    const CURRENT_USER_KEY = 'ueg_current_user';
+  <!-- 引入 Supabase 客户端 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-client.js"></script>
 
-    function getUsers() {
-      return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    }
-    function saveUsers(users) {
-      localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    }
+  <script>
+    // ==================== 工具函数 ====================
+    // 获取当前登录用户（从 localStorage）
     function getCurrentUser() {
-      const cu = localStorage.getItem(CURRENT_USER_KEY);
+      const cu = localStorage.getItem('ueg_current_user');
       return cu ? JSON.parse(cu) : null;
     }
 
-    function checkAdmin() {
+    // ==================== 管理员权限校验 ====================
+    async function checkAdmin() {
       const currentUser = getCurrentUser();
-      if (!currentUser || !currentUser.isAdmin) {
+      if (!currentUser) {
         document.getElementById('unauthorized').style.display = 'block';
         document.getElementById('adminContent').style.display = 'none';
+        document.getElementById('loadingIndicator').style.display = 'none';
         return false;
       }
+
+      // 从 Supabase 查询当前用户是否为管理员
+      const { data, error } = await supabase
+        .from('users')
+        .select('is_admin')
+        .eq('username', currentUser.username)
+        .maybeSingle();
+
+      if (error || !data || !data.is_admin) {
+        document.getElementById('unauthorized').style.display = 'block';
+        document.getElementById('adminContent').style.display = 'none';
+        document.getElementById('loadingIndicator').style.display = 'none';
+        return false;
+      }
+
+      // 是管理员，显示内容
       document.getElementById('unauthorized').style.display = 'none';
       document.getElementById('adminContent').style.display = 'block';
+      document.getElementById('loadingIndicator').style.display = 'none';
       return true;
     }
 
-    function renderTable() {
-      const users = getUsers();
+    // ==================== 渲染用户表格 ====================
+    async function renderTable() {
       const tbody = document.getElementById('userTableBody');
+      tbody.innerHTML = '<tr><td colspan="4" class="loading-message">加载中...</td></tr>';
+
+      // 从 Supabase 读取所有用户
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('username, is_admin, highest_record')
+        .order('username');
+
+      if (error) {
+        tbody.innerHTML = `<tr><td colspan="4" class="error-message">加载失败：${error.message}</td></tr>`;
+        return;
+      }
+
+      if (!users || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#4a5a6a;">暂无用户</td></tr>';
+        return;
+      }
+
       let html = '';
       users.forEach(user => {
-        html += `<tr>
-          <td>${user.username}</td>
-          <td>${user.isAdmin ? '是' : '否'}</td>
-          <td>${user.highestRecord || 0}</td>
-          <td>
-            <input type="number" class="record-input" id="record-${user.username}" placeholder="等级" value="${user.highestRecord || ''}">
-            <button class="btn-small" onclick="setRecord('${user.username}')">保存</button>
-          </td>
-        </tr>`;
+        const isAdmin = user.is_admin ? '是' : '否';
+        html += `
+          <tr>
+            <td>${user.username}</td>
+            <td>${isAdmin}</td>
+            <td>
+              <input type="number" class="record-input" id="record-${user.username}" 
+                     placeholder="等级" value="${user.highest_record || 0}" min="0" step="1">
+            </td>
+            <td>
+              <button class="btn-small" onclick="updateRecord('${user.username}')">保存</button>
+            </td>
+          </tr>
+        `;
       });
       tbody.innerHTML = html;
     }
 
-    window.setRecord = function(username) {
+    // ==================== 更新用户最高记录 ====================
+    async function updateRecord(username) {
       const input = document.getElementById(`record-${username}`);
+      if (!input) return;
+
       const record = parseInt(input.value);
       if (isNaN(record) || record < 0) {
-        alert('请输入有效的数字');
+        alert('请输入有效的非负整数');
         return;
       }
-      const users = getUsers();
-      const user = users.find(u => u.username === username);
-      if (user) {
-        user.highestRecord = record;
-        saveUsers(users);
-        // 如果修改的是当前登录用户，同步更新 session
-        const currentUser = getCurrentUser();
-        if (currentUser && currentUser.username === username) {
-          currentUser.highestRecord = record;
-          localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(currentUser));
-        }
-        renderTable();
-      }
-    };
 
-    if (checkAdmin()) {
-      renderTable();
+      // 更新 Supabase
+      const { error } = await supabase
+        .from('users')
+        .update({ highest_record: record })
+        .eq('username', username);
+
+      if (error) {
+        alert('更新失败：' + error.message);
+        return;
+      }
+
+      // 如果修改的是当前登录用户，同步更新 localStorage 中的记录（保持界面一致）
+      const currentUser = getCurrentUser();
+      if (currentUser && currentUser.username === username) {
+        currentUser.highestRecord = record;
+        localStorage.setItem('ueg_current_user', JSON.stringify(currentUser));
+      }
+
+      alert('更新成功！');
     }
+
+    // 暴露函数到全局（供 onclick 调用）
+    window.updateRecord = updateRecord;
+
+    // ==================== 初始化 ====================
+    async function init() {
+      const isAdmin = await checkAdmin();
+      if (isAdmin) {
+        await renderTable();
+      }
+    }
+
+    init();
   </script>
+</body>
+</html>
 </body>
 </html>
