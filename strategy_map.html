@@ -13,7 +13,7 @@
       min-height: 100vh;
       display: flex;
       justify-content: center;
-      align-items: flex-start; /* 改为顶部对齐，避免内容被截断 */
+      align-items: flex-start;
       margin: 0;
       padding: 10px;
     }
@@ -24,13 +24,11 @@
       border: 1px solid #2a3340;
       box-shadow: 0 0 30px rgba(0,160,255,0.1);
       position: relative;
-      overflow-y: auto; /* 允许垂直滚动 */
-      min-height: auto; /* 移除固定最小高度 */
+      overflow-y: auto;
       height: auto;
       padding: 25px 20px;
       margin: 10px auto;
     }
-    /* 保留装饰角 */
     .container::before {
       content: ''; position: absolute; top: 0; left: 0;
       width: 60px; height: 60px;
@@ -197,7 +195,6 @@
       font-size: 1.1rem;
     }
 
-    /* 新建地图模态框 */
     .modal {
       display: none;
       position: fixed;
@@ -276,26 +273,13 @@
       color: #fff;
     }
 
-    /* 移动端优化 */
     @media (max-width: 600px) {
-      body {
-        align-items: flex-start;
-      }
-      .container {
-        padding: 15px;
-        margin: 5px;
-        min-height: auto;
-        height: auto;
-        overflow-y: visible;
-      }
+      body { align-items: flex-start; }
+      .container { padding: 15px; margin: 5px; }
       .title { font-size: 1.6rem; }
-      .map-list {
-        grid-template-columns: 1fr;
-      }
+      .map-list { grid-template-columns: 1fr; }
       .protocol-option { flex: 1 1 calc(50% - 8px); }
-      .map-card {
-        padding: 15px;
-      }
+      .map-card { padding: 15px; }
     }
   </style>
 </head>
@@ -312,7 +296,7 @@
     </div>
 
     <div class="map-list" id="mapList">
-      <div class="empty-state">暂无地图，等待管理员创建</div>
+      <div class="empty-state">加载中...</div>
     </div>
 
     <div class="modal" id="mapModal">
@@ -338,50 +322,62 @@
     </div>
   </div>
 
+  <!-- 引入 Supabase 客户端（必须先加载） -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-client.js"></script>
+
   <script>
-    const MAPS_KEY = 'guild_maps';
-    const CURRENT_USER_KEY = 'ueg_current_user';
-
-    function getMaps() {
-      return JSON.parse(localStorage.getItem(MAPS_KEY) || '[]');
-    }
-    function saveMaps(maps) {
-      localStorage.setItem(MAPS_KEY, JSON.stringify(maps));
-    }
-    function getCurrentUser() {
-      const cu = localStorage.getItem(CURRENT_USER_KEY);
-      return cu ? JSON.parse(cu) : null;
-    }
-    function isAdmin() {
-      const user = getCurrentUser();
-      return user && user.isAdmin;
+    // ==================== 工具函数 ====================
+    // 从 localStorage 获取当前用户名（与 index.html 保持一致）
+    function getCurrentUsername() {
+      const cu = localStorage.getItem('ueg_current_user');
+      if (!cu) return null;
+      try { return JSON.parse(cu).username; } catch { return null; }
     }
 
-    let currentMapType = 'template';
-    let selectedProtocol = '2.0';
-
-    function deleteMap(mapId) {
-      if (!confirm('确定要删除此地图吗？此操作不可恢复！')) return;
-      let maps = getMaps();
-      maps = maps.filter(m => m.id !== mapId);
-      saveMaps(maps);
-      renderMapList();
+    // ==================== 管理员判断（从 Supabase 查询） ====================
+    async function isAdmin() {
+      const username = getCurrentUsername();
+      if (!username) return false;
+      const { data, error } = await supabase
+        .from('users')
+        .select('is_admin')
+        .eq('username', username)
+        .maybeSingle();
+      if (error || !data) return false;
+      return data.is_admin === true;
     }
 
-    function renderMapList() {
-      const maps = getMaps();
+    // ==================== 加载地图列表 ====================
+    async function renderMapList() {
       const container = document.getElementById('mapList');
-      if (maps.length === 0) {
+      container.innerHTML = '<div class="empty-state">加载中...</div>';
+
+      // 查询所有地图，按创建时间降序
+      const { data: maps, error } = await supabase
+        .from('guild_maps')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        container.innerHTML = '<div class="empty-state">加载失败，请刷新重试</div>';
+        console.error('加载地图失败:', error);
+        return;
+      }
+
+      if (!maps || maps.length === 0) {
         container.innerHTML = '<div class="empty-state">暂无地图，等待管理员创建</div>';
         return;
       }
-      maps.sort((a, b) => b.createdAt - a.createdAt);
-      const admin = isAdmin();
+
+      const admin = await isAdmin();
       let html = '';
       maps.forEach(map => {
-        const date = new Date(map.createdAt);
-        const timeStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+        const date = new Date(map.created_at);
+        const timeStr =
+          `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
         const typeLabel = map.type === 'template' ? '模板地图' : '星系地图';
+
         html += `
           <div class="map-card-wrapper">
             <a href="map_editor.html?mode=view&id=${map.id}" class="map-card">
@@ -391,33 +387,82 @@
               <div class="map-info">创建者：${map.creator} · ${timeStr}</div>
             </a>
         `;
+
         if (admin) {
           html += `
-            <button class="delete-map-btn" style="display:block;" onclick="event.preventDefault(); event.stopPropagation(); deleteMap('${map.id}')">✕</button>
+            <button class="delete-map-btn" style="display:block;" onclick="deleteMap('${map.id}')">✕</button>
             <a href="map_editor.html?mode=edit&id=${map.id}" class="edit-map-btn" style="display:flex;" title="编辑地图">✎</a>
           `;
         }
+
         html += `</div>`;
       });
+
       container.innerHTML = html;
     }
 
-    function createMap(name, type, protocol = null) {
-      const maps = getMaps();
-      const user = getCurrentUser();
-      const newMap = {
-        id: Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-        name: name,
-        type: type,
-        protocol: type === 'template' ? protocol : null,
-        creator: user ? user.username : '未知',
-        createdAt: Date.now(),
-        shapes: []
-      };
-      maps.push(newMap);
-      saveMaps(maps);
-      renderMapList();
+    // ==================== 删除地图 ====================
+    async function deleteMap(mapId) {
+      if (!confirm('确定要删除此地图吗？此操作不可恢复！')) return;
+
+      const admin = await isAdmin();
+      if (!admin) {
+        alert('您没有管理员权限');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('guild_maps')
+        .delete()
+        .eq('id', mapId);
+
+      if (error) {
+        alert('删除失败: ' + error.message);
+        return;
+      }
+
+      // 重新渲染列表
+      await renderMapList();
     }
+
+    // 暴露到全局（供 onclick 调用）
+    window.deleteMap = deleteMap;
+
+    // ==================== 创建地图 ====================
+    async function createMap(name, type, protocol = null) {
+      const username = getCurrentUsername();
+      if (!username) {
+        alert('请先登录');
+        return false;
+      }
+
+      const newMap = {
+        name: name,
+        type: type,                 // 'template' 或 'galaxy'
+        protocol: type === 'template' ? protocol : null,
+        creator: username,
+        shapes: []                  // 初始空数组
+        // created_at 和 id 由数据库自动生成
+      };
+
+      const { data, error } = await supabase
+        .from('guild_maps')
+        .insert([newMap])
+        .select();  // 返回插入的记录（含自动生成的 id）
+
+      if (error) {
+        alert('创建失败: ' + error.message);
+        return false;
+      }
+
+      // 刷新列表
+      await renderMapList();
+      return true;
+    }
+
+    // ==================== 模态框控制 ====================
+    let currentMapType = 'template';
+    let selectedProtocol = '2.0';
 
     function resetProtocolSelection() {
       document.querySelectorAll('.protocol-option').forEach(btn => btn.classList.remove('selected'));
@@ -441,12 +486,18 @@
       document.getElementById('mapModal').style.display = 'flex';
     }
 
-    function init() {
-      if (isAdmin()) {
+    // ==================== 初始化 ====================
+    async function init() {
+      // 检查管理员权限并显示创建按钮
+      const admin = await isAdmin();
+      if (admin) {
         document.getElementById('adminActions').style.display = 'flex';
       }
-      renderMapList();
 
+      // 加载地图列表
+      await renderMapList();
+
+      // ---------- 事件绑定 ----------
       document.getElementById('btnTemplateMap').addEventListener('click', () => showModal('template'));
       document.getElementById('btnGalaxyMap').addEventListener('click', () => showModal('galaxy'));
 
@@ -462,17 +513,20 @@
         document.getElementById('mapModal').style.display = 'none';
       });
 
-      document.getElementById('btnSave').addEventListener('click', () => {
+      document.getElementById('btnSave').addEventListener('click', async () => {
         const name = document.getElementById('mapNameInput').value.trim();
         if (!name) {
           alert('请输入地图名称');
           return;
         }
-        createMap(name, currentMapType, selectedProtocol);
-        document.getElementById('mapModal').style.display = 'none';
+        const success = await createMap(name, currentMapType, selectedProtocol);
+        if (success) {
+          document.getElementById('mapModal').style.display = 'none';
+        }
       });
     }
 
+    // 启动
     init();
   </script>
 </body>
