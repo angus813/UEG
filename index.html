@@ -143,7 +143,6 @@
           <div class="menu-card-text">纪念堂</div>
           <div class="menu-card-desc">历史记录与成就</div>
         </div>
-        <!-- 新增公会卡片 -->
         <a href="guild.html" class="menu-card">
           <div class="menu-card-icon">🏰</div>
           <div class="menu-card-text">公会</div>
@@ -152,7 +151,7 @@
       </div>
     </div>
 
-    <!-- 登录/注册模态框（保留） -->
+    <!-- 登录/注册模态框 -->
     <div class="modal" id="modal">
       <div class="modal-content">
         <h3 id="modalTitle">登录</h3>
@@ -166,34 +165,109 @@
     </div>
   </div>
 
-  <script>
-    const USERS_KEY = 'ueg_users';
-    const CURRENT_USER_KEY = 'ueg_current_user';
+  <!-- 引入 Supabase 客户端 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-client.js"></script>
 
-    function getUsers() {
-      return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    }
-    function saveUsers(users) {
-      localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    }
+  <script>
+    // ==================== Supabase 用户操作 ====================
+
+    // 获取当前登录用户（从 localStorage 读取会话）
     function getCurrentUser() {
-      const cu = localStorage.getItem(CURRENT_USER_KEY);
+      const cu = localStorage.getItem('ueg_current_user');
       return cu ? JSON.parse(cu) : null;
     }
+
+    // 设置当前用户（存入 localStorage）
     function setCurrentUser(user) {
-      if (user) localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
-      else localStorage.removeItem(CURRENT_USER_KEY);
+      if (user) {
+        localStorage.setItem('ueg_current_user', JSON.stringify(user));
+      } else {
+        localStorage.removeItem('ueg_current_user');
+      }
     }
 
-    // 默认管理员
-    (function() {
-      let users = getUsers();
-      if (!users.find(u => u.username === 'angus')) {
-        users.push({ username: 'angus', password: 'angus123', isAdmin: true, highestRecord: 0 });
-        saveUsers(users);
-      }
-    })();
+    // ==================== 登录 ====================
+    async function loginUser(username, password) {
+      // 查询 users 表，匹配用户名和密码
+      const { data, error } = await supabase
+        .from('users')
+        .select('username, password, is_admin, highest_record')
+        .eq('username', username)
+        .maybeSingle();
 
+      if (error) {
+        console.error('登录查询失败:', error);
+        alert('登录失败，请稍后再试');
+        return false;
+      }
+
+      if (!data) {
+        alert('用户名不存在');
+        return false;
+      }
+
+      if (data.password !== password) {
+        alert('密码错误');
+        return false;
+      }
+
+      // 登录成功，保存会话（将 is_admin 字段映射为 isAdmin）
+      const userInfo = {
+        username: data.username,
+        isAdmin: data.is_admin || false,
+        highestRecord: data.highest_record || 0,
+        // 为了兼容其他页面，也存储 password 但通常不推荐明文存储，但这里用于 profile 等页面
+        password: data.password
+      };
+      setCurrentUser(userInfo);
+      return true;
+    }
+
+    // ==================== 注册 ====================
+    async function registerUser(username, password) {
+      // 检查用户名是否已存在
+      const { data: existing, error: checkError } = await supabase
+        .from('users')
+        .select('username')
+        .eq('username', username)
+        .maybeSingle();
+
+      if (checkError) {
+        console.error('检查用户名失败:', checkError);
+        alert('注册失败，请稍后再试');
+        return false;
+      }
+
+      if (existing) {
+        alert('用户名已存在');
+        return false;
+      }
+
+      // 如果是 angus，自动设为管理员
+      const isAdmin = (username === 'angus');
+
+      // 插入新用户
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert([{
+          username: username,
+          password: password,
+          is_admin: isAdmin,
+          highest_record: 0
+        }]);
+
+      if (insertError) {
+        console.error('注册插入失败:', insertError);
+        alert('注册失败: ' + insertError.message);
+        return false;
+      }
+
+      alert('注册成功，请登录');
+      return true;
+    }
+
+    // ==================== UI 更新 ====================
     const userInfo = document.getElementById('userInfo');
     const btnLogin = document.getElementById('btnLogin');
     const btnRegister = document.getElementById('btnRegister');
@@ -224,11 +298,12 @@
       }
     }
 
-    // 个人中心跳转到独立页面
+    // 个人中心跳转
     btnProfile.addEventListener('click', () => {
       window.location.href = 'profile.html';
     });
 
+    // 登录/注册模态框
     function openModal(mode) {
       modalMode = mode;
       modalTitle.textContent = mode === 'login' ? '登录' : '注册';
@@ -241,31 +316,38 @@
       modal.style.display = 'none';
     };
 
-    modalConfirm.addEventListener('click', () => {
+    modalConfirm.addEventListener('click', async () => {
       const username = usernameInput.value.trim();
       const password = passwordInput.value.trim();
-      if (!username || !password) { alert('用户名和密码不能为空'); return; }
-      const users = getUsers();
+      if (!username || !password) {
+        alert('用户名和密码不能为空');
+        return;
+      }
+
       if (modalMode === 'register') {
-        if (users.find(u => u.username === username)) { alert('用户名已存在'); return; }
-        const isAdmin = (username === 'angus');
-        users.push({ username, password, isAdmin, highestRecord: 0 });
-        saveUsers(users);
-        alert('注册成功，请登录');
-        closeModal();
+        const success = await registerUser(username, password);
+        if (success) {
+          closeModal();
+        }
       } else {
-        const user = users.find(u => u.username === username && u.password === password);
-        if (!user) { alert('用户名或密码错误'); return; }
-        setCurrentUser(user);
-        updateUI();
-        closeModal();
+        // login
+        const success = await loginUser(username, password);
+        if (success) {
+          updateUI();
+          closeModal();
+        }
       }
     });
 
+    // 按钮事件
     btnLogin.addEventListener('click', () => openModal('login'));
     btnRegister.addEventListener('click', () => openModal('register'));
-    btnLogout.addEventListener('click', () => { setCurrentUser(null); updateUI(); });
+    btnLogout.addEventListener('click', () => {
+      setCurrentUser(null);
+      updateUI();
+    });
 
+    // ==================== 初始化 ====================
     updateUI();
   </script>
 </body>

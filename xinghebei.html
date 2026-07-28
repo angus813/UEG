@@ -331,6 +331,10 @@
     </div>
   </div>
 
+  <!-- 引入 Supabase 客户端 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-client.js"></script>
+
   <script>
     // ========== 合约数据（与之前完全一致） ==========
     const contracts = [
@@ -438,7 +442,8 @@
       { id: 'str_support_2', category: '应变', name: '支援舰II', level: 2, desc: '白板配置', series: 'support_ship' }
     ];
 
-   let currentCategory = '改写';
+    // ========== 核心逻辑 ==========
+    let currentCategory = '改写';
     let selectedContracts = new Set();
     let lastSelectedId = null;
 
@@ -451,15 +456,56 @@
     const resetBtn = document.getElementById('resetBtn');
     const recordValueEl = document.getElementById('recordValue');
 
+    // ---------- 用户及记录（从 Supabase） ----------
     function getCurrentUser() {
       const cu = localStorage.getItem('ueg_current_user');
       return cu ? JSON.parse(cu) : null;
     }
-    function loadHighestRecord() {
+
+    async function loadHighestRecord() {
       const user = getCurrentUser();
-      recordValueEl.textContent = user ? user.highestRecord || 0 : '0';
+      if (!user) {
+        recordValueEl.textContent = '0';
+        return;
+      }
+      const { data, error } = await supabase
+        .from('users')
+        .select('highest_record')
+        .eq('username', user.username)
+        .maybeSingle();
+      if (error) {
+        console.error('读取最高记录失败:', error);
+        recordValueEl.textContent = '0';
+        return;
+      }
+      recordValueEl.textContent = data?.highest_record ?? 0;
     }
 
+    // ---------- 排行榜 ----------
+    async function loadLeaderboard() {
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('username, highest_record')
+        .order('highest_record', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        alert('加载排行榜失败: ' + error.message);
+        return;
+      }
+
+      let msg = '🏆 排行榜\n';
+      if (!users || users.length === 0) {
+        msg += '暂无数据';
+      } else {
+        users.forEach((u, i) => {
+          msg += `${i+1}. ${u.username} - ${u.highest_record || 0}\n`;
+        });
+      }
+      alert(msg); // 简单提示，也可改为弹窗展示
+    }
+
+    // ---------- 合约交互（保持不变） ----------
     function initTabs() {
       document.querySelectorAll('.tab').forEach(tab => {
         const text = tab.textContent.trim();
@@ -560,7 +606,7 @@
       loadHighestRecord();
     }
 
-    // 分享功能
+    // ---------- 分享导入 ----------
     function generateShareCode() {
       const ids = Array.from(selectedContracts);
       return ids.length ? btoa(JSON.stringify(ids)) : null;
@@ -611,24 +657,36 @@
       if (code && importFromCode(code)) closeImportModal();
     });
 
-    // 排行榜（改用弹窗）
-    document.getElementById('leaderboardBtn').addEventListener('click', () => {
-      const users = JSON.parse(localStorage.getItem('ueg_users') || '[]');
-      users.sort((a, b) => (b.highestRecord || 0) - (a.highestRecord || 0));
-      let html = '';
-      if (users.length === 0) html = '<p style="color:#7a8b9a; text-align:center;">暂无数据</p>';
-      else {
-        html = '<table style="width:100%; color:#d0dae4;">';
+    // ---------- 排行榜按钮（改为弹窗展示） ----------
+    document.getElementById('leaderboardBtn').addEventListener('click', async () => {
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('username, highest_record')
+        .order('highest_record', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        alert('加载排行榜失败: ' + error.message);
+        return;
+      }
+
+      const content = document.getElementById('leaderboardContent');
+      if (!users || users.length === 0) {
+        content.innerHTML = '<p style="color:#7a8b9a; text-align:center;">暂无数据</p>';
+      } else {
+        let html = '<table style="width:100%; color:#d0dae4; border-collapse:collapse;">';
+        html += '<tr><th style="padding:6px 4px;border-bottom:1px solid #2a3340;">#</th><th style="padding:6px 4px;border-bottom:1px solid #2a3340;">用户名</th><th style="padding:6px 4px;border-bottom:1px solid #2a3340;text-align:right;">记录</th></tr>';
         users.forEach((u, i) => {
-          html += `<tr><td>${i+1}</td><td>${u.username}</td><td style="text-align:right;">${u.highestRecord || 0}</td></tr>`;
+          html += `<tr><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;">${i+1}</td><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;">${u.username}</td><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;text-align:right;">${u.highest_record || 0}</td></tr>`;
         });
         html += '</table>';
+        content.innerHTML = html;
       }
-      document.getElementById('leaderboardContent').innerHTML = html;
       document.getElementById('leaderboardModal').style.display = 'flex';
     });
     window.closeLeaderboard = () => document.getElementById('leaderboardModal').style.display = 'none';
 
+    // ---------- 标签切换 ----------
     tabNav.addEventListener('click', (e) => {
       const tab = e.target.closest('.tab');
       if (!tab) return;
@@ -644,6 +702,7 @@
     });
     resetBtn.addEventListener('click', () => { selectedContracts.clear(); lastSelectedId = null; updateUI(); });
 
+    // ---------- 初始化 ----------
     (function init() {
       initTabs();
       renderContracts();

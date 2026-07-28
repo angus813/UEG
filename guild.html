@@ -221,7 +221,6 @@
     <div class="left-panel">
       <div class="guild-title">⚔️ 公会</div>
       <div class="feature-cards">
-        <!-- 战略地图：已链接至 strategy_map.html -->
         <a href="strategy_map.html" class="feature-card" style="text-decoration:none; color:inherit;">
           <div class="feature-icon">🗺️</div>
           <div class="feature-text">
@@ -258,68 +257,100 @@
     </div>
   </div>
 
-  <script>
-    const USERS_KEY = 'ueg_users';
-    const CURRENT_USER_KEY = 'ueg_current_user';
+  <!-- 引入 Supabase 客户端 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-client.js"></script>
 
-    function getUsers() {
-      return JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
-    }
-    function saveUsers(users) {
-      localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    }
+  <script>
+    // ==================== 工具函数 ====================
+    // 获取当前登录用户（从 localStorage，保持与 index.html 一致）
     function getCurrentUser() {
-      const cu = localStorage.getItem(CURRENT_USER_KEY);
+      const cu = localStorage.getItem('ueg_current_user');
       return cu ? JSON.parse(cu) : null;
     }
 
-    // 判断当前用户是否为管理员
-    function isAdmin() {
+    // 判断当前用户是否为管理员（从 Supabase 实时查询）
+    async function isAdmin() {
       const user = getCurrentUser();
-      return user && user.isAdmin;
+      if (!user) return false;
+      const { data, error } = await supabase
+        .from('users')
+        .select('is_admin')
+        .eq('username', user.username)
+        .maybeSingle();
+      if (error || !data) return false;
+      return data.is_admin === true;
     }
 
-    // 删除用户
-    window.deleteMember = function(username) {
+    // ==================== 删除用户 ====================
+    async function deleteMember(username) {
       if (!confirm(`⚠️ 确定要永久删除用户 "${username}" 吗？此操作不可恢复！`)) return;
-      if (!isAdmin()) {
+
+      const admin = await isAdmin();
+      if (!admin) {
         alert('您没有管理员权限');
         return;
       }
-      let users = getUsers();
-      users = users.filter(u => u.username !== username);
-      saveUsers(users);
+
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('username', username);
+
+      if (error) {
+        alert('删除失败: ' + error.message);
+        return;
+      }
+
       // 如果被删除的是当前登录用户，则登出并跳转
       const currentUser = getCurrentUser();
       if (currentUser && currentUser.username === username) {
-        localStorage.removeItem(CURRENT_USER_KEY);
+        localStorage.removeItem('ueg_current_user');
         alert('你的账号已被删除，即将返回主页。');
         window.location.href = 'index.html';
         return;
       }
-      renderMemberList();
-    };
 
-    // 渲染成员列表
-    function renderMemberList() {
-      const users = getUsers();
-      const admin = isAdmin();
+      // 重新渲染列表
+      await renderMemberList();
+    }
+
+    // 暴露到全局（供 onclick 调用）
+    window.deleteMember = deleteMember;
+
+    // ==================== 渲染成员列表 ====================
+    async function renderMemberList() {
       const container = document.getElementById('memberList');
+      container.innerHTML = '<div class="no-members">加载中...</div>';
 
-      if (users.length === 0) {
+      // 从 Supabase 读取所有用户，按用户名排序
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('username, is_admin')
+        .order('username');
+
+      if (error) {
+        container.innerHTML = '<div class="no-members">加载失败，请刷新重试</div>';
+        console.error('加载成员列表失败:', error);
+        return;
+      }
+
+      if (!users || users.length === 0) {
         container.innerHTML = '<div class="no-members">暂无成员</div>';
         return;
       }
 
       // 置顶 angus（会长），其余按用户名排序
       const angus = users.find(u => u.username === 'angus');
-      const others = users.filter(u => u.username !== 'angus').sort((a, b) => a.username.localeCompare(b.username));
+      const others = users.filter(u => u.username !== 'angus');
       const sorted = angus ? [angus, ...others] : others;
 
+      const admin = await isAdmin();
       let html = '';
       sorted.forEach(user => {
-        const role = user.username === 'angus' ? '会长' : '成员';
-        const roleClass = user.username === 'angus' ? 'leader-badge' : '';
+        const isLeader = user.username === 'angus';
+        const role = isLeader ? '会长' : '成员';
+        const roleClass = isLeader ? 'leader-badge' : '';
         html += `
           <div class="member-item">
             <div class="member-info">
@@ -329,15 +360,18 @@
                 <span class="member-role ${roleClass}">${role}</span>
               </div>
             </div>
-            <button class="delete-member-btn" style="display:${admin ? 'block' : 'none'}" onclick="deleteMember('${user.username}')">注销</button>
+            <button class="delete-member-btn" style="display:${admin && !isLeader ? 'block' : 'none'}" onclick="deleteMember('${user.username}')">注销</button>
           </div>
         `;
       });
+
       container.innerHTML = html;
     }
 
-    // 初始加载
-    renderMemberList();
+    // ==================== 初始化 ====================
+    (async function init() {
+      await renderMemberList();
+    })();
   </script>
 </body>
 </html>

@@ -1,7 +1,6 @@
-// ---------- 全局变量 ----------
+// ========== 全局变量 ==========
 const params = new URLSearchParams(window.location.search);
 const mapId = params.get('id');
-const MAPS_KEY = 'guild_maps';
 let currentMap = null;
 let shapes = [];
 
@@ -1009,7 +1008,6 @@ if (!isViewMode) {
   document.getElementById('btnCopy').addEventListener('click', copyShape);
   document.getElementById('btnPaste').addEventListener('click', pasteShape);
   document.getElementById('btnLocate').addEventListener('click', () => { const x=parseInt(document.getElementById('locateX').value), y=parseInt(document.getElementById('locateY').value); if(isNaN(x)||isNaN(y)){ alert('请输入有效的坐标'); return; } locateToPoint(x,y); });
-  document.getElementById('saveBtn').addEventListener('click', () => { if(!currentMap) return; const maps=JSON.parse(localStorage.getItem(MAPS_KEY)||'[]'); const idx=maps.findIndex(m=>m.id===mapId); if(idx!==-1){ maps[idx].shapes=shapes; localStorage.setItem(MAPS_KEY,JSON.stringify(maps)); alert('保存成功'); } });
 }
 
 // 键盘快捷键（仅编辑模式）
@@ -1042,8 +1040,55 @@ toolbar.addEventListener('click', e => {
   if (content) content.classList.toggle('collapsed');
 });
 
-// 初始化
-function init() {
+// ========== Supabase 数据交互 ==========
+
+// 加载地图
+async function loadMap() {
+  const { data, error } = await supabase
+    .from('guild_maps')
+    .select('*')
+    .eq('id', mapId)
+    .maybeSingle();
+
+  if (error || !data) {
+    alert('地图不存在或加载失败');
+    window.location.href = 'strategy_map.html';
+    return;
+  }
+
+  currentMap = data;
+  document.getElementById('mapTitle').textContent = data.name;
+  shapes = data.shapes || [];
+  initHistory();
+  redraw();
+}
+
+// 保存地图
+async function saveMap() {
+  if (!currentMap) {
+    alert('没有加载的地图');
+    return;
+  }
+
+  // 更新 shapes 字段
+  const { error } = await supabase
+    .from('guild_maps')
+    .update({ shapes: shapes })
+    .eq('id', currentMap.id);
+
+  if (error) {
+    alert('保存失败: ' + error.message);
+    return;
+  }
+
+  alert('保存成功');
+}
+
+// 绑定保存按钮
+document.getElementById('saveBtn').addEventListener('click', saveMap);
+
+// ========== 初始化 ==========
+async function init() {
   const urlParams = new URLSearchParams(window.location.search);
   const mode = urlParams.get('mode') || 'edit';
   isViewMode = (mode === 'view');
@@ -1051,17 +1096,18 @@ function init() {
   if (isViewMode) {
     document.getElementById('toolbar').style.display = 'none';
     document.getElementById('saveBtn').style.display = 'none';
-    // 也可以隐藏编辑工具按钮，但已经隐藏整个工具栏
   }
 
-  const maps=JSON.parse(localStorage.getItem(MAPS_KEY)||'[]');
-  currentMap=maps.find(m=>m.id===mapId);
-  if(!currentMap){ alert('地图不存在'); window.location.href='strategy_map.html'; return; }
-  document.getElementById('mapTitle').textContent=currentMap.name;
-  shapes=currentMap.shapes||[];
-  createShapeButtons();
+  // 加载地图
+  await loadMap();
+
+  // 创建形状按钮（仅在编辑模式下）
+  if (!isViewMode) {
+    createShapeButtons();
+  }
+
   resizeCanvas();
-  if (!isViewMode) initHistory();
   redraw();
 }
+
 init();
