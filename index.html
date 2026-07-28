@@ -77,7 +77,7 @@
     .menu-card-text { font-size: 1.8rem; font-weight: 600; letter-spacing: 4px; color: #f0f4f8; }
     .menu-card-desc { font-size: 0.8rem; color: #7a8b9a; margin-top: 8px; text-align: center; }
 
-    /* ========== 模态框（左右两栏布局） ========== */
+    /* ========== 模态框（左右两栏） ========== */
     .modal {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0,0,0,0.85); justify-content: center; align-items: center; z-index: 100;
@@ -90,7 +90,6 @@
       flex-direction: row;
       overflow: hidden;
     }
-    /* 左栏：表单 */
     .modal-left {
       flex: 1;
       padding: 30px 25px;
@@ -108,13 +107,23 @@
     .modal-input {
       width: 100%; background: #1a1e24; border: 1px solid #3a5060;
       color: #fff; padding: 10px; margin-bottom: 15px; font-family: inherit;
+      border-radius: 4px;
+    }
+    .modal-input:focus {
+      outline: none;
+      border-color: #00c8ff;
+      box-shadow: 0 0 10px rgba(0,200,255,0.2);
     }
     .modal-btn {
       background: #00c8ff; border: none; color: #000; padding: 10px 20px;
       cursor: pointer; font-weight: bold; font-family: inherit;
-      transition: 0.2s;
+      transition: 0.2s; border-radius: 4px;
     }
     .modal-btn:hover { background: #00a3ff; }
+    .modal-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     .modal-btn.toggle {
       background: #3a5060; color: #fff;
     }
@@ -127,7 +136,6 @@
     }
     .btn-row .modal-btn { flex: 1; text-align: center; }
 
-    /* 右栏：简介 */
     .modal-right {
       flex: 1;
       padding: 30px 25px;
@@ -165,7 +173,7 @@
       padding-top: 15px;
     }
 
-    /* 移动端适配：两栏堆叠 */
+    /* 移动端适配 */
     @media (max-width: 700px) {
       .modal-content {
         flex-direction: column;
@@ -234,20 +242,19 @@
       </div>
     </div>
 
-    <!-- 登录/注册模态框（左右两栏） -->
+    <!-- 登录/注册模态框 -->
     <div class="modal" id="modal">
       <div class="modal-content">
-        <!-- 左栏：表单 -->
         <div class="modal-left">
           <h3 id="modalTitle">登录</h3>
-          <input type="text" id="usernameInput" class="modal-input" placeholder="用户名">
-          <input type="password" id="passwordInput" class="modal-input" placeholder="密码">
+          <input type="text" id="usernameInput" class="modal-input" placeholder="用户名" autocomplete="username">
+          <input type="password" id="passwordInput" class="modal-input" placeholder="密码" autocomplete="current-password">
           <div class="btn-row">
             <button class="modal-btn" id="modalConfirm">确定</button>
             <button class="modal-btn toggle" id="modalToggle">切换至注册</button>
           </div>
+          <div id="errorMessage" style="color:#ff6666; font-size:0.9rem; margin-top:10px; text-align:center; min-height:24px;"></div>
         </div>
-        <!-- 右栏：简介 -->
         <div class="modal-right">
           <h2>拉格朗日UEG公会</h2>
           <div class="intro-text">
@@ -276,14 +283,37 @@
       else localStorage.removeItem('ueg_current_user');
     }
 
+    // 显示错误信息（带自动清除）
+    function showError(msg, duration = 3000) {
+      const el = document.getElementById('errorMessage');
+      el.textContent = msg;
+      if (duration > 0) {
+        clearTimeout(el._timer);
+        el._timer = setTimeout(() => { el.textContent = ''; }, duration);
+      }
+    }
+
     async function loginUser(username, password) {
       const { data, error } = await supabase
         .from('users')
         .select('username, password, is_admin, highest_record')
         .eq('username', username)
         .maybeSingle();
-      if (error || !data) { alert('登录失败'); return false; }
-      if (data.password !== password) { alert('密码错误'); return false; }
+
+      if (error) {
+        console.error('登录查询失败:', error);
+        showError('登录失败，请稍后再试');
+        return false;
+      }
+      if (!data) {
+        showError('用户名不存在');
+        return false;
+      }
+      if (data.password !== password) {
+        showError('密码错误');
+        return false;
+      }
+
       setCurrentUser({
         username: data.username,
         isAdmin: data.is_admin || false,
@@ -294,18 +324,41 @@
     }
 
     async function registerUser(username, password) {
+      // 密码长度校验
+      if (password.length < 6) {
+        showError('密码长度至少6位');
+        return false;
+      }
+
       const { data: existing, error: checkError } = await supabase
         .from('users')
         .select('username')
         .eq('username', username)
         .maybeSingle();
-      if (checkError) { alert('注册失败'); return false; }
-      if (existing) { alert('用户名已存在'); return false; }
+
+      if (checkError) {
+        showError('注册失败，请稍后再试');
+        return false;
+      }
+      if (existing) {
+        showError('用户名已存在');
+        return false;
+      }
+
       const isAdmin = (username === 'angus');
       const { error: insertError } = await supabase
         .from('users')
-        .insert([{ username, password, is_admin: isAdmin, highest_record: 0 }]);
-      if (insertError) { alert('注册失败: ' + insertError.message); return false; }
+        .insert([{
+          username,
+          password,
+          is_admin: isAdmin,
+          highest_record: 0
+        }]);
+
+      if (insertError) {
+        showError('注册失败: ' + insertError.message);
+        return false;
+      }
       return true;
     }
 
@@ -319,9 +372,11 @@
     const passwordInput = document.getElementById('passwordInput');
     const modalConfirm = document.getElementById('modalConfirm');
     const modalToggle = document.getElementById('modalToggle');
+    const errorMessage = document.getElementById('errorMessage');
     const menuCards = document.querySelectorAll('.menu-card');
 
     let modalMode = 'login'; // 'login' | 'register'
+    let isProcessing = false;
 
     function updateUI() {
       const user = getCurrentUser();
@@ -333,7 +388,6 @@
           c.style.pointerEvents = 'auto';
           c.style.opacity = '1';
         });
-        // 如果模态框开着，关闭它
         if (modal.style.display === 'flex') modal.style.display = 'none';
       } else {
         userInfo.textContent = '未登录';
@@ -343,7 +397,6 @@
           c.style.pointerEvents = 'none';
           c.style.opacity = '0.6';
         });
-        // 强制打开登录模态框（如果未打开）
         if (modal.style.display !== 'flex') {
           openModal('login');
         }
@@ -363,7 +416,10 @@
       }
       usernameInput.value = '';
       passwordInput.value = '';
+      errorMessage.textContent = '';
       modal.style.display = 'flex';
+      // 自动聚焦第一个输入框
+      setTimeout(() => usernameInput.focus(), 100);
     }
 
     // 切换模式
@@ -372,30 +428,56 @@
       else openModal('login');
     });
 
+    // 确定按钮
     modalConfirm.addEventListener('click', async () => {
+      if (isProcessing) return;
       const username = usernameInput.value.trim();
       const password = passwordInput.value.trim();
-      if (!username || !password) { alert('用户名和密码不能为空'); return; }
+      if (!username || !password) {
+        showError('用户名和密码不能为空');
+        return;
+      }
 
-      if (modalMode === 'register') {
-        const ok = await registerUser(username, password);
-        if (ok) {
-          alert('注册成功，请登录');
-          openModal('login');
+      isProcessing = true;
+      modalConfirm.disabled = true;
+      modalConfirm.textContent = modalMode === 'login' ? '登录中...' : '注册中...';
+
+      try {
+        if (modalMode === 'register') {
+          const ok = await registerUser(username, password);
+          if (ok) {
+            showError('注册成功，请登录', 2000);
+            setTimeout(() => openModal('login'), 500);
+          }
+        } else {
+          const ok = await loginUser(username, password);
+          if (ok) {
+            updateUI();
+          }
         }
-      } else {
-        const ok = await loginUser(username, password);
-        if (ok) {
-          updateUI(); // 关闭模态框并更新界面
-        }
+      } catch (err) {
+        showError('操作失败，请重试');
+        console.error(err);
+      } finally {
+        isProcessing = false;
+        modalConfirm.disabled = false;
+        modalConfirm.textContent = modalMode === 'login' ? '登录' : '注册';
       }
     });
 
-    // 点击背景不允许关闭（未登录时）
+    // 回车键提交
+    passwordInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') modalConfirm.click();
+    });
+    usernameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') passwordInput.focus();
+    });
+
+    // 点击背景不能关闭（未登录时）
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {
         if (!getCurrentUser()) {
-          alert('请先登录或注册');
+          showError('请先登录或注册', 2000);
         } else {
           modal.style.display = 'none';
         }
@@ -406,7 +488,7 @@
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && modal.style.display === 'flex') {
         if (!getCurrentUser()) {
-          alert('请先登录或注册');
+          showError('请先登录或注册', 2000);
         } else {
           modal.style.display = 'none';
         }
@@ -420,14 +502,17 @@
       if (!getCurrentUser()) {
         e.preventDefault();
         e.stopPropagation();
-        alert('请先登录');
+        showError('请先登录', 2000);
         if (modal.style.display !== 'flex') openModal('login');
       }
     });
 
-    // 个人中心/注销
+    // 个人中心 / 注销
     btnProfile.addEventListener('click', () => {
-      if (!getCurrentUser()) { alert('请先登录'); return; }
+      if (!getCurrentUser()) {
+        showError('请先登录', 2000);
+        return;
+      }
       window.location.href = 'profile.html';
     });
     btnLogout.addEventListener('click', () => {
@@ -435,7 +520,7 @@
       updateUI();
     });
 
-    // 初始化
+    // ==================== 初始化 ====================
     updateUI();
   </script>
 </body>
