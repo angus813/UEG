@@ -34,6 +34,10 @@ let clipboardShape = null;
 // 只读模式
 let isViewMode = false;
 
+// ---------- 触摸缩放新增 ----------
+let lastTouchDist = 0;
+let isTouchPinch = false;
+
 // ---------- 撤回/回撤系统 ----------
 const MAX_HISTORY = 50;
 let history = [];
@@ -775,7 +779,7 @@ function drawSelectionHandles(shape) {
   ctx.restore();
 }
 
-// ---------- 事件处理 ----------
+// ========== 事件处理（含触摸缩放） ==========
 function getEventPos(e) {
   const rect = canvas.getBoundingClientRect();
   const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -792,11 +796,21 @@ canvas.addEventListener('touchmove', onPointerMove, {passive: false});
 canvas.addEventListener('touchend', onPointerUp);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 
+// 修改后的 onPointerDown（支持双指检测）
 function onPointerDown(e) {
   e.preventDefault();
   const pos = getEventPos(e);
+
+  // 双指触摸检测
+  if (e.touches && e.touches.length === 2) {
+    isTouchPinch = true;
+    const t1 = e.touches[0];
+    const t2 = e.touches[1];
+    lastTouchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+    return;
+  }
+
   if (isViewMode) {
-    // 只允许平移（左键、右键、双指）
     if (e.button === 2 || (e.touches && e.touches.length === 2)) {
       isPanning = true;
       lastScreen = { x: pos.x, y: pos.y };
@@ -809,7 +823,7 @@ function onPointerDown(e) {
     }
     return;
   }
-  // 原有编辑逻辑
+
   const world = toWorld(pos.x, pos.y);
   pointerDownPos = pos; isPointerDown = true;
   if(e.button===2 || (e.touches && e.touches.length===2)) { clearLongPress(); isPanning=true; isLongPressPan=false; lastScreen={x:pos.x,y:pos.y}; return; }
@@ -852,9 +866,38 @@ function onPointerDown(e) {
   }
 }
 
+// 修改后的 onPointerMove（支持双指缩放）
 function onPointerMove(e) {
   e.preventDefault();
   const pos = getEventPos(e);
+
+  // 双指缩放
+  if (isTouchPinch && e.touches && e.touches.length === 2) {
+    const t1 = e.touches[0];
+    const t2 = e.touches[1];
+    const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+    if (lastTouchDist > 0) {
+      const ratio = dist / lastTouchDist;
+      const midX = (t1.clientX + t2.clientX) / 2;
+      const midY = (t1.clientY + t2.clientY) / 2;
+      const rect = canvas.getBoundingClientRect();
+      const sx = midX - rect.left;
+      const sy = midY - rect.top;
+      const world = toWorld(sx, sy);
+      let newScale = scale * ratio;
+      newScale = clampScale(newScale);
+      if (newScale !== scale) {
+        offsetX = world.x - sx / newScale;
+        offsetY = world.y - (canvas.height - sy) / newScale;
+        clampOffset();
+        scale = newScale;
+        redraw();
+      }
+    }
+    lastTouchDist = dist;
+    return;
+  }
+
   if (isViewMode) {
     if (isPanning) {
       const dx = pos.x - lastScreen.x;
@@ -867,6 +910,7 @@ function onPointerMove(e) {
     }
     return;
   }
+
   const world = toWorld(pos.x, pos.y);
   if(isPointerDown && !isPanning && !isLongPressPan && !dragHandle && !isMovingShape && !isDrawing) {
     const dx=pos.x-pointerDownPos.x, dy=pos.y-pointerDownPos.y;
@@ -893,8 +937,17 @@ function onPointerMove(e) {
   }
 }
 
+// 修改后的 onPointerUp（重置双指状态）
 function onPointerUp(e) {
   e.preventDefault();
+
+  // 重置双指状态
+  if (isTouchPinch) {
+    isTouchPinch = false;
+    lastTouchDist = 0;
+    return;
+  }
+
   if (isViewMode) {
     isPanning = false;
     return;
@@ -938,7 +991,7 @@ function hitHandle(shape, wx, wy) {
   return null;
 }
 
-// ★★★ 椭圆仅轮廓可选中 ★★★
+// 椭圆仅轮廓可选中
 function isPointInShape(wx, wy, shape) {
   if (shape.type === 'ellipse') {
     const cx = shape.x + shape.w/2;
@@ -1041,8 +1094,6 @@ toolbar.addEventListener('click', e => {
 });
 
 // ========== Supabase 数据交互 ==========
-
-// 加载地图
 async function loadMap() {
   const { data, error } = await supabase
     .from('guild_maps')
@@ -1063,14 +1114,12 @@ async function loadMap() {
   redraw();
 }
 
-// 保存地图
 async function saveMap() {
   if (!currentMap) {
     alert('没有加载的地图');
     return;
   }
 
-  // 更新 shapes 字段
   const { error } = await supabase
     .from('guild_maps')
     .update({ shapes: shapes })
@@ -1084,7 +1133,6 @@ async function saveMap() {
   alert('保存成功');
 }
 
-// 绑定保存按钮
 document.getElementById('saveBtn').addEventListener('click', saveMap);
 
 // ========== 初始化 ==========
@@ -1098,10 +1146,8 @@ async function init() {
     document.getElementById('saveBtn').style.display = 'none';
   }
 
-  // 加载地图
   await loadMap();
 
-  // 创建形状按钮（仅在编辑模式下）
   if (!isViewMode) {
     createShapeButtons();
   }
