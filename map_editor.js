@@ -41,6 +41,12 @@ let isTouchPinch = false;
 // ---------- 模板图形只读标记 ----------
 let isGalaxyMode = false;  // 当前地图是否为星系地图
 
+// ---------- 当前用户 ----------
+function getCurrentUser() {
+  const cu = localStorage.getItem('ueg_current_user');
+  return cu ? JSON.parse(cu) : null;
+}
+
 // ---------- 撤回/回撤系统 ----------
 const MAX_HISTORY = 50;
 let history = [];
@@ -181,7 +187,9 @@ const ShapeGenerator = {
       }
       return p;
     }
-    if (type === 'text' || type === 'verticalText' || type === 'city' || type === 'frame' || type === 'brokenFrame' || type === 'arc') {
+    // 所有新图形以及原特殊图形均使用矩形包围盒（用于碰撞检测）
+    if (type === 'text' || type === 'verticalText' || type === 'city' || type === 'frame' || type === 'brokenFrame' ||
+        type === 'defenseLine' || type === 'target' || type === 'gather' || type === 'mine' || type === 'caution' || type === 'focus' || type === 'pin') {
       p.rect(x, y, w, h);
       return p;
     }
@@ -362,32 +370,58 @@ function isShapeEditable(shape) {
   return true;
 }
 
-// ---------- 形状预设（只保留一种箭头） ----------
-const shapePresets = [
-  { category: '矩形', shapes: [{ type: 'rect', name: '矩形' }, { type: 'roundRect', name: '圆角矩形' }] },
-  { category: '基本形状', shapes: [
-    { type: 'ellipse', name: '椭圆' }, { type: 'triangle', name: '等腰三角' }, { type: 'rightTriangle', name: '直角三角' },
-    { type: 'diamond', name: '菱形' }, { type: 'parallelogram', name: '平行四边形' }, { type: 'trapezoid', name: '梯形' },
-    { type: 'pentagon', name: '正五边形' }, { type: 'hexagon', name: '六边形' }, { type: 'star', name: '星形' },
-    { type: 'cross', name: '十字形' }, { type: 'plus', name: '加号' },
-    { type: 'arc', name: '空心弧' },
-    { type: 'text', name: '文本框' }
-  ]},
-  { category: '设施', shapes: [
-    { type: 'city', name: '城市' },
-    { type: 'frame', name: '方形边框' },
-    { type: 'brokenFrame', name: '断开方框' }
-  ]},
-  { category: '箭头', shapes: [
-    { type: 'arrow', name: '箭头' }
-  ]}
-];
+// ---------- 形状预设（根据地图类型动态生成） ----------
+function getShapePresets() {
+  // 基础预设（所有地图共有）
+  const base = [
+    { category: '矩形', shapes: [{ type: 'rect', name: '矩形' }, { type: 'roundRect', name: '圆角矩形' }] },
+    { category: '基本形状', shapes: [
+      { type: 'ellipse', name: '椭圆' }, { type: 'triangle', name: '等腰三角' }, { type: 'rightTriangle', name: '直角三角' },
+      { type: 'diamond', name: '菱形' }, { type: 'parallelogram', name: '平行四边形' }, { type: 'trapezoid', name: '梯形' },
+      { type: 'pentagon', name: '正五边形' }, { type: 'hexagon', name: '六边形' }, { type: 'star', name: '星形' },
+      { type: 'cross', name: '十字形' }, { type: 'plus', name: '加号' },
+      { type: 'arc', name: '空心弧' },
+      { type: 'text', name: '文本框' }
+    ]},
+    { category: '箭头', shapes: [
+      { type: 'arrow', name: '箭头' }
+    ]}
+  ];
+
+  // 如果是星系地图，用“标记”分类替换“设施”
+  if (isGalaxyMode) {
+    base.push({
+      category: '标记',
+      shapes: [
+        { type: 'defenseLine', name: '防御线' },
+        { type: 'target', name: '目标' },
+        { type: 'gather', name: '集合' },
+        { type: 'mine', name: '矿区' },
+        { type: 'caution', name: '注意' },
+        { type: 'focus', name: '重点' },
+        { type: 'pin', name: '标记针' }
+      ]
+    });
+  } else {
+    // 模板地图保留“设施”
+    base.push({
+      category: '设施',
+      shapes: [
+        { type: 'city', name: '城市' },
+        { type: 'frame', name: '方形边框' },
+        { type: 'brokenFrame', name: '断开方框' }
+      ]
+    });
+  }
+  return base;
+}
 
 // ---------- 工具栏按钮创建 ----------
 const toolbar = document.getElementById('toolbar');
 function createShapeButtons() {
   if (isViewMode) return;
-  shapePresets.forEach(cat => {
+  const presets = getShapePresets();
+  presets.forEach(cat => {
     const section = document.createElement('div'); section.className = 'tool-section';
     section.innerHTML = `<div class="section-title" data-collapse="${cat.category}">${cat.category}</div><div class="section-content collapsed"></div>`;
     const content = section.querySelector('.section-content');
@@ -401,6 +435,9 @@ function createShapeButtons() {
       btn.addEventListener('click', () => {
         const center = toWorld(canvas.width/2, canvas.height/2);
         let newShape;
+        // 根据类型创建形状（所有新图形使用 createShape 通用方法，传入类型和位置）
+        newShape = createShape(s.type, Math.max(0, center.x-50), Math.max(0, center.y-50), 100, 100);
+        // 对于箭头特殊处理
         if (s.type === 'arrow') {
           newShape = createShape('arrow', 0, 0, 0, 0, { x1: center.x-50, y1: center.y-50, x2: center.x+50, y2: center.y+50 });
         } else if (s.type === 'text') {
@@ -411,34 +448,9 @@ function createShapeButtons() {
             strokeColor: '#ffffff',
             strokeWidth: 0
           });
-        } else if (s.type === 'city') {
-          newShape = createShape('city', center.x-60, center.y-60, 120, 120, {
-            fill: 'solid',
-            fillColor: '#ffcc00',
-            strokeColor: '#ffcc00'
-          });
-        } else if (s.type === 'frame') {
-          newShape = createShape('frame', center.x-50, center.y-50, 100, 100, {
-            fill: 'none',
-            strokeColor: '#ffcc00',
-            strokeWidth: 4
-          });
-        } else if (s.type === 'brokenFrame') {
-          newShape = createShape('brokenFrame', center.x-50, center.y-50, 100, 100, {
-            fill: 'none',
-            strokeColor: '#ffcc00',
-            strokeWidth: 4
-          });
-        } else if (s.type === 'arc') {
-          newShape = createShape('arc', center.x-50, center.y-50, 100, 100, {
-            fill: 'none',
-            strokeColor: '#ffffff',
-            strokeWidth: 4
-          });
-        } else {
-          newShape = createShape(s.type, Math.max(0, center.x-50), Math.max(0, center.y-50), 100, 100);
         }
-        // 新形状默认可编辑（fromTemplate: false）
+        // 其他类型（包括新标记图形）统一使用 createShape
+        // 注意：createShape 已经包含 creator 和 remark
         shapes.push(newShape);
         saveState();
         redraw();
@@ -449,6 +461,7 @@ function createShapeButtons() {
   });
 }
 
+// ---------- 绘制工具栏图标（包含所有新图形） ----------
 function drawShapeIcon(ictx, type, x, y, w, h) {
   const shape = { type, x, y, w, h };
   if (type === 'arrow') {
@@ -457,6 +470,8 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
     shape.text = 'T';
     shape.fontSize = 12;
   }
+
+  // 处理特殊图形（城市、框架等）
   if (type === 'city') {
     const ctxIcon = ictx;
     ctxIcon.save();
@@ -513,18 +528,220 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
     ictx.fillText('T', x + w/2, y + h/2);
     return;
   }
+
+  // ---- 新增标记图形图标绘制 ----
+  if (type === 'defenseLine') {
+    // 防御线：水平线上有垛口
+    const cx = x + w/2, cy = y + h/2;
+    ictx.strokeStyle = '#ffffff';
+    ictx.lineWidth = 1.5;
+    ictx.beginPath();
+    ictx.moveTo(x+2, cy);
+    ictx.lineTo(x+w-2, cy);
+    ictx.stroke();
+    // 绘制垛口（5个均匀分布）
+    const count = 5;
+    for (let i = 0; i < count; i++) {
+      const px = x + 2 + (w-4) * (i / (count-1));
+      ictx.fillStyle = '#00c8ff';
+      ictx.fillRect(px-2, cy-5, 4, 5);
+      ictx.fillRect(px-1, cy-8, 2, 8);
+    }
+    return;
+  }
+  if (type === 'target') {
+    // 目标：圆形+中心点+四个三角形指向中心
+    const cx = x + w/2, cy = y + h/2;
+    const r = Math.min(w,h)/2 - 2;
+    ictx.strokeStyle = '#ffffff';
+    ictx.lineWidth = 1.5;
+    ictx.beginPath();
+    ictx.arc(cx, cy, r, 0, Math.PI*2);
+    ictx.stroke();
+    // 中心点
+    ictx.fillStyle = '#ffffff';
+    ictx.beginPath();
+    ictx.arc(cx, cy, 2, 0, Math.PI*2);
+    ictx.fill();
+    // 四个三角形
+    const dirs = [[0,-1], [1,0], [0,1], [-1,0]];
+    const size = 6;
+    dirs.forEach(([dx, dy]) => {
+      const px = cx + dx * (r - 4);
+      const py = cy + dy * (r - 4);
+      ictx.fillStyle = '#00c8ff';
+      ictx.beginPath();
+      if (dx === 0 && dy === -1) { // 上
+        ictx.moveTo(px, py - size);
+        ictx.lineTo(px - size, py + size);
+        ictx.lineTo(px + size, py + size);
+      } else if (dx === 1 && dy === 0) { // 右
+        ictx.moveTo(px + size, py);
+        ictx.lineTo(px - size, py - size);
+        ictx.lineTo(px - size, py + size);
+      } else if (dx === 0 && dy === 1) { // 下
+        ictx.moveTo(px, py + size);
+        ictx.lineTo(px - size, py - size);
+        ictx.lineTo(px + size, py - size);
+      } else { // 左
+        ictx.moveTo(px - size, py);
+        ictx.lineTo(px + size, py - size);
+        ictx.lineTo(px + size, py + size);
+      }
+      ictx.closePath();
+      ictx.fill();
+    });
+    return;
+  }
+  if (type === 'gather') {
+    // 集合：弧形箭头循环+中心点
+    const cx = x + w/2, cy = y + h/2;
+    const r = Math.min(w,h)/2 - 3;
+    ictx.strokeStyle = '#00c8ff';
+    ictx.lineWidth = 2;
+    // 画四个弧形箭头（顺时针）
+    for (let i = 0; i < 4; i++) {
+      const angle = i * Math.PI/2;
+      const startA = angle - 0.8;
+      const endA = angle + 0.8;
+      ictx.beginPath();
+      ictx.arc(cx, cy, r, startA, endA);
+      ictx.stroke();
+      // 箭头头
+      const endX = cx + r * Math.cos(endA);
+      const endY = cy + r * Math.sin(endA);
+      const ang = endA + Math.PI/2;
+      const headSize = 4;
+      ictx.fillStyle = '#00c8ff';
+      ictx.beginPath();
+      ictx.moveTo(endX, endY);
+      ictx.lineTo(endX + headSize * Math.cos(ang - 0.5), endY + headSize * Math.sin(ang - 0.5));
+      ictx.lineTo(endX + headSize * Math.cos(ang + 0.5), endY + headSize * Math.sin(ang + 0.5));
+      ictx.closePath();
+      ictx.fill();
+    }
+    // 中心点
+    ictx.fillStyle = '#ffffff';
+    ictx.beginPath();
+    ictx.arc(cx, cy, 2, 0, Math.PI*2);
+    ictx.fill();
+    return;
+  }
+  if (type === 'mine') {
+    // 矿区：3D立方体
+    const cx = x + w/2, cy = y + h/2;
+    const size = Math.min(w,h) * 0.35;
+    ictx.strokeStyle = '#ffffff';
+    ictx.lineWidth = 1.5;
+    // 前面正方形
+    ictx.strokeRect(cx - size, cy - size, size*2, size*2);
+    // 右面
+    ictx.beginPath();
+    ictx.moveTo(cx + size, cy - size);
+    ictx.lineTo(cx + size + size*0.5, cy - size - size*0.3);
+    ictx.lineTo(cx + size + size*0.5, cy + size - size*0.3);
+    ictx.lineTo(cx + size, cy + size);
+    ictx.stroke();
+    // 上面
+    ictx.beginPath();
+    ictx.moveTo(cx - size, cy - size);
+    ictx.lineTo(cx - size + size*0.5, cy - size - size*0.3);
+    ictx.lineTo(cx + size + size*0.5, cy - size - size*0.3);
+    ictx.lineTo(cx + size, cy - size);
+    ictx.stroke();
+    return;
+  }
+  if (type === 'caution') {
+    // 注意：大小倒三角嵌套
+    const cx = x + w/2, cy = y + h/2;
+    const outer = Math.min(w,h)/2 - 2;
+    const inner = outer * 0.6;
+    ictx.fillStyle = '#00c8ff';
+    ictx.strokeStyle = '#ffffff';
+    ictx.lineWidth = 1.5;
+    // 外三角（尖朝下）
+    ictx.beginPath();
+    ictx.moveTo(cx, cy + outer);
+    ictx.lineTo(cx - outer, cy - outer);
+    ictx.lineTo(cx + outer, cy - outer);
+    ictx.closePath();
+    ictx.fill();
+    ictx.stroke();
+    // 内三角（尖朝下）
+    ictx.fillStyle = '#0a0c0f';
+    ictx.beginPath();
+    ictx.moveTo(cx, cy + inner);
+    ictx.lineTo(cx - inner, cy - inner);
+    ictx.lineTo(cx + inner, cy - inner);
+    ictx.closePath();
+    ictx.fill();
+    ictx.stroke();
+    return;
+  }
+  if (type === 'focus') {
+    // 重点：大小正菱形嵌套（旋转45°的正方形）
+    const cx = x + w/2, cy = y + h/2;
+    const outer = Math.min(w,h)/2 * 0.7;
+    const inner = outer * 0.55;
+    ictx.fillStyle = '#00c8ff';
+    ictx.strokeStyle = '#ffffff';
+    ictx.lineWidth = 1.5;
+    // 外菱形
+    ictx.beginPath();
+    ictx.moveTo(cx, cy - outer);
+    ictx.lineTo(cx + outer, cy);
+    ictx.lineTo(cx, cy + outer);
+    ictx.lineTo(cx - outer, cy);
+    ictx.closePath();
+    ictx.fill();
+    ictx.stroke();
+    // 内菱形
+    ictx.fillStyle = '#0a0c0f';
+    ictx.beginPath();
+    ictx.moveTo(cx, cy - inner);
+    ictx.lineTo(cx + inner, cy);
+    ictx.lineTo(cx, cy + inner);
+    ictx.lineTo(cx - inner, cy);
+    ictx.closePath();
+    ictx.fill();
+    ictx.stroke();
+    return;
+  }
+  if (type === 'pin') {
+    // 标记针：上方正方形+垂直线
+    const cx = x + w/2, cy = y + h/2;
+    const size = 8;
+    ictx.fillStyle = '#00c8ff';
+    ictx.strokeStyle = '#ffffff';
+    ictx.lineWidth = 1.5;
+    // 正方形
+    ictx.fillRect(cx - size/2, cy - size, size, size);
+    ictx.strokeRect(cx - size/2, cy - size, size, size);
+    // 垂直线
+    ictx.beginPath();
+    ictx.moveTo(cx, cy + 2);
+    ictx.lineTo(cx, cy + h/2);
+    ictx.stroke();
+    return;
+  }
+
+  // 其他普通形状使用路径生成
   const p = ShapeGenerator.getPath(shape);
   ictx.fill(p); ictx.stroke(p);
 }
 
-// ---------- 创建形状对象（支持箭头和 fromTemplate） ----------
+// ---------- 创建形状对象（支持箭头、fromTemplate、creator、remark） ----------
 function createShape(type, x, y, w, h, props={}) {
+  const user = getCurrentUser();
   const defaults = {
     type, x, y, w: w||100, h: h||100, rotation:0,
     fill: 'solid', fillColor: '#00c8ff', strokeColor: '#ffffff', strokeWidth: 2, opacity: 1,
     text: '文本', fontSize: 20,
-    fromTemplate: false   // 是否为从模板复制的图形
+    fromTemplate: false,
+    creator: user ? user.username : '未知',   // 记录创建者
+    remark: ''                                // 备注
   };
+  // 根据类型调整默认值
   if (type === 'text' || type === 'verticalText') {
     defaults.fill = 'none';
     defaults.strokeWidth = 0;
@@ -553,6 +770,21 @@ function createShape(type, x, y, w, h, props={}) {
     defaults.strokeColor = '#ffffff';
     defaults.strokeWidth = 2;
     defaults.fill = 'none';
+  }
+  // 新标记图形默认有填充色
+  if (['defenseLine', 'target', 'gather', 'mine', 'caution', 'focus', 'pin'].includes(type)) {
+    defaults.fill = 'solid';
+    defaults.fillColor = '#00c8ff';
+    defaults.strokeColor = '#ffffff';
+    defaults.strokeWidth = 1.5;
+    // 针对不同图形调整填充色（方便区分）
+    if (type === 'mine') defaults.fillColor = '#ffaa44';
+    if (type === 'target') defaults.fillColor = '#ff6a00';
+    if (type === 'gather') defaults.fillColor = '#44ccff';
+    if (type === 'caution') defaults.fillColor = '#ff4444';
+    if (type === 'focus') defaults.fillColor = '#ffaa00';
+    if (type === 'pin') defaults.fillColor = '#66dd88';
+    if (type === 'defenseLine') defaults.fillColor = '#88aacc';
   }
   return Object.assign(defaults, props);
 }
@@ -629,6 +861,274 @@ function resizeCanvas() {
 }
 window.addEventListener('resize', resizeCanvas);
 
+// ---------- 特殊标记图形绘制函数 ----------
+function drawDefenseLine(ctx, shape) {
+  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  // 填充背景（半透明）
+  if (fillColor && fillColor !== 'none') {
+    ctx.fillStyle = fillColor;
+    ctx.globalAlpha = 0.15;
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  }
+  // 主线条
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  ctx.beginPath();
+  ctx.moveTo(x + 4, cy);
+  ctx.lineTo(x + w - 4, cy);
+  ctx.stroke();
+  // 垛口（8个均匀分布）
+  const count = 8;
+  const step = (w - 8) / (count - 1);
+  for (let i = 0; i < count; i++) {
+    const px = x + 4 + i * step;
+    const blockW = Math.max(3, 8 / scale);
+    const blockH = Math.max(4, 10 / scale);
+    ctx.fillStyle = strokeColor || '#ffffff';
+    ctx.fillRect(px - blockW/2, cy - blockH/2 - 2/scale, blockW, blockH/2);
+    ctx.fillRect(px - blockW/4, cy - blockH/2 - 5/scale, blockW/2, 3/scale);
+  }
+  ctx.restore();
+}
+
+function drawTarget(ctx, shape) {
+  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const r = Math.min(w, h) / 2 - 4;
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  // 圆环
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  // 内部中心圆点
+  ctx.fillStyle = strokeColor || '#ffffff';
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(2, 4 / scale), 0, Math.PI * 2);
+  ctx.fill();
+  // 四个三角形（指向中心）
+  const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  const triSize = Math.max(5, 10 / scale);
+  dirs.forEach(([dx, dy]) => {
+    const px = cx + dx * (r - 4);
+    const py = cy + dy * (r - 4);
+    ctx.fillStyle = strokeColor || '#ffffff';
+    ctx.beginPath();
+    if (dx === 0 && dy === -1) { // 上
+      ctx.moveTo(px, py - triSize);
+      ctx.lineTo(px - triSize, py + triSize);
+      ctx.lineTo(px + triSize, py + triSize);
+    } else if (dx === 1 && dy === 0) { // 右
+      ctx.moveTo(px + triSize, py);
+      ctx.lineTo(px - triSize, py - triSize);
+      ctx.lineTo(px - triSize, py + triSize);
+    } else if (dx === 0 && dy === 1) { // 下
+      ctx.moveTo(px, py + triSize);
+      ctx.lineTo(px - triSize, py - triSize);
+      ctx.lineTo(px + triSize, py - triSize);
+    } else { // 左
+      ctx.moveTo(px - triSize, py);
+      ctx.lineTo(px + triSize, py - triSize);
+      ctx.lineTo(px + triSize, py + triSize);
+    }
+    ctx.closePath();
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+function drawGather(ctx, shape) {
+  const { x, y, w, h, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const r = Math.min(w, h) / 2 - 4;
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  for (let i = 0; i < 4; i++) {
+    const angle = i * Math.PI / 2;
+    const startA = angle - 0.6;
+    const endA = angle + 0.6;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startA, endA);
+    ctx.stroke();
+    // 箭头头
+    const endX = cx + r * Math.cos(endA);
+    const endY = cy + r * Math.sin(endA);
+    const ang = endA + Math.PI / 2;
+    const headSize = Math.max(3, 6 / scale);
+    ctx.fillStyle = strokeColor || '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(endX + headSize * Math.cos(ang - 0.5), endY + headSize * Math.sin(ang - 0.5));
+    ctx.lineTo(endX + headSize * Math.cos(ang + 0.5), endY + headSize * Math.sin(ang + 0.5));
+    ctx.closePath();
+    ctx.fill();
+  }
+  // 中心点
+  ctx.fillStyle = strokeColor || '#ffffff';
+  ctx.beginPath();
+  ctx.arc(cx, cy, Math.max(2, 4 / scale), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawMine(ctx, shape) {
+  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const size = Math.min(w, h) * 0.35;
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  // 前面正方形（填充）
+  if (fillColor && fillColor !== 'none') {
+    ctx.fillStyle = fillColor;
+    ctx.globalAlpha = 0.3;
+    ctx.fillRect(cx - size, cy - size, size * 2, size * 2);
+    ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  }
+  ctx.strokeRect(cx - size, cy - size, size * 2, size * 2);
+  // 右面
+  ctx.beginPath();
+  ctx.moveTo(cx + size, cy - size);
+  ctx.lineTo(cx + size + size * 0.5, cy - size - size * 0.3);
+  ctx.lineTo(cx + size + size * 0.5, cy + size - size * 0.3);
+  ctx.lineTo(cx + size, cy + size);
+  ctx.stroke();
+  // 上面
+  ctx.beginPath();
+  ctx.moveTo(cx - size, cy - size);
+  ctx.lineTo(cx - size + size * 0.5, cy - size - size * 0.3);
+  ctx.lineTo(cx + size + size * 0.5, cy - size - size * 0.3);
+  ctx.lineTo(cx + size, cy - size);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawCaution(ctx, shape) {
+  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const outer = Math.min(w, h) / 2 - 4;
+  const inner = outer * 0.6;
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  // 外三角（尖朝下）
+  ctx.fillStyle = fillColor || '#ff4444';
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + outer);
+  ctx.lineTo(cx - outer, cy - outer);
+  ctx.lineTo(cx + outer, cy - outer);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // 内三角（尖朝下）用背景色挖空
+  ctx.fillStyle = '#0a0c0f';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + inner);
+  ctx.lineTo(cx - inner, cy - inner);
+  ctx.lineTo(cx + inner, cy - inner);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawFocus(ctx, shape) {
+  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const outer = Math.min(w, h) / 2 * 0.7;
+  const inner = outer * 0.55;
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.fillStyle = fillColor || '#ffaa00';
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  // 外菱形
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - outer);
+  ctx.lineTo(cx + outer, cy);
+  ctx.lineTo(cx, cy + outer);
+  ctx.lineTo(cx - outer, cy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // 内菱形
+  ctx.fillStyle = '#0a0c0f';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - inner);
+  ctx.lineTo(cx + inner, cy);
+  ctx.lineTo(cx, cy + inner);
+  ctx.lineTo(cx - inner, cy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawPin(ctx, shape) {
+  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const size = Math.min(w, h) * 0.25;
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.fillStyle = fillColor || '#66dd88';
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  // 正方形
+  const sqSize = size * 1.2;
+  ctx.fillRect(cx - sqSize/2, cy - sqSize, sqSize, sqSize);
+  ctx.strokeRect(cx - sqSize/2, cy - sqSize, sqSize, sqSize);
+  // 垂直线
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + 2);
+  ctx.lineTo(cx, cy + h/2 - 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- 绘制用户名+备注标签 ----------
+function drawShapeLabel(ctx, shape) {
+  // 仅对非模板图形显示标签
+  if (shape.fromTemplate === true) return;
+  const label = shape.creator || '';
+  const remark = shape.remark || '';
+  if (!label && !remark) return;
+  const text = label + (remark ? ': ' + remark : '');
+  if (text.length === 0) return;
+  const bounds = getShapeBounds(shape);
+  const screen = toScreen(bounds.maxX + 5, bounds.minY - 5); // 右下角偏移
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const fontSize = Math.max(8, 11 * scale);
+  ctx.font = `${fontSize}px Rajdhani, sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'bottom';
+  const metrics = ctx.measureText(text);
+  const pad = 4;
+  const w = metrics.width + pad * 2;
+  const h = fontSize + pad * 2;
+  // 背景
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 6;
+  ctx.fillRect(screen.x - pad, screen.y - h, w, h);
+  ctx.shadowBlur = 0;
+  // 文字
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, screen.x, screen.y - pad);
+  ctx.restore();
+}
+
+// ---------- 重绘函数 ----------
 function redraw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.save();
@@ -661,8 +1161,21 @@ function redraw() {
     ctx.beginPath(); ctx.moveTo(0, Math.max(0, startY)); ctx.lineTo(0, Math.min(WORLD_MAX, endY)); ctx.stroke();
   }
 
-  // 形状
+  // 绘制所有形状
   shapes.forEach((shape, index) => {
+    const isText = (shape.type === 'text' || shape.type === 'verticalText');
+    const isCity = (shape.type === 'city');
+    const isFrame = (shape.type === 'frame');
+    const isBrokenFrame = (shape.type === 'brokenFrame');
+    const isArc = (shape.type === 'arc');
+    const isDefense = shape.type === 'defenseLine';
+    const isTarget = shape.type === 'target';
+    const isGather = shape.type === 'gather';
+    const isMine = shape.type === 'mine';
+    const isCaution = shape.type === 'caution';
+    const isFocus = shape.type === 'focus';
+    const isPin = shape.type === 'pin';
+
     ctx.save();
     const bounds = getShapeBounds(shape);
     const cx = (bounds.minX + bounds.maxX) / 2;
@@ -673,57 +1186,75 @@ function redraw() {
       ctx.translate(-cx, -cy);
     }
 
-    const isText = (shape.type === 'text' || shape.type === 'verticalText');
-    const isCity = (shape.type === 'city');
-    const isFrame = (shape.type === 'frame');
-    const isBrokenFrame = (shape.type === 'brokenFrame');
-    const isArc = (shape.type === 'arc');
-    const path = ShapeGenerator.getPath(shape);
-
-    ctx.globalAlpha = shape.opacity !== undefined ? shape.opacity : 1;
-
-    if (shape.fill !== 'none' && !isText && !isFrame && !isBrokenFrame && !isArc) {
-      if (shape.fill === 'solid') ctx.fillStyle = shape.fillColor || '#00c8ff';
-      else if (shape.fill === 'linear' || shape.fill === 'radial') {
-        const grad = shape.fill === 'linear' ?
-          ctx.createLinearGradient(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY) :
-          ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY)/2);
-        grad.addColorStop(0, shape.fillColor); grad.addColorStop(1, shape.fillColor2 || '#000000');
-        ctx.fillStyle = grad;
-      } else if (shape.fill === 'texture' && textureImage) ctx.fillStyle = ctx.createPattern(textureImage, 'repeat');
-      if (isCity) drawCityShape(ctx, shape);
-      else ctx.fill(path);
-    } else if (isText && shape.fill !== 'none') {
-      ctx.fillStyle = shape.fillColor || '#00c8ff';
-      ctx.fill(path);
-    }
-
-    // 描边
-    if (isCity) {
-      // 已绘制
-    } else if (isFrame) {
-      drawFrameShape(ctx, shape);
-    } else if (isBrokenFrame) {
-      drawBrokenFrameShape(ctx, shape);
-    } else if (isArc) {
-      drawArcShape(ctx, shape);
+    // 对于特殊图形，直接调用绘制函数，不绘制通用路径
+    if (isDefense) {
+      drawDefenseLine(ctx, shape);
+    } else if (isTarget) {
+      drawTarget(ctx, shape);
+    } else if (isGather) {
+      drawGather(ctx, shape);
+    } else if (isMine) {
+      drawMine(ctx, shape);
+    } else if (isCaution) {
+      drawCaution(ctx, shape);
+    } else if (isFocus) {
+      drawFocus(ctx, shape);
+    } else if (isPin) {
+      drawPin(ctx, shape);
     } else {
-      ctx.globalAlpha = 1;
-      if (!isText) {
-        ctx.strokeStyle = shape.strokeColor || '#ffffff';
-        ctx.lineWidth = Math.max(1.5 / scale, (shape.strokeWidth || 2) / scale);
-        ctx.stroke(path);
+      // 通用形状
+      const path = ShapeGenerator.getPath(shape);
+      ctx.globalAlpha = shape.opacity !== undefined ? shape.opacity : 1;
+      if (shape.fill !== 'none' && !isText && !isFrame && !isBrokenFrame && !isArc) {
+        if (shape.fill === 'solid') ctx.fillStyle = shape.fillColor || '#00c8ff';
+        else if (shape.fill === 'linear' || shape.fill === 'radial') {
+          const grad = shape.fill === 'linear' ?
+            ctx.createLinearGradient(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY) :
+            ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY)/2);
+          grad.addColorStop(0, shape.fillColor); grad.addColorStop(1, shape.fillColor2 || '#000000');
+          ctx.fillStyle = grad;
+        } else if (shape.fill === 'texture' && textureImage) ctx.fillStyle = ctx.createPattern(textureImage, 'repeat');
+        if (isCity) drawCityShape(ctx, shape);
+        else ctx.fill(path);
+      } else if (isText && shape.fill !== 'none') {
+        ctx.fillStyle = shape.fillColor || '#00c8ff';
+        ctx.fill(path);
+      }
+
+      // 描边
+      if (isCity) {
+        // 已绘制
+      } else if (isFrame) {
+        drawFrameShape(ctx, shape);
+      } else if (isBrokenFrame) {
+        drawBrokenFrameShape(ctx, shape);
+      } else if (isArc) {
+        drawArcShape(ctx, shape);
+      } else {
+        ctx.globalAlpha = 1;
+        if (!isText) {
+          ctx.strokeStyle = shape.strokeColor || '#ffffff';
+          ctx.lineWidth = Math.max(1.5 / scale, (shape.strokeWidth || 2) / scale);
+          ctx.stroke(path);
+        }
       }
     }
 
     ctx.restore();
+
+    // 文本绘制（通用）
     if (isText && shape.text) drawTextOnCanvas(shape);
-    // 绘制箭头距离（无论是否选中）
+
+    // 箭头距离绘制
     if (shape.type === 'arrow') drawArrowDistance(ctx, shape);
-    // 只在编辑模式下显示选中手柄（且形状可编辑）
+
+    // 编辑模式下选中手柄
     if (!isViewMode && index === selectedShapeIndex && isShapeEditable(shape)) {
       drawSelectionHandles(shape);
     }
+
+    // 绘制用户名+备注标签（在右上角偏移）
+    drawShapeLabel(ctx, shape);
   });
 
   // 中心红点
@@ -752,6 +1283,7 @@ function redraw() {
   ctx.restore();
 }
 
+// ---------- 文本绘制辅助 ----------
 function drawTextOnCanvas(shape) {
   const { x, y, w, h, text, fontSize, rotation } = shape;
   const cx = x + w/2, cy = y + h/2;
@@ -790,6 +1322,7 @@ function drawTextOnCanvas(shape) {
   ctx.restore();
 }
 
+// ---------- 选中手柄 ----------
 function drawSelectionHandles(shape) {
   if (isViewMode) return;
   const bounds = getShapeBounds(shape);
@@ -1120,26 +1653,20 @@ function isPointInShape(wx, wy, shape) {
     const dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len === 0) {
-      // 如果起点终点重合，检测点是否接近该点
       const dist = Math.sqrt((wx - x1) * (wx - x1) + (wy - y1) * (wy - y1));
       const threshold = Math.max(3, (shape.strokeWidth || 2) / 2 + 2) / scale;
       return dist < threshold;
     }
-    // 计算投影参数 t
     const t = ((wx - x1) * dx + (wy - y1) * dy) / (len * len);
     let projX, projY;
     if (t < 0) {
-      projX = x1;
-      projY = y1;
+      projX = x1; projY = y1;
     } else if (t > 1) {
-      projX = x2;
-      projY = y2;
+      projX = x2; projY = y2;
     } else {
-      projX = x1 + t * dx;
-      projY = y1 + t * dy;
+      projX = x1 + t * dx; projY = y1 + t * dy;
     }
     const dist = Math.sqrt((wx - projX) * (wx - projX) + (wy - projY) * (wy - projY));
-    // 阈值：线宽的一半 + 3 像素（世界坐标）
     const strokeWidth = shape.strokeWidth || 2;
     const threshold = Math.max(3, strokeWidth / 2 + 3) / scale;
     return dist < threshold;
@@ -1160,27 +1687,39 @@ function isPointInShape(wx, wy, shape) {
     ctx.rotate(shape.rotation);
     ctx.translate(-bCx, -bCy);
   }
-  // 先用路径检测（填充区域）
   let result = ctx.isPointInPath(path, wx, wy);
   ctx.restore();
   if (result) return true;
-  // 如果路径未命中，再检测包围盒（允许点击内部空白区域选中，适用于填充形状）
   return (wx >= bounds.minX && wx <= bounds.maxX &&
           wy >= bounds.minY && wy <= bounds.maxY);
 }
 
+// ---------- 加载形状属性（含备注） ----------
 function loadShapeProperties(shape) {
   if (isViewMode) return;
   const editable = isShapeEditable(shape);
-  document.getElementById('fillColor').value=shape.fillColor||'#00c8ff';
-  document.getElementById('fillType').value=shape.fill||'solid';
-  document.getElementById('strokeColor').value=shape.strokeColor||'#ffffff';
-  document.getElementById('strokeWidth').value=shape.strokeWidth||2;
-  document.getElementById('opacity').value=shape.opacity!==undefined?shape.opacity:1;
-  const textProps=document.getElementById('textProps');
-  if(shape.type==='text'||shape.type==='verticalText'){ textProps.style.display='block'; document.getElementById('textContent').value=shape.text||''; document.getElementById('fontSize').value=shape.fontSize||20; }
-  else textProps.style.display='none';
-  // 根据可编辑性启用/禁用控件
+  document.getElementById('fillColor').value = shape.fillColor || '#00c8ff';
+  document.getElementById('fillType').value = shape.fill || 'solid';
+  document.getElementById('strokeColor').value = shape.strokeColor || '#ffffff';
+  document.getElementById('strokeWidth').value = shape.strokeWidth || 2;
+  document.getElementById('opacity').value = shape.opacity !== undefined ? shape.opacity : 1;
+  const textProps = document.getElementById('textProps');
+  if (shape.type === 'text' || shape.type === 'verticalText') {
+    textProps.style.display = 'block';
+    document.getElementById('textContent').value = shape.text || '';
+    document.getElementById('fontSize').value = shape.fontSize || 20;
+  } else {
+    textProps.style.display = 'none';
+  }
+
+  // 备注字段
+  const remarkInput = document.getElementById('remarkInput');
+  if (remarkInput) {
+    remarkInput.value = shape.remark || '';
+    remarkInput.disabled = !editable;
+  }
+
+  // 禁用/启用控件
   const inputs = ['fillColor', 'fillType', 'strokeColor', 'strokeWidth', 'opacity', 'textContent', 'fontSize'];
   inputs.forEach(id => {
     const el = document.getElementById(id);
@@ -1189,98 +1728,131 @@ function loadShapeProperties(shape) {
   document.getElementById('deleteShapeBtn').style.display = editable ? 'block' : 'none';
 }
 
+// ---------- 滚轮缩放 ----------
 container.addEventListener('wheel', e => {
   e.preventDefault();
-  const rect=canvas.getBoundingClientRect(), sx=e.clientX-rect.left, sy=e.clientY-rect.top, world=toWorld(sx,sy);
-  let newScale=scale*(e.deltaY<0?1.08:0.92); newScale=clampScale(newScale);
-  offsetX=world.x-sx/newScale; offsetY=world.y-(canvas.height-sy)/newScale; clampOffset(); scale=newScale; redraw();
-}, {passive:false});
+  const rect = canvas.getBoundingClientRect(), sx = e.clientX - rect.left, sy = e.clientY - rect.top, world = toWorld(sx, sy);
+  let newScale = scale * (e.deltaY < 0 ? 1.08 : 0.92);
+  newScale = clampScale(newScale);
+  offsetX = world.x - sx / newScale;
+  offsetY = world.y - (canvas.height - sy) / newScale;
+  clampOffset();
+  scale = newScale;
+  redraw();
+}, {passive: false});
 
-// UI 事件（仅编辑模式可用）
+// ---------- UI 事件（仅编辑模式） ----------
 if (!isViewMode) {
+  // 填充类型
   document.getElementById('fillType').addEventListener('change', e => {
-    document.getElementById('textureUpload').style.display=e.target.value==='texture'?'block':'none';
-    if(selectedShapeIndex!==-1 && isShapeEditable(shapes[selectedShapeIndex])) {
-      shapes[selectedShapeIndex].fill=e.target.value; redraw();
+    document.getElementById('textureUpload').style.display = e.target.value === 'texture' ? 'block' : 'none';
+    if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
+      shapes[selectedShapeIndex].fill = e.target.value;
+      redraw();
     }
   });
+  // 颜色、线宽、透明度
   document.getElementById('fillColor').addEventListener('input', e => {
-    if(selectedShapeIndex!==-1 && isShapeEditable(shapes[selectedShapeIndex])) {
-      shapes[selectedShapeIndex].fillColor=e.target.value; redraw();
+    if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
+      shapes[selectedShapeIndex].fillColor = e.target.value;
+      redraw();
     }
   });
   document.getElementById('strokeColor').addEventListener('input', e => {
-    if(selectedShapeIndex!==-1 && isShapeEditable(shapes[selectedShapeIndex])) {
-      shapes[selectedShapeIndex].strokeColor=e.target.value; redraw();
+    if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
+      shapes[selectedShapeIndex].strokeColor = e.target.value;
+      redraw();
     }
   });
   document.getElementById('strokeWidth').addEventListener('input', e => {
-    if(selectedShapeIndex!==-1 && isShapeEditable(shapes[selectedShapeIndex])) {
-      shapes[selectedShapeIndex].strokeWidth=parseInt(e.target.value); redraw();
+    if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
+      shapes[selectedShapeIndex].strokeWidth = parseInt(e.target.value);
+      redraw();
     }
   });
   document.getElementById('opacity').addEventListener('input', e => {
-    if(selectedShapeIndex!==-1 && isShapeEditable(shapes[selectedShapeIndex])) {
-      shapes[selectedShapeIndex].opacity=parseFloat(e.target.value); redraw();
+    if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
+      shapes[selectedShapeIndex].opacity = parseFloat(e.target.value);
+      redraw();
     }
   });
+  // 备注输入
+  document.getElementById('remarkInput').addEventListener('input', function() {
+    if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
+      const val = this.value.slice(0, 30);
+      shapes[selectedShapeIndex].remark = val;
+      redraw();
+    }
+  });
+  // 删除形状
   document.getElementById('deleteShapeBtn').addEventListener('click', () => {
-    if(selectedShapeIndex!==-1 && isShapeEditable(shapes[selectedShapeIndex])) {
-      shapes.splice(selectedShapeIndex,1);
-      selectedShapeIndex=-1;
-      document.getElementById('propertiesSection').style.display='none';
-      document.getElementById('textProps').style.display='none';
+    if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
+      shapes.splice(selectedShapeIndex, 1);
+      selectedShapeIndex = -1;
+      document.getElementById('propertiesSection').style.display = 'none';
+      document.getElementById('textProps').style.display = 'none';
       saveState();
       redraw();
     } else {
       alert('当前选中的图形为模板图形，不可删除');
     }
   });
+  // 纹理上传
   document.getElementById('textureFile').addEventListener('change', e => {
-    const file=e.target.files[0]; if(!file) return;
-    const reader=new FileReader();
-    reader.onload=ev=>{
-      const img=new Image();
-      img.onload=()=>{
-        textureImage=img;
-        if(selectedShapeIndex!==-1 && isShapeEditable(shapes[selectedShapeIndex])) {
-          shapes[selectedShapeIndex].fill='texture';
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        textureImage = img;
+        if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
+          shapes[selectedShapeIndex].fill = 'texture';
           redraw();
         }
       };
-      img.src=ev.target.result;
+      img.src = ev.target.result;
     };
     reader.readAsDataURL(file);
   });
+  // 文本内容
   document.getElementById('textContent').addEventListener('input', e => {
-    if(selectedShapeIndex!==-1 && isShapeEditable(shapes[selectedShapeIndex])) {
-      shapes[selectedShapeIndex].text=e.target.value;
+    if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
+      shapes[selectedShapeIndex].text = e.target.value;
       redraw();
     }
   });
   document.getElementById('textContent').addEventListener('blur', saveState);
   document.getElementById('fontSize').addEventListener('input', e => {
-    if(selectedShapeIndex!==-1 && isShapeEditable(shapes[selectedShapeIndex])) {
-      shapes[selectedShapeIndex].fontSize=parseInt(e.target.value);
+    if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
+      shapes[selectedShapeIndex].fontSize = parseInt(e.target.value);
       redraw();
     }
   });
   document.getElementById('fontSize').addEventListener('change', saveState);
+
+  // 工具切换
   document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      currentTool=btn.dataset.tool;
+      currentTool = btn.dataset.tool;
     });
   });
+  // 撤销/重做/复制/粘贴
   document.getElementById('btnUndo').addEventListener('click', undo);
   document.getElementById('btnRedo').addEventListener('click', redo);
   document.getElementById('btnCopy').addEventListener('click', copyShape);
   document.getElementById('btnPaste').addEventListener('click', pasteShape);
+  // 坐标定位
   document.getElementById('btnLocate').addEventListener('click', () => {
-    const x=parseInt(document.getElementById('locateX').value), y=parseInt(document.getElementById('locateY').value);
-    if(isNaN(x)||isNaN(y)){ alert('请输入有效的坐标'); return; }
-    locateToPoint(x,y);
+    const x = parseInt(document.getElementById('locateX').value);
+    const y = parseInt(document.getElementById('locateY').value);
+    if (isNaN(x) || isNaN(y)) {
+      alert('请输入有效的坐标');
+      return;
+    }
+    locateToPoint(x, y);
   });
 }
 
