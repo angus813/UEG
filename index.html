@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>拉格朗日UEG公会官网</title>
   <link rel="stylesheet" href="admin.css">
   <style>
@@ -15,7 +15,6 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      overflow: hidden;
     }
     .container {
       width: 1100px;
@@ -175,48 +174,37 @@
       padding-top: 15px;
     }
 
-    /* ========== 竖屏遮罩 ========== */
-    #rotateOverlay {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.92);
-      z-index: 9999;
-      justify-content: center;
-      align-items: center;
-      flex-direction: column;
-      color: #fff;
-      text-align: center;
-      padding: 20px;
-      backdrop-filter: blur(8px);
-    }
-    #rotateOverlay .icon {
-      font-size: 4rem;
-      animation: rotate-phone 2s ease-in-out infinite;
-    }
-    #rotateOverlay h2 {
-      font-size: 1.8rem;
-      margin: 20px 0 10px;
-      color: #00c8ff;
-    }
-    #rotateOverlay p {
-      font-size: 1rem;
-      color: #8a9aa8;
-      max-width: 320px;
-    }
-    @keyframes rotate-phone {
-      0%, 100% { transform: rotate(0deg); }
-      50% { transform: rotate(90deg); }
+    /* ========== 移动端竖屏默认适配 ========== */
+    @media (max-width: 700px) {
+      .modal-content {
+        flex-direction: column;
+        width: 95%;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+      .modal-right {
+        border-left: none;
+        border-top: 1px solid #1f2833;
+        padding: 20px;
+      }
+      .modal-left {
+        padding: 20px;
+      }
     }
 
-    /* ========== 移动端竖屏：显示遮罩 ========== */
-    @media (max-width: 900px) and (orientation: portrait) {
-      #rotateOverlay { display: flex !important; }
-      body { overflow: hidden; }
+    @media (max-width: 600px) {
+      .container { max-width: 100%; margin: 10px; min-height: auto; }
+      .menu-title { font-size: 2rem; letter-spacing: 6px; }
+      .menu-subtitle { font-size: 0.8rem; margin-bottom: 40px; }
+      .menu-card { width: 150px; height: 150px; }
+      .menu-card-icon { font-size: 2.5rem; margin-bottom: 12px; }
+      .menu-card-text { font-size: 1.4rem; }
+      .menu-card-desc { font-size: 0.7rem; }
     }
 
     /* ========== 移动端横屏优化 ========== */
     @media (max-width: 900px) and (orientation: landscape) {
+      /* 容器内边距减少，充分利用宽度 */
       .container {
         max-width: 98%;
         margin: 10px auto;
@@ -236,6 +224,7 @@
         font-size: 0.8rem;
         margin-bottom: 20px;
       }
+      /* 菜单卡片横排，尺寸适中 */
       .menu-options {
         gap: 15px;
         max-width: 100%;
@@ -258,6 +247,8 @@
         font-size: 0.65rem;
         margin-top: 4px;
       }
+
+      /* 模态框在横屏时恢复左右布局，并更宽 */
       .modal-content {
         flex-direction: row;
         width: 90%;
@@ -281,6 +272,7 @@
       }
     }
 
+    /* 更小屏幕的横屏（如手机小屏横屏） */
     @media (max-width: 650px) and (orientation: landscape) {
       .menu-card {
         width: 110px;
@@ -305,14 +297,6 @@
   </style>
 </head>
 <body>
-
-  <!-- ===== 竖屏遮罩 ===== -->
-  <div id="rotateOverlay">
-    <div class="icon">📱</div>
-    <h2>请横屏使用</h2>
-    <p>为获得最佳体验，请将手机旋转至横屏模式</p>
-  </div>
-
   <div class="container">
     <div class="user-bar" id="userBar">
       <span class="user-info" id="userInfo">未登录</span>
@@ -383,46 +367,6 @@
   <script src="supabase-client.js"></script>
 
   <script>
-    // ==================== 横屏检测与自动旋转 ====================
-    (function() {
-      // 仅在移动设备生效
-      if (!/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) return;
-
-      const overlay = document.getElementById('rotateOverlay');
-
-      // 尝试锁定横屏（部分浏览器支持）
-      function tryLockLandscape() {
-        if (screen.orientation && screen.orientation.lock) {
-          screen.orientation.lock('landscape').catch(() => {
-            // 静默失败，不影响功能
-          });
-        }
-      }
-
-      // 检测方向变化
-      function checkOrientation() {
-        const isLandscape = window.innerWidth > window.innerHeight;
-        if (!isLandscape) {
-          overlay.style.display = 'flex';
-          tryLockLandscape();
-        } else {
-          overlay.style.display = 'none';
-        }
-      }
-
-      // 初始检测
-      checkOrientation();
-
-      // 监听变化
-      window.addEventListener('resize', checkOrientation);
-      window.addEventListener('orientationchange', function() {
-        setTimeout(checkOrientation, 300);
-      });
-
-      // 用户点击遮罩时再次尝试
-      overlay.addEventListener('click', tryLockLandscape);
-    })();
-
     // ==================== 用户操作 ====================
     function getCurrentUser() {
       const cu = localStorage.getItem('ueg_current_user');
@@ -433,6 +377,7 @@
       else localStorage.removeItem('ueg_current_user');
     }
 
+    // 显示错误信息（带自动清除）
     function showError(msg, duration = 3000) {
       const el = document.getElementById('errorMessage');
       el.textContent = msg;
@@ -473,6 +418,7 @@
     }
 
     async function registerUser(username, password) {
+      // 密码长度校验
       if (password.length < 6) {
         showError('密码长度至少6位');
         return false;
@@ -523,7 +469,7 @@
     const errorMessage = document.getElementById('errorMessage');
     const menuCards = document.querySelectorAll('.menu-card');
 
-    let modalMode = 'login';
+    let modalMode = 'login'; // 'login' | 'register'
     let isProcessing = false;
 
     function updateUI() {
@@ -566,14 +512,17 @@
       passwordInput.value = '';
       errorMessage.textContent = '';
       modal.style.display = 'flex';
+      // 自动聚焦第一个输入框
       setTimeout(() => usernameInput.focus(), 100);
     }
 
+    // 切换模式
     modalToggle.addEventListener('click', () => {
       if (modalMode === 'login') openModal('register');
       else openModal('login');
     });
 
+    // 确定按钮
     modalConfirm.addEventListener('click', async () => {
       if (isProcessing) return;
       const username = usernameInput.value.trim();
@@ -610,6 +559,7 @@
       }
     });
 
+    // 回车键提交
     passwordInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') modalConfirm.click();
     });
@@ -617,6 +567,7 @@
       if (e.key === 'Enter') passwordInput.focus();
     });
 
+    // 点击背景不能关闭（未登录时）
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {
         if (!getCurrentUser()) {
@@ -627,6 +578,7 @@
       }
     });
 
+    // ESC 键处理
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && modal.style.display === 'flex') {
         if (!getCurrentUser()) {
@@ -637,6 +589,7 @@
       }
     });
 
+    // 菜单拦截
     document.querySelector('.menu-options').addEventListener('click', (e) => {
       const card = e.target.closest('.menu-card');
       if (!card) return;
@@ -648,6 +601,7 @@
       }
     });
 
+    // 个人中心 / 注销
     btnProfile.addEventListener('click', () => {
       if (!getCurrentUser()) {
         showError('请先登录', 2000);
