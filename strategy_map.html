@@ -507,10 +507,16 @@
               <div class="map-info">创建者：${map.creator} · ${timeStr}</div>
             </a>
         `;
+        // 编辑按钮：星系地图对所有用户显示，模板地图仅管理员显示
+        if (map.type === 'galaxy' || isAdmin) {
+          html += `
+            <a href="map_editor.html?mode=edit&id=${map.id}" class="edit-map-btn" style="display:flex;" title="编辑地图">✎</a>
+          `;
+        }
+        // 删除按钮：仅管理员
         if (isAdmin) {
           html += `
             <button class="delete-map-btn" style="display:block;" onclick="deleteMap('${map.id}')">✕</button>
-            <a href="map_editor.html?mode=edit&id=${map.id}" class="edit-map-btn" style="display:flex;" title="编辑地图">✎</a>
           `;
         }
         html += `</div>`;
@@ -536,7 +542,6 @@
       if (!username) { alert('请先登录'); return false; }
       let shapes = [];
       if (templateId) {
-        // 从模板复制图形
         const { data: template, error } = await supabase
           .from('guild_maps')
           .select('shapes')
@@ -570,7 +575,7 @@
     // ==================== 模态框逻辑 ====================
     let currentMapType = 'template';
     let selectedProtocol = '2.0';
-    let templateMaps = []; // 缓存模板地图列表
+    let templateMaps = [];
 
     async function loadTemplateMaps() {
       const { data, error } = await supabase
@@ -604,7 +609,6 @@
       } else {
         protocolSection.style.display = 'none';
         templateWrap.style.display = 'block';
-        // 加载模板列表
         templateMaps = await loadTemplateMaps();
         templateSelect.innerHTML = '<option value="">-- 不使用模板 --</option>';
         templateMaps.forEach(t => {
