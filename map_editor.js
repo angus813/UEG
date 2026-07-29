@@ -1088,11 +1088,13 @@ function hitHandle(shape, wx, wy) {
 // 椭圆仅轮廓可选中（同时检查可编辑性）
 function isPointInShape(wx, wy, shape) {
   if (!isShapeEditable(shape)) return false;
+
+  // ---- 椭圆特殊处理（仅轮廓） ----
   if (shape.type === 'ellipse') {
-    const cx = shape.x + shape.w/2;
-    const cy = shape.y + shape.h/2;
-    const rx = shape.w/2;
-    const ry = shape.h/2;
+    const cx = shape.x + shape.w / 2;
+    const cy = shape.y + shape.h / 2;
+    const rx = shape.w / 2;
+    const ry = shape.h / 2;
     let lx = wx - cx;
     let ly = wy - cy;
     if (shape.rotation) {
@@ -1106,16 +1108,65 @@ function isPointInShape(wx, wy, shape) {
     const norm = Math.sqrt((lx * lx) / (rx * rx) + (ly * ly) / (ry * ry));
     const strokeWidth = shape.strokeWidth || 2;
     const tolerance = (strokeWidth / 2) / Math.min(rx, ry) + 0.03;
-    if (Math.abs(norm - 1) < tolerance) return true;
-    return false;
+    return Math.abs(norm - 1) < tolerance;
   }
+
+  // ---- 直线 和 箭头：精确计算点到线段的距离 ----
+  if (shape.type === 'line' || shape.type === 'arrow') {
+    if (shape.x1 === undefined || shape.x2 === undefined) return false;
+    const x1 = shape.x1, y1 = shape.y1;
+    const x2 = shape.x2, y2 = shape.y2;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) {
+      // 如果起点终点重合，检测点是否接近该点
+      const dist = Math.sqrt((wx - x1) * (wx - x1) + (wy - y1) * (wy - y1));
+      const threshold = Math.max(3, (shape.strokeWidth || 2) / 2 + 2) / scale;
+      return dist < threshold;
+    }
+    // 计算投影参数 t
+    const t = ((wx - x1) * dx + (wy - y1) * dy) / (len * len);
+    let projX, projY;
+    if (t < 0) {
+      projX = x1;
+      projY = y1;
+    } else if (t > 1) {
+      projX = x2;
+      projY = y2;
+    } else {
+      projX = x1 + t * dx;
+      projY = y1 + t * dy;
+    }
+    const dist = Math.sqrt((wx - projX) * (wx - projX) + (wy - projY) * (wy - projY));
+    // 阈值：线宽的一半 + 3 像素（世界坐标）
+    const strokeWidth = shape.strokeWidth || 2;
+    const threshold = Math.max(3, strokeWidth / 2 + 3) / scale;
+    return dist < threshold;
+  }
+
+  // ---- 其他形状（矩形、圆形、多边形、自由曲线等）使用路径检测 ----
   const path = ShapeGenerator.getPath(shape);
-  ctx.save(); ctx.translate(0,canvas.height); ctx.scale(1,-1); ctx.translate(-offsetX*scale,-offsetY*scale); ctx.scale(scale,scale);
-  const bounds=getShapeBounds(shape), b_cx=(bounds.minX+bounds.maxX)/2, b_cy=(bounds.minY+bounds.maxY)/2;
-  if(shape.rotation){ ctx.translate(b_cx,b_cy); ctx.rotate(shape.rotation); ctx.translate(-b_cx,-b_cy); }
-  const result = ctx.isPointInPath(path, wx, wy); ctx.restore();
-  if(result) return true;
-  return (wx>=bounds.minX&&wx<=bounds.maxX&&wy>=bounds.minY&&wy<=bounds.maxY);
+  ctx.save();
+  ctx.translate(0, canvas.height);
+  ctx.scale(1, -1);
+  ctx.translate(-offsetX * scale, -offsetY * scale);
+  ctx.scale(scale, scale);
+  const bounds = getShapeBounds(shape);
+  const bCx = (bounds.minX + bounds.maxX) / 2;
+  const bCy = (bounds.minY + bounds.maxY) / 2;
+  if (shape.rotation) {
+    ctx.translate(bCx, bCy);
+    ctx.rotate(shape.rotation);
+    ctx.translate(-bCx, -bCy);
+  }
+  // 先用路径检测（填充区域）
+  let result = ctx.isPointInPath(path, wx, wy);
+  ctx.restore();
+  if (result) return true;
+  // 如果路径未命中，再检测包围盒（允许点击内部空白区域选中，适用于填充形状）
+  return (wx >= bounds.minX && wx <= bounds.maxX &&
+          wy >= bounds.minY && wy <= bounds.maxY);
 }
 
 function loadShapeProperties(shape) {
