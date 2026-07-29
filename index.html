@@ -17,7 +17,8 @@
       align-items: center;
     }
     .container {
-      width: 1100px; max-width: 95%;
+      width: 1100px;
+      max-width: 95%;
       background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
       border: 1px solid #2a3340;
       box-shadow: 0 0 30px rgba(0,160,255,0.1);
@@ -173,7 +174,7 @@
       padding-top: 15px;
     }
 
-    /* 移动端适配 */
+    /* ========== 移动端竖屏默认适配 ========== */
     @media (max-width: 700px) {
       .modal-content {
         flex-direction: column;
@@ -199,6 +200,99 @@
       .menu-card-icon { font-size: 2.5rem; margin-bottom: 12px; }
       .menu-card-text { font-size: 1.4rem; }
       .menu-card-desc { font-size: 0.7rem; }
+    }
+
+    /* ========== 移动端横屏优化 ========== */
+    @media (max-width: 900px) and (orientation: landscape) {
+      /* 容器内边距减少，充分利用宽度 */
+      .container {
+        max-width: 98%;
+        margin: 10px auto;
+        min-height: auto;
+        padding: 10px 5px;
+      }
+      .menu-view {
+        min-height: auto;
+        padding: 20px 10px;
+      }
+      .menu-title {
+        font-size: 2.2rem;
+        letter-spacing: 6px;
+        margin-bottom: 5px;
+      }
+      .menu-subtitle {
+        font-size: 0.8rem;
+        margin-bottom: 20px;
+      }
+      /* 菜单卡片横排，尺寸适中 */
+      .menu-options {
+        gap: 15px;
+        max-width: 100%;
+        justify-content: center;
+      }
+      .menu-card {
+        width: 140px;
+        height: 140px;
+        padding: 10px;
+      }
+      .menu-card-icon {
+        font-size: 2.2rem;
+        margin-bottom: 10px;
+      }
+      .menu-card-text {
+        font-size: 1.2rem;
+        letter-spacing: 2px;
+      }
+      .menu-card-desc {
+        font-size: 0.65rem;
+        margin-top: 4px;
+      }
+
+      /* 模态框在横屏时恢复左右布局，并更宽 */
+      .modal-content {
+        flex-direction: row;
+        width: 90%;
+        max-width: 760px;
+        max-height: 85vh;
+      }
+      .modal-right {
+        border-left: 1px solid #1f2833;
+        border-top: none;
+        padding: 20px;
+      }
+      .modal-left {
+        padding: 20px;
+      }
+      .modal-right h2 {
+        font-size: 1.6rem;
+      }
+      .modal-right .intro-text {
+        font-size: 0.85rem;
+        line-height: 1.6;
+      }
+    }
+
+    /* 更小屏幕的横屏（如手机小屏横屏） */
+    @media (max-width: 650px) and (orientation: landscape) {
+      .menu-card {
+        width: 110px;
+        height: 110px;
+      }
+      .menu-card-icon {
+        font-size: 1.8rem;
+        margin-bottom: 6px;
+      }
+      .menu-card-text {
+        font-size: 1rem;
+      }
+      .menu-title {
+        font-size: 1.8rem;
+        letter-spacing: 4px;
+      }
+      .modal-content {
+        width: 95%;
+        max-height: 90vh;
+      }
     }
   </style>
 </head>
