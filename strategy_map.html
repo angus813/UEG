@@ -39,7 +39,6 @@
       width: 60px; height: 60px;
       border-bottom: 2px solid #00c8ff; border-right: 2px solid #00c8ff;
     }
-
     .header {
       display: flex;
       justify-content: space-between;
@@ -71,7 +70,6 @@
       background: rgba(0,200,255,0.1);
       box-shadow: 0 0 15px rgba(0,200,255,0.4);
     }
-
     .admin-actions {
       display: flex;
       gap: 12px;
@@ -93,16 +91,12 @@
       background: #ff8c33;
       box-shadow: 0 0 15px rgba(255,106,0,0.4);
     }
-
-    /* 地图列表网格 */
     .map-list {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       gap: 15px;
       min-height: 200px;
     }
-
-    /* 骨架屏卡片 */
     .skeleton-card {
       background: rgba(20,26,33,0.5);
       border: 1px solid #2a3a4a;
@@ -124,7 +118,6 @@
     }
     .skeleton-card .line.short { width: 60%; }
     .skeleton-card .line.long { width: 90%; }
-
     .map-card-wrapper {
       position: relative;
     }
@@ -213,7 +206,6 @@
       padding: 2px 10px;
       border-radius: 2px;
     }
-
     .empty-state {
       text-align: center;
       color: #4a5a6a;
@@ -221,8 +213,6 @@
       font-size: 1.1rem;
       grid-column: 1 / -1;
     }
-
-    /* 分页加载更多 */
     .load-more-wrap {
       text-align: center;
       margin-top: 30px;
@@ -247,8 +237,6 @@
       opacity: 0.3;
       cursor: not-allowed;
     }
-
-    /* 模态框 */
     .modal {
       display: none;
       position: fixed;
@@ -264,7 +252,7 @@
       border: 1px solid #2a3340;
       padding: 30px;
       width: 90%;
-      max-width: 400px;
+      max-width: 450px;
       box-shadow: 0 0 30px rgba(0,160,255,0.3);
     }
     .modal-content h3 {
@@ -273,6 +261,15 @@
       letter-spacing: 2px;
     }
     .modal-input {
+      width: 100%;
+      background: #1a1e24;
+      border: 1px solid #3a5060;
+      color: #fff;
+      padding: 10px;
+      margin-bottom: 15px;
+      font-family: inherit;
+    }
+    .modal-select {
       width: 100%;
       background: #1a1e24;
       border: 1px solid #3a5060;
@@ -326,7 +323,6 @@
       background: #3a5060;
       color: #fff;
     }
-
     @media (max-width: 600px) {
       body { align-items: flex-start; }
       .container { padding: 15px; margin: 5px; }
@@ -361,6 +357,13 @@
       <div class="modal-content">
         <h3 id="modalTitle">新建地图</h3>
         <input type="text" id="mapNameInput" class="modal-input" placeholder="输入地图名称">
+        <!-- 模板选择下拉（仅星系地图显示） -->
+        <div id="templateSelectWrap" style="display: none;">
+          <label style="display:block; margin-bottom:8px; color:#7a8b9a;">从模板复制</label>
+          <select id="templateSelect" class="modal-select">
+            <option value="">-- 不使用模板 --</option>
+          </select>
+        </div>
         <div id="protocolSection" style="display: none;">
           <label style="display:block; margin-bottom:8px; color:#7a8b9a;">选择协议</label>
           <div class="protocol-options" id="protocolOptions">
@@ -386,18 +389,16 @@
 
   <script>
     // ==================== 全局配置 ====================
-    const PAGE_SIZE = 12;                // 每页加载数量
+    const PAGE_SIZE = 12;
     const ADMIN_CACHE_KEY = 'ueg_admin_cache';
-    const ADMIN_CACHE_TTL = 300000;      // 5分钟（毫秒）
+    const ADMIN_CACHE_TTL = 300000;
 
-    // 当前状态
     let currentPage = 0;
     let isLoading = false;
     let hasMore = true;
-    let allMaps = [];                    // 已加载的地图数据（用于删除后刷新）
-    let isAdmin = false;                // 缓存管理员状态
+    let allMaps = [];
+    let isAdmin = false;
 
-    // DOM 引用
     const mapListEl = document.getElementById('mapList');
     const loadMoreWrap = document.getElementById('loadMoreWrap');
     const btnLoadMore = document.getElementById('btnLoadMore');
@@ -410,37 +411,24 @@
       try { return JSON.parse(cu).username; } catch { return null; }
     }
 
-    // ==================== 管理员状态缓存 ====================
+    // ==================== 管理员状态 ====================
     async function fetchIsAdmin() {
       const username = getCurrentUsername();
       if (!username) return false;
-
-      // 检查缓存
       const cached = localStorage.getItem(ADMIN_CACHE_KEY);
       if (cached) {
         try {
           const data = JSON.parse(cached);
-          if (Date.now() - data.timestamp < ADMIN_CACHE_TTL) {
-            return data.isAdmin;
-          }
-        } catch (e) { /* 缓存无效 */ }
+          if (Date.now() - data.timestamp < ADMIN_CACHE_TTL) return data.isAdmin;
+        } catch (e) {}
       }
-
-      // 查询数据库
       const { data, error } = await supabase
         .from('users')
         .select('is_admin')
         .eq('username', username)
         .maybeSingle();
-
       const result = !error && data && data.is_admin === true;
-
-      // 存入缓存
-      localStorage.setItem(ADMIN_CACHE_KEY, JSON.stringify({
-        isAdmin: result,
-        timestamp: Date.now()
-      }));
-
+      localStorage.setItem(ADMIN_CACHE_KEY, JSON.stringify({ isAdmin: result, timestamp: Date.now() }));
       return result;
     }
 
@@ -449,68 +437,41 @@
       if (isLoading) return;
       isLoading = true;
       btnLoadMore.disabled = true;
-
-      // 显示骨架屏（仅首次加载）
-      if (!append) {
-        renderSkeletons();
-      }
-
+      if (!append) renderSkeletons();
       try {
         const from = page * PAGE_SIZE;
         const to = from + PAGE_SIZE - 1;
-
-        // 只查询必要字段，减少数据传输
         const { data, error } = await supabase
           .from('guild_maps')
           .select('id, name, type, protocol, creator, created_at')
           .order('created_at', { ascending: false })
           .range(from, to);
-
         if (error) throw error;
-
         if (!data || data.length === 0) {
           hasMore = false;
-          if (page === 0) {
-            mapListEl.innerHTML = '<div class="empty-state">暂无地图，等待管理员创建</div>';
-          }
+          if (page === 0) mapListEl.innerHTML = '<div class="empty-state">暂无地图，等待管理员创建</div>';
           return;
         }
-
-        // 判断是否还有更多
         hasMore = data.length === PAGE_SIZE;
-
-        // 合并或替换数据
-        if (append) {
-          allMaps = allMaps.concat(data);
-        } else {
-          allMaps = data;
-        }
-
-        // 渲染
+        if (append) allMaps = allMaps.concat(data);
+        else allMaps = data;
         renderMaps(allMaps);
-
-        // 控制“加载更多”按钮显示
         if (hasMore) {
           loadMoreWrap.style.display = 'block';
           btnLoadMore.disabled = false;
         } else {
           loadMoreWrap.style.display = 'none';
         }
-
         currentPage = page;
-
       } catch (err) {
         console.error('加载地图失败:', err);
-        if (page === 0) {
-          mapListEl.innerHTML = '<div class="empty-state">加载失败，请刷新重试</div>';
-        }
+        if (page === 0) mapListEl.innerHTML = '<div class="empty-state">加载失败，请刷新重试</div>';
       } finally {
         isLoading = false;
         btnLoadMore.disabled = !hasMore;
       }
     }
 
-    // ==================== 渲染骨架屏 ====================
     function renderSkeletons() {
       let html = '';
       for (let i = 0; i < PAGE_SIZE; i++) {
@@ -526,21 +487,17 @@
       mapListEl.innerHTML = html;
     }
 
-    // ==================== 渲染地图卡片 ====================
     function renderMaps(maps) {
       if (!maps || maps.length === 0) {
         mapListEl.innerHTML = '<div class="empty-state">暂无地图</div>';
         loadMoreWrap.style.display = 'none';
         return;
       }
-
       let html = '';
       maps.forEach(map => {
         const date = new Date(map.created_at);
-        const timeStr =
-          `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+        const timeStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
         const typeLabel = map.type === 'template' ? '模板地图' : '星系地图';
-
         html += `
           <div class="map-card-wrapper">
             <a href="map_editor.html?mode=view&id=${map.id}" class="map-card">
@@ -550,90 +507,80 @@
               <div class="map-info">创建者：${map.creator} · ${timeStr}</div>
             </a>
         `;
-
         if (isAdmin) {
           html += `
             <button class="delete-map-btn" style="display:block;" onclick="deleteMap('${map.id}')">✕</button>
             <a href="map_editor.html?mode=edit&id=${map.id}" class="edit-map-btn" style="display:flex;" title="编辑地图">✎</a>
           `;
         }
-
         html += `</div>`;
       });
-
       mapListEl.innerHTML = html;
     }
 
     // ==================== 删除地图 ====================
     async function deleteMap(mapId) {
       if (!confirm('确定要删除此地图吗？此操作不可恢复！')) return;
-
-      if (!isAdmin) {
-        alert('您没有管理员权限');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('guild_maps')
-        .delete()
-        .eq('id', mapId);
-
-      if (error) {
-        alert('删除失败: ' + error.message);
-        return;
-      }
-
-      // 从已加载列表中移除（前端优化，避免重新加载全量）
+      if (!isAdmin) { alert('您没有管理员权限'); return; }
+      const { error } = await supabase.from('guild_maps').delete().eq('id', mapId);
+      if (error) { alert('删除失败: ' + error.message); return; }
       allMaps = allMaps.filter(m => m.id !== mapId);
       renderMaps(allMaps);
-
-      // 如果当前页数据变空且还有更多，自动加载下一页（可选）
-      if (allMaps.length === 0 && hasMore) {
-        loadMaps(currentPage + 1, true);
-      }
+      if (allMaps.length === 0 && hasMore) loadMaps(currentPage + 1, true);
     }
-
-    // 暴露到全局（供 onclick 调用）
     window.deleteMap = deleteMap;
 
-    // ==================== 创建地图 ====================
-    async function createMap(name, type, protocol = null) {
+    // ==================== 创建地图（支持从模板复制） ====================
+    async function createMap(name, type, protocol = null, templateId = null) {
       const username = getCurrentUsername();
-      if (!username) {
-        alert('请先登录');
-        return false;
+      if (!username) { alert('请先登录'); return false; }
+      let shapes = [];
+      if (templateId) {
+        // 从模板复制图形
+        const { data: template, error } = await supabase
+          .from('guild_maps')
+          .select('shapes')
+          .eq('id', templateId)
+          .maybeSingle();
+        if (error || !template) {
+          alert('模板地图不存在');
+          return false;
+        }
+        shapes = (template.shapes || []).map(s => ({ ...s, fromTemplate: true }));
       }
-
       const newMap = {
-        name: name,
-        type: type,
+        name,
+        type,
         protocol: type === 'template' ? protocol : null,
         creator: username,
-        shapes: []
+        shapes
       };
-
       const { data, error } = await supabase
         .from('guild_maps')
         .insert([newMap])
         .select('id, name, type, protocol, creator, created_at');
-
-      if (error) {
-        alert('创建失败: ' + error.message);
-        return false;
-      }
-
-      // 将新地图插入到列表最前面（因为按 created_at 降序）
+      if (error) { alert('创建失败: ' + error.message); return false; }
       if (data && data.length > 0) {
         allMaps.unshift(data[0]);
         renderMaps(allMaps);
       }
-
       return true;
     }
 
-    // ==================== 模态框控制 ====================
+    // ==================== 模态框逻辑 ====================
     let currentMapType = 'template';
     let selectedProtocol = '2.0';
+    let templateMaps = []; // 缓存模板地图列表
+
+    async function loadTemplateMaps() {
+      const { data, error } = await supabase
+        .from('guild_maps')
+        .select('id, name')
+        .eq('type', 'template')
+        .order('name');
+      if (error) { console.error('加载模板列表失败:', error); return []; }
+      return data || [];
+    }
 
     function resetProtocolSelection() {
       document.querySelectorAll('.protocol-option').forEach(btn => btn.classList.remove('selected'));
@@ -642,16 +589,27 @@
       selectedProtocol = '2.0';
     }
 
-    function showModal(type) {
+    async function showModal(type) {
       currentMapType = type;
       document.getElementById('modalTitle').textContent = type === 'template' ? '新建模板地图' : '新建星系地图';
       document.getElementById('mapNameInput').value = '';
       const protocolSection = document.getElementById('protocolSection');
+      const templateWrap = document.getElementById('templateSelectWrap');
+      const templateSelect = document.getElementById('templateSelect');
       if (type === 'template') {
         protocolSection.style.display = 'block';
+        templateWrap.style.display = 'none';
         resetProtocolSelection();
+        selectedProtocol = '2.0';
       } else {
         protocolSection.style.display = 'none';
+        templateWrap.style.display = 'block';
+        // 加载模板列表
+        templateMaps = await loadTemplateMaps();
+        templateSelect.innerHTML = '<option value="">-- 不使用模板 --</option>';
+        templateMaps.forEach(t => {
+          templateSelect.innerHTML += `<option value="${t.id}">${t.name}</option>`;
+        });
         selectedProtocol = null;
       }
       document.getElementById('mapModal').style.display = 'flex';
@@ -659,16 +617,10 @@
 
     // ==================== 初始化 ====================
     async function init() {
-      // 1. 获取管理员状态（带缓存）
       isAdmin = await fetchIsAdmin();
-      if (isAdmin) {
-        adminActions.style.display = 'flex';
-      }
-
-      // 2. 加载第一页数据
+      if (isAdmin) adminActions.style.display = 'flex';
       await loadMaps(0, false);
 
-      // 3. 事件绑定
       document.getElementById('btnTemplateMap').addEventListener('click', () => showModal('template'));
       document.getElementById('btnGalaxyMap').addEventListener('click', () => showModal('galaxy'));
 
@@ -686,25 +638,22 @@
 
       document.getElementById('btnSave').addEventListener('click', async () => {
         const name = document.getElementById('mapNameInput').value.trim();
-        if (!name) {
-          alert('请输入地图名称');
-          return;
+        if (!name) { alert('请输入地图名称'); return; }
+        let templateId = null;
+        if (currentMapType === 'galaxy') {
+          const select = document.getElementById('templateSelect');
+          templateId = select.value || null;
         }
-        const success = await createMap(name, currentMapType, selectedProtocol);
+        const success = await createMap(name, currentMapType, selectedProtocol, templateId);
         if (success) {
           document.getElementById('mapModal').style.display = 'none';
         }
       });
 
-      // 加载更多按钮
       btnLoadMore.addEventListener('click', () => {
-        if (!isLoading && hasMore) {
-          loadMaps(currentPage + 1, true);
-        }
+        if (!isLoading && hasMore) loadMaps(currentPage + 1, true);
       });
     }
-
-    // 启动
     init();
   </script>
 </body>
