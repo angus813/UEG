@@ -1001,7 +1001,6 @@ function pasteShape() {
     return;
   }
   const newShape = JSON.parse(JSON.stringify(clipboardShape));
-  // 粘贴后的新形状默认可编辑
   newShape.fromTemplate = false;
   const offset = 50;
   if (newShape.x1 !== undefined) {
@@ -1025,7 +1024,7 @@ function pasteShape() {
   redraw();
 }
 
-// ---------- 坐标定位函数 ----------
+// ---------- 坐标定位 ----------
 function locateToPoint(worldX, worldY) {
   worldX = Math.max(WORLD_MIN, Math.min(WORLD_MAX, worldX));
   worldY = Math.max(WORLD_MIN, Math.min(WORLD_MAX, worldY));
@@ -1138,23 +1137,23 @@ function redraw() {
       ctx.translate(-cx, -cy);
     }
 
-    // 特殊图形调用独立绘制函数
+    // 特殊标记图形（固定屏幕像素大小）
     if (isDefense) {
-      drawDefenseLine(ctx, shape);
+      drawDefenseLine(ctx, shape);   // 内部已除以 scale
     } else if (isTarget) {
-      drawTarget(ctx, shape);
+      drawTarget(ctx, shape);        // 内部已除以 scale
     } else if (isGather) {
-      drawGather(ctx, shape);
+      drawGather(ctx, shape);        // 内部已除以 scale
     } else if (isMine) {
-      drawMine(ctx, shape);
+      drawMine(ctx, shape);          // 内部已除以 scale
     } else if (isCaution) {
-      drawCaution(ctx, shape);
+      drawCaution(ctx, shape);       // 内部已除以 scale
     } else if (isFocus) {
-      drawFocus(ctx, shape);
+      drawFocus(ctx, shape);         // 内部已除以 scale
     } else if (isPin) {
-      drawPin(ctx, shape);
+      drawPin(ctx, shape);           // 内部已除以 scale
     } else {
-      // 通用形状
+      // 通用形状（随缩放变化）
       const path = ShapeGenerator.getPath(shape);
       ctx.globalAlpha = shape.opacity !== undefined ? shape.opacity : 1;
       if (shape.fill !== 'none' && !isText && !isFrame && !isBrokenFrame && !isArc) {
@@ -1563,11 +1562,11 @@ function hitHandle(shape, wx, wy) {
   return null;
 }
 
-// ---------- 形状碰撞检测（含椭圆轮廓、直线精确检测） ----------
+// ---------- 形状碰撞检测 ----------
 function isPointInShape(wx, wy, shape) {
   if (!isShapeEditable(shape)) return false;
 
-  // 椭圆特殊处理（仅轮廓）
+  // 椭圆仅轮廓
   if (shape.type === 'ellipse') {
     const cx = shape.x + shape.w / 2;
     const cy = shape.y + shape.h / 2;
@@ -1589,7 +1588,7 @@ function isPointInShape(wx, wy, shape) {
     return Math.abs(norm - 1) < tolerance;
   }
 
-  // 直线和箭头：精确计算点到线段距离
+  // 直线和箭头：精确检测
   if (shape.type === 'line' || shape.type === 'arrow') {
     if (shape.x1 === undefined || shape.x2 === undefined) return false;
     const x1 = shape.x1, y1 = shape.y1;
@@ -1653,14 +1652,12 @@ function loadShapeProperties(shape) {
     textProps.style.display = 'none';
   }
 
-  // 备注字段
   const remarkInput = document.getElementById('remarkInput');
   if (remarkInput) {
     remarkInput.value = shape.remark || '';
     remarkInput.disabled = !editable;
   }
 
-  // 禁用/启用控件
   const inputs = ['fillColor', 'fillType', 'strokeColor', 'strokeWidth', 'opacity', 'textContent', 'fontSize'];
   inputs.forEach(id => {
     const el = document.getElementById(id);
@@ -1684,7 +1681,6 @@ container.addEventListener('wheel', e => {
 
 // ---------- UI 事件（仅编辑模式） ----------
 if (!isViewMode) {
-  // 填充类型
   document.getElementById('fillType').addEventListener('change', e => {
     document.getElementById('textureUpload').style.display = e.target.value === 'texture' ? 'block' : 'none';
     if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
@@ -1692,7 +1688,6 @@ if (!isViewMode) {
       redraw();
     }
   });
-  // 颜色、线宽、透明度
   document.getElementById('fillColor').addEventListener('input', e => {
     if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
       shapes[selectedShapeIndex].fillColor = e.target.value;
@@ -1717,7 +1712,6 @@ if (!isViewMode) {
       redraw();
     }
   });
-  // 备注输入
   document.getElementById('remarkInput').addEventListener('input', function() {
     if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
       const val = this.value.slice(0, 30);
@@ -1726,7 +1720,7 @@ if (!isViewMode) {
     }
   });
 
-  // 删除形状（使用 canDeleteShape 权限控制）
+  // 删除形状（权限控制）
   document.getElementById('deleteShapeBtn').addEventListener('click', () => {
     if (selectedShapeIndex !== -1 && canDeleteShape(shapes[selectedShapeIndex])) {
       shapes.splice(selectedShapeIndex, 1);
@@ -1740,7 +1734,6 @@ if (!isViewMode) {
     }
   });
 
-  // 纹理上传
   document.getElementById('textureFile').addEventListener('change', e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1758,7 +1751,6 @@ if (!isViewMode) {
     };
     reader.readAsDataURL(file);
   });
-  // 文本内容
   document.getElementById('textContent').addEventListener('input', e => {
     if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
       shapes[selectedShapeIndex].text = e.target.value;
@@ -1774,7 +1766,6 @@ if (!isViewMode) {
   });
   document.getElementById('fontSize').addEventListener('change', saveState);
 
-  // 工具切换
   document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
@@ -1782,12 +1773,10 @@ if (!isViewMode) {
       currentTool = btn.dataset.tool;
     });
   });
-  // 撤销/重做/复制/粘贴
   document.getElementById('btnUndo').addEventListener('click', undo);
   document.getElementById('btnRedo').addEventListener('click', redo);
   document.getElementById('btnCopy').addEventListener('click', copyShape);
   document.getElementById('btnPaste').addEventListener('click', pasteShape);
-  // 坐标定位
   document.getElementById('btnLocate').addEventListener('click', () => {
     const x = parseInt(document.getElementById('locateX').value);
     const y = parseInt(document.getElementById('locateY').value);
@@ -1799,7 +1788,7 @@ if (!isViewMode) {
   });
 }
 
-// ---------- 键盘快捷键（仅编辑模式） ----------
+// ---------- 键盘快捷键 ----------
 if (!isViewMode) {
   window.addEventListener('keydown', e => {
     if (e.ctrlKey || e.metaKey) {
@@ -1825,7 +1814,6 @@ if (!isViewMode) {
   });
 }
 
-// 工具栏折叠
 toolbar.addEventListener('click', e => {
   if (isViewMode) return;
   const title = e.target.closest('.section-title');
