@@ -357,7 +357,6 @@
       <div class="modal-content">
         <h3 id="modalTitle">新建地图</h3>
         <input type="text" id="mapNameInput" class="modal-input" placeholder="输入地图名称">
-        <!-- 模板选择下拉（仅星系地图显示） -->
         <div id="templateSelectWrap" style="display: none;">
           <label style="display:block; margin-bottom:8px; color:#7a8b9a;">从模板复制</label>
           <select id="templateSelect" class="modal-select">
@@ -500,7 +499,7 @@
         const typeLabel = map.type === 'template' ? '模板地图' : '星系地图';
         html += `
           <div class="map-card-wrapper">
-            <a href="map_editor.html?mode=view&id=${map.id}" class="map-card">
+            <a href="map/map_editor.html?mode=view&id=${map.id}" class="map-card">
               <div class="map-type">${typeLabel}</div>
               <div class="map-name">${map.name}</div>
               ${map.protocol ? `<div class="map-protocol">协议：${map.protocol}</div>` : ''}
@@ -510,7 +509,7 @@
         // 编辑按钮：星系地图对所有用户显示，模板地图仅管理员显示
         if (map.type === 'galaxy' || isAdmin) {
           html += `
-            <a href="map_editor.html?mode=edit&id=${map.id}" class="edit-map-btn" style="display:flex;" title="编辑地图">✎</a>
+            <a href="map/map_editor.html?mode=edit&id=${map.id}" class="edit-map-btn" style="display:flex;" title="编辑地图">✎</a>
           `;
         }
         // 删除按钮：仅管理员

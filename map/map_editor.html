@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>地图编辑器 - 星河杯</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0c0f;
+      color: #e0e8f0;
+      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      padding: 6px 12px;
+      background: rgba(20,25,30,0.95);
+      border-bottom: 1px solid #2a3340;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .header-left { display: flex; align-items: center; gap: 8px; }
+    .back-btn {
+      background: transparent; border: 1px solid #3a5060;
+      color: #b0c7d6; padding: 4px 10px; font-family: inherit;
+      font-size: 0.8rem; letter-spacing: 1px; cursor: pointer;
+      text-decoration: none;
+    }
+    .map-title { font-size: 1.1rem; font-weight: 700; color: #fff; }
+    .btn {
+      padding: 5px 12px; border: 1px solid #3a5060;
+      background: transparent; color: #b0c7d6;
+      font-family: inherit; letter-spacing: 1px; cursor: pointer;
+      font-size: 0.8rem; margin-left: 4px;
+    }
+    .btn.save { border-color: #ff6a00; color: #ff6a00; }
+    .main-area { display: flex; flex: 1; overflow: hidden; }
+    .canvas-container { flex: 1; overflow: hidden; position: relative; background: #0d1116; cursor: crosshair; }
+    canvas#mainCanvas { position: absolute; top: 0; left: 0; }
+
+    .toolbar {
+      width: 250px;
+      background: rgba(20,25,30,0.95);
+      border-left: 1px solid #2a3340;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+    .tool-section { border-bottom: 1px solid #2a3340; }
+    .section-title {
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      letter-spacing: 1px;
+      color: #7a8b9a;
+      background: #1a222a;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+    }
+    .section-content {
+      padding: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+    .section-content.collapsed { display: none; }
+    .shape-btn {
+      width: 38px; height: 38px;
+      background: #1a1e24;
+      border: 1px solid #2e3b47;
+      padding: 2px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .shape-btn canvas { width: 32px; height: 32px; }
+    .shape-btn:hover { border-color: #ff6a00; }
+    .tool-btn {
+      background: #1a1e24;
+      border: 1px solid #2e3b47;
+      color: #b0c7d6;
+      padding: 5px 10px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .tool-btn.active { border-color: #ff6a00; color: #ff6a00; }
+    .color-picker { width: 100%; height: 28px; border: 1px solid #3a5060; background: #1a1e24; }
+    .range-input { width: 100%; margin: 2px 0; }
+    label { font-size: 0.7rem; color: #7a8b9a; display: block; margin-top: 5px; }
+    .modal-input {
+      width: 100%;
+      background: #1a1e24;
+      border: 1px solid #3a5060;
+      color: #fff;
+      padding: 8px;
+      font-family: inherit;
+    }
+    .btn-delete-shape {
+      background: rgba(255,50,50,0.2); border: 1px solid #ff4444;
+      color: #ff6666; padding: 6px; width: 100%; margin-top: 6px;
+    }
+    @media (max-width: 768px) {
+      .main-area { flex-direction: column; }
+      .toolbar { width: 100%; max-height: 200px; border-left: none; border-top: 1px solid #2a3340; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <a href="strategy_map.html" class="back-btn">← 返回</a>
+      <div class="map-title" id="mapTitle">加载中...</div>
+    </div>
+    <div>
+      <button class="btn save" id="saveBtn">💾 保存</button>
+    </div>
+  </div>
+
+  <div class="main-area">
+    <div class="canvas-container" id="canvasContainer">
+      <canvas id="mainCanvas"></canvas>
+    </div>
+
+    <div class="toolbar" id="toolbar">
+      <div class="tool-section">
+        <div class="section-title" data-collapse="tools">✏️ 绘图工具</div>
+        <div class="section-content" id="drawTools">
+          <button class="tool-btn active" data-tool="select">选择</button>
+          <button class="tool-btn" data-tool="line">直线</button>
+          <button class="tool-btn" data-tool="freehand">自由曲线</button>
+          <button class="tool-btn" data-tool="rect">矩形</button>
+          <button class="tool-btn" data-tool="ellipse">椭圆</button>
+          <button class="tool-btn" data-tool="circle">圆规</button>
+          <button class="tool-btn" id="btnUndo" style="margin-top:6px;">↩️ 撤回</button>
+          <button class="tool-btn" id="btnRedo">↪️ 回撤</button>
+          <button class="tool-btn" id="btnCopy" style="margin-top:4px;">📋 复制</button>
+          <button class="tool-btn" id="btnPaste">📄 粘贴</button>
+        </div>
+      </div>
+
+      <div class="tool-section" id="propertiesSection" style="display:none;">
+        <div class="section-title" data-collapse="props">🎨 形状属性</div>
+        <div class="section-content" style="flex-direction:column;">
+          <label>填充颜色</label>
+          <input type="color" class="color-picker" id="fillColor" value="#00c8ff">
+          <label>填充类型</label>
+          <select id="fillType" style="background:#1a1e24; color:#fff; border:1px solid #3a5060; padding:4px;">
+            <option value="solid">纯色</option>
+            <option value="linear">线性渐变</option>
+            <option value="radial">径向渐变</option>
+            <option value="texture">纹理</option>
+          </select>
+          <div id="textureUpload" style="display:none;">
+            <input type="file" id="textureFile" accept="image/*" style="color:#fff; width:100%;">
+          </div>
+          <label>轮廓颜色</label>
+          <input type="color" class="color-picker" id="strokeColor" value="#ffffff">
+          <label>轮廓粗细</label>
+          <input type="range" class="range-input" id="strokeWidth" min="1" max="20" value="2">
+          <div id="textProps" style="display:none;">
+            <label>文字内容</label>
+            <input type="text" id="textContent" class="modal-input" placeholder="输入文字" style="margin-bottom:5px;">
+            <label>字号</label>
+            <input type="range" class="range-input" id="fontSize" min="8" max="80" value="20">
+          </div>
+          <label>透明度</label>
+          <input type="range" class="range-input" id="opacity" min="0" max="1" step="0.05" value="1">
+          <label>备注（限30字）</label>
+          <input type="text" id="remarkInput" class="modal-input" maxlength="30" placeholder="输入备注...">
+          <button class="btn-delete-shape" id="deleteShapeBtn">🗑️ 删除形状</button>
+        </div>
+      </div>
+
+      <!-- 坐标定位工具 -->
+      <div class="tool-section">
+        <div class="section-title" data-collapse="locate">📍 坐标定位</div>
+        <div class="section-content" style="flex-direction:column;">
+          <label style="margin-top:0;">X 坐标</label>
+          <input type="number" id="locateX" class="modal-input" placeholder="0-10000" min="0" max="10000" value="5000" style="margin-bottom:5px;">
+          <label>Y 坐标</label>
+          <input type="number" id="locateY" class="modal-input" placeholder="0-10000" min="0" max="10000" value="5000" style="margin-bottom:10px;">
+          <button class="btn" id="btnLocate" style="width:100%;">定位</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 引入 Supabase 客户端 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-client.js"></script>
+  <script src="map_editor.js"></script>
+</body>
+</html>
