@@ -204,7 +204,6 @@
 
     /* ========== 移动端横屏优化 ========== */
     @media (max-width: 900px) and (orientation: landscape) {
-      /* 容器内边距减少，充分利用宽度 */
       .container {
         max-width: 98%;
         margin: 10px auto;
@@ -224,7 +223,6 @@
         font-size: 0.8rem;
         margin-bottom: 20px;
       }
-      /* 菜单卡片横排，尺寸适中 */
       .menu-options {
         gap: 15px;
         max-width: 100%;
@@ -248,7 +246,6 @@
         margin-top: 4px;
       }
 
-      /* 模态框在横屏时恢复左右布局，并更宽 */
       .modal-content {
         flex-direction: row;
         width: 90%;
@@ -272,7 +269,6 @@
       }
     }
 
-    /* 更小屏幕的横屏（如手机小屏横屏） */
     @media (max-width: 650px) and (orientation: landscape) {
       .menu-card {
         width: 110px;
@@ -318,7 +314,8 @@
           <div class="menu-card-text">交易所</div>
           <div class="menu-card-desc">资源交易系统</div>
         </div>
-        <a href="games.html" class="menu-card">
+        <!-- ===== 修改点：小游戏链接指向 games/games.html ===== -->
+        <a href="games/games.html" class="menu-card">
           <div class="menu-card-icon">🎮</div>
           <div class="menu-card-text">小游戏</div>
           <div class="menu-card-desc">娱乐模块</div>
