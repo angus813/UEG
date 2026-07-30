@@ -438,16 +438,19 @@ function drawTarget(ctx, shape) {
   ctx.restore();
 }
 
-// ===== 集合（三个弧形箭头循环，固定像素 + 旋转动画 + 倒三角形箭头） =====
+// ===== 集合（三个弧形箭头循环，固定像素 + 旋转动画 + 箭头朝外 + 大小可调） =====
 function drawGather(ctx, shape) {
   const { x, y, w, h, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
 
-  // 固定像素尺寸（不随世界缩放变化）
-  const pixelR = 20 / scale;          // 弧半径
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
-  const headSize = Math.max(3, 6 / scale);
-  const dotSize = Math.max(2, 4 / scale);
+  // 根据 w,h 计算缩放因子（基准尺寸为 100）
+  const sizeFactor = Math.max(0.1, Math.min(w, h) / 100);
+  // 像素尺寸 = 基准像素 * sizeFactor，然后除以 scale 转换为世界坐标
+  const pixelR = 20 * sizeFactor;
+  const radius = pixelR / scale;                     // 弧半径（世界坐标）
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) * sizeFactor / scale);
+  const headSize = Math.max(3, 6 * sizeFactor / scale);
+  const dotSize = Math.max(2, 4 * sizeFactor / scale);
 
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
@@ -464,23 +467,18 @@ function drawGather(ctx, shape) {
 
     // 绘制弧线
     ctx.beginPath();
-    ctx.arc(cx, cy, pixelR, startA, endA);
+    ctx.arc(cx, cy, radius, startA, endA);
     ctx.stroke();
 
-    // 绘制倒三角形箭头（顶点指向圆心）
-    // 末端点坐标
-    const endX = cx + pixelR * Math.cos(endA);
-    const endY = cy + pixelR * Math.sin(endA);
-    // 顶点沿半径向内偏移 headSize（指向圆心）
-    const tipX = cx + (pixelR - headSize) * Math.cos(endA);
-    const tipY = cy + (pixelR - headSize) * Math.sin(endA);
-    // 底边两点在末端沿切线方向偏移
+    // 绘制朝外的三角形箭头（顶点在弧末端，沿切线方向）
+    const tipX = cx + radius * Math.cos(endA);
+    const tipY = cy + radius * Math.sin(endA);
     const tangentAngle = endA + Math.PI / 2;
     const baseOffset = headSize * 0.5;
-    const baseX1 = endX + baseOffset * Math.cos(tangentAngle);
-    const baseY1 = endY + baseOffset * Math.sin(tangentAngle);
-    const baseX2 = endX - baseOffset * Math.cos(tangentAngle);
-    const baseY2 = endY - baseOffset * Math.sin(tangentAngle);
+    const baseX1 = tipX - baseOffset * Math.cos(tangentAngle);
+    const baseY1 = tipY - baseOffset * Math.sin(tangentAngle);
+    const baseX2 = tipX + baseOffset * Math.cos(tangentAngle);
+    const baseY2 = tipY + baseOffset * Math.sin(tangentAngle);
 
     ctx.fillStyle = strokeColor || '#ffffff';
     ctx.beginPath();
@@ -1182,7 +1180,7 @@ function redraw() {
     } else if (isTarget) {
       drawTarget(ctx, shape);        // 内部已除以 scale
     } else if (isGather) {
-      drawGather(ctx, shape);        // 内部已除以 scale，且含动画和倒三角
+      drawGather(ctx, shape);        // 内部已除以 scale（且大小随 w/h 变化）
     } else if (isMine) {
       drawMine(ctx, shape);          // 内部已除以 scale
     } else if (isCaution) {
@@ -1601,9 +1599,20 @@ function hitHandle(shape, wx, wy) {
   return null;
 }
 
-// ---------- 形状碰撞检测 ----------
+// ---------- 形状碰撞检测（修复旋转箭头无法选中） ----------
 function isPointInShape(wx, wy, shape) {
   if (!isShapeEditable(shape)) return false;
+
+  // 对箭头和直线，先处理旋转
+  if ((shape.type === 'line' || shape.type === 'arrow') && shape.rotation) {
+    const cx = (shape.x1 + shape.x2) / 2;
+    const cy = (shape.y1 + shape.y2) / 2;
+    const cos = Math.cos(-shape.rotation);
+    const sin = Math.sin(-shape.rotation);
+    const dx = wx - cx, dy = wy - cy;
+    wx = cx + dx * cos - dy * sin;
+    wy = cy + dx * sin + dy * cos;
+  }
 
   // 椭圆仅轮廓
   if (shape.type === 'ellipse') {
@@ -1627,41 +1636,27 @@ function isPointInShape(wx, wy, shape) {
     return Math.abs(norm - 1) < tolerance;
   }
 
-  // 直线和箭头：精确检测（已修复旋转 bug，并扩大判定范围）
+  // 直线和箭头：精确检测（已处理旋转）
   if (shape.type === 'line' || shape.type === 'arrow') {
     if (shape.x1 === undefined || shape.x2 === undefined) return false;
-    let x1 = shape.x1, y1 = shape.y1;
-    let x2 = shape.x2, y2 = shape.y2;
-    // 如果形状有旋转，将检测点逆旋转到未旋转的坐标系
-    if (shape.rotation) {
-      const cos = Math.cos(-shape.rotation);
-      const sin = Math.sin(-shape.rotation);
-      const cx = (x1 + x2) / 2;
-      const cy = (y1 + y2) / 2;
-      const dx = wx - cx, dy = wy - cy;
-      wx = cx + dx * cos - dy * sin;
-      wy = cy + dx * sin + dy * cos;
-      // 同时将线段端点也逆旋转（但旋转中心与形状中心一致，线段相对中心不变，所以端点无需变换）
-      // 因为旋转是绕形状中心，逆旋转后端点恢复原位置，而检测点已逆旋转，所以直接用原始 x1,y1,x2,y2 即可
-    }
-    // 重新赋值给局部变量以便使用
-    const px = wx, py = wy;
+    const x1 = shape.x1, y1 = shape.y1;
+    const x2 = shape.x2, y2 = shape.y2;
     const dx = x2 - x1;
     const dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len === 0) {
-      const dist = Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
-      const threshold = Math.max(3, (shape.strokeWidth || 2) / 2 + 5) / scale; // 扩大阈值（原+3改为+5）
+      const dist = Math.sqrt((wx - x1) * (wx - x1) + (wy - y1) * (wy - y1));
+      const threshold = Math.max(3, (shape.strokeWidth || 2) / 2 + 5) / scale;
       return dist < threshold;
     }
-    const t = ((px - x1) * dx + (py - y1) * dy) / (len * len);
+    const t = ((wx - x1) * dx + (wy - y1) * dy) / (len * len);
     let projX, projY;
     if (t < 0) { projX = x1; projY = y1; }
     else if (t > 1) { projX = x2; projY = y2; }
     else { projX = x1 + t * dx; projY = y1 + t * dy; }
-    const dist = Math.sqrt((px - projX) * (px - projX) + (py - projY) * (py - projY));
+    const dist = Math.sqrt((wx - projX) * (wx - projX) + (wy - projY) * (wy - projY));
     const strokeWidth = shape.strokeWidth || 2;
-    const threshold = Math.max(3, strokeWidth / 2 + 5) / scale; // 扩大阈值
+    const threshold = Math.max(3, strokeWidth / 2 + 5) / scale;
     return dist < threshold;
   }
 
@@ -1935,13 +1930,11 @@ async function init() {
     createShapeButtons();
   }
 
-  // 启动集合动画
-  startAnimation();
-
   resizeCanvas();
   redraw();
+  startAnimation();  // 启动集合旋转动画
 
-  // 页面卸载时停止动画
+  // 页面关闭时停止动画
   window.addEventListener('beforeunload', stopAnimation);
 }
 
