@@ -39,7 +39,7 @@ let lastTouchDist = 0;
 let isTouchPinch = false;
 
 // ---------- 模板图形只读标记 ----------
-let isGalaxyMode = false;  // 当前地图是否为星系地图
+let isGalaxyMode = false;
 
 // ---------- 当前用户 ----------
 function getCurrentUser() {
@@ -57,16 +57,12 @@ function saveState() {
   history = history.slice(0, historyIndex + 1);
   const snapshot = JSON.parse(JSON.stringify(shapes));
   history.push(snapshot);
-  if (history.length > MAX_HISTORY) {
-    history.shift();
-  } else {
-    historyIndex++;
-  }
+  if (history.length > MAX_HISTORY) history.shift();
+  else historyIndex++;
 }
 
 function undo() {
-  if (isViewMode) return;
-  if (historyIndex <= 0) return;
+  if (isViewMode || historyIndex <= 0) return;
   historyIndex--;
   shapes = JSON.parse(JSON.stringify(history[historyIndex]));
   selectedShapeIndex = -1;
@@ -76,8 +72,7 @@ function undo() {
 }
 
 function redo() {
-  if (isViewMode) return;
-  if (historyIndex >= history.length - 1) return;
+  if (isViewMode || historyIndex >= history.length - 1) return;
   historyIndex++;
   shapes = JSON.parse(JSON.stringify(history[historyIndex]));
   selectedShapeIndex = -1;
@@ -101,18 +96,11 @@ function toScreen(wx, wy) {
 }
 
 function clampOffset() {
-  const worldVisibleW = canvas.width / scale;
-  const worldVisibleH = canvas.height / scale;
-  if (worldVisibleW > WORLD_MAX - WORLD_MIN) {
-    offsetX = (WORLD_MIN + WORLD_MAX - worldVisibleW) / 2;
-  } else {
-    offsetX = Math.max(WORLD_MIN, Math.min(WORLD_MAX - worldVisibleW, offsetX));
-  }
-  if (worldVisibleH > WORLD_MAX - WORLD_MIN) {
-    offsetY = (WORLD_MIN + WORLD_MAX - worldVisibleH) / 2;
-  } else {
-    offsetY = Math.max(WORLD_MIN, Math.min(WORLD_MAX - worldVisibleH, offsetY));
-  }
+  const ww = canvas.width / scale, hh = canvas.height / scale;
+  if (ww > WORLD_MAX - WORLD_MIN) offsetX = (WORLD_MIN + WORLD_MAX - ww) / 2;
+  else offsetX = Math.max(WORLD_MIN, Math.min(WORLD_MAX - ww, offsetX));
+  if (hh > WORLD_MAX - WORLD_MIN) offsetY = (WORLD_MIN + WORLD_MAX - hh) / 2;
+  else offsetY = Math.max(WORLD_MIN, Math.min(WORLD_MAX - hh, offsetY));
 }
 
 function clampScale(newScale) {
@@ -121,7 +109,7 @@ function clampScale(newScale) {
   return Math.max(minScale, Math.min(maxScale, newScale));
 }
 
-// ---------- 精确包围盒计算 ----------
+// ---------- 包围盒 ----------
 function getShapeBounds(shape) {
   const { type } = shape;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -187,7 +175,6 @@ const ShapeGenerator = {
       }
       return p;
     }
-    // 所有新图形以及原特殊图形均使用矩形包围盒（用于碰撞检测）
     if (type === 'text' || type === 'verticalText' || type === 'city' || type === 'frame' || type === 'brokenFrame' ||
         type === 'defenseLine' || type === 'target' || type === 'gather' || type === 'mine' || type === 'caution' || type === 'focus' || type === 'pin') {
       p.rect(x, y, w, h);
@@ -242,7 +229,7 @@ function drawStar(p, cx,cy,outerR,innerR,points) { let ang=-Math.PI/2; p.moveTo(
 function drawCross(p, x,y,w,h) { p.moveTo(x+w*0.35, y); p.lineTo(x+w*0.65, y); p.lineTo(x+w*0.65, y+h*0.35); p.lineTo(x+w, y+h*0.35); p.lineTo(x+w, y+h*0.65); p.lineTo(x+w*0.65, y+h*0.65); p.lineTo(x+w*0.65, y+h); p.lineTo(x+w*0.35, y+h); p.lineTo(x+w*0.35, y+h*0.65); p.lineTo(x, y+h*0.65); p.lineTo(x, y+h*0.35); p.lineTo(x+w*0.35, y+h*0.35); p.closePath(); }
 function drawPlus(p, cx,cy,armW,armH) { p.moveTo(cx-armW*0.3, cy-armH); p.lineTo(cx+armW*0.3, cy-armH); p.lineTo(cx+armW*0.3, cy-armW*0.3); p.lineTo(cx+armW, cy-armW*0.3); p.lineTo(cx+armW, cy+armW*0.3); p.lineTo(cx+armW*0.3, cy+armW*0.3); p.lineTo(cx+armW*0.3, cy+armH); p.lineTo(cx-armW*0.3, cy+armH); p.lineTo(cx-armW*0.3, cy+armW*0.3); p.lineTo(cx-armW, cy+armW*0.3); p.lineTo(cx-armW, cy-armW*0.3); p.lineTo(cx-armW*0.3, cy-armW*0.3); p.closePath(); }
 
-// ---------- 空心弧绘制 ----------
+// ---------- 空心弧 ----------
 function drawArcShape(ctx, shape) {
   const { x, y, w, h, strokeColor, strokeWidth, opacity, startAngle = 0, endAngle = Math.PI } = shape;
   const cx = x + w/2, cy = y + h/2;
@@ -257,7 +244,7 @@ function drawArcShape(ctx, shape) {
   ctx.restore();
 }
 
-// ---------- 城市三层绘制 ----------
+// ---------- 城市 ----------
 function drawCityShape(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const thickness = Math.max(w * 0.06, 1.5 / scale);
@@ -274,25 +261,21 @@ function drawCityShape(ctx, shape) {
     w: w - 4 * thickness,
     h: h - 4 * thickness
   };
-
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
-
   ctx.fillStyle = fillColor || '#ffcc00';
   ctx.beginPath();
   ctx.rect(borderRect.x, borderRect.y, borderRect.w, borderRect.h);
   ctx.rect(holeRect.x, holeRect.y, holeRect.w, holeRect.h);
   ctx.fill('evenodd');
-
   ctx.fillStyle = strokeColor || '#ffcc00';
   ctx.beginPath();
   ctx.rect(centerRect.x, centerRect.y, centerRect.w, centerRect.h);
   ctx.fill();
-
   ctx.restore();
 }
 
-// ---------- 黄色方形边框 ----------
+// ---------- 边框 ----------
 function drawFrameShape(ctx, shape) {
   const { x, y, w, h, strokeColor, strokeWidth, opacity } = shape;
   ctx.save();
@@ -305,38 +288,31 @@ function drawFrameShape(ctx, shape) {
   ctx.restore();
 }
 
-// ---------- 左右断开方框 ----------
 function drawBrokenFrameShape(ctx, shape) {
   const { x, y, w, h, strokeColor, strokeWidth, opacity } = shape;
   const gapSize = Math.min(w, h) * 0.2;
   const halfGap = gapSize / 2;
   const cx = x + w/2;
   const cy = y + h/2;
-
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.strokeStyle = strokeColor || '#ffcc00';
   ctx.lineWidth = Math.max(1.5 / scale, (strokeWidth || 4) / scale);
   ctx.beginPath();
-
   ctx.moveTo(x, y);
   ctx.lineTo(x + w, y);
-
   ctx.lineTo(x + w, cy - halfGap);
   ctx.moveTo(x + w, cy + halfGap);
   ctx.lineTo(x + w, y + h);
-
   ctx.lineTo(x, y + h);
-
   ctx.lineTo(x, cy + halfGap);
   ctx.moveTo(x, cy - halfGap);
   ctx.lineTo(x, y);
-
   ctx.stroke();
   ctx.restore();
 }
 
-// ---------- 绘制箭头距离 ----------
+// ---------- 箭头距离 ----------
 function drawArrowDistance(ctx, shape) {
   if (shape.type !== 'arrow' || shape.x1 === undefined) return;
   const x1 = shape.x1, y1 = shape.y1, x2 = shape.x2, y2 = shape.y2;
@@ -361,30 +337,266 @@ function drawArrowDistance(ctx, shape) {
   ctx.restore();
 }
 
-// ---------- 判断形状是否可编辑 ----------
+// ---------- 可编辑性 ----------
 function isShapeEditable(shape) {
-  // 如果是星系地图且形状有 fromTemplate 标记，则不可编辑
-  if (isGalaxyMode && shape.fromTemplate === true) {
-    return false;
-  }
+  if (isGalaxyMode && shape.fromTemplate === true) return false;
   return true;
 }
 
-// ---------- 判断是否可以删除形状 ----------
+// ==================== 修正图形样式（固定大小，除以scale） ====================
+
+// 防御线（水平线+垛口，固定像素大小）
+function drawDefenseLine(ctx, shape) {
+  const { x, y, w, h, strokeColor, opacity } = shape;
+  const cy = y + h/2;
+  const lineWidth = Math.max(2, (shape.strokeWidth || 2) / scale);
+  const blockW = Math.max(4, 10 / scale);
+  const blockH = Math.max(4, 12 / scale);
+  const count = 8;
+  const step = w / (count - 1); // 利用世界宽度均匀分布，但块大小固定
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  ctx.moveTo(x + 4, cy);
+  ctx.lineTo(x + w - 4, cy);
+  ctx.stroke();
+  for (let i = 0; i < count; i++) {
+    const px = x + i * step;
+    ctx.fillStyle = strokeColor || '#ffffff';
+    ctx.fillRect(px - blockW/2, cy - blockH/2 - 2/scale, blockW, blockH/2);
+    ctx.fillRect(px - blockW/4, cy - blockH/2 - 5/scale, blockW/2, 3/scale);
+  }
+  ctx.restore();
+}
+
+// 目标（外圆+中心点+四个倒三角指向中心，固定大小）
+function drawTarget(ctx, shape) {
+  const { x, y, w, h, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const r = Math.min(w, h) / 2 - 4;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  const triSize = Math.max(4, 10 / scale);
+  const dotSize = Math.max(2, 4 / scale);
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = strokeColor || '#ffffff';
+  ctx.beginPath();
+  ctx.arc(cx, cy, dotSize, 0, Math.PI * 2);
+  ctx.fill();
+  const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  dirs.forEach(([dx, dy]) => {
+    const px = cx + dx * (r - 4);
+    const py = cy + dy * (r - 4);
+    ctx.fillStyle = strokeColor || '#ffffff';
+    ctx.beginPath();
+    if (dx === 0 && dy === -1) { // 上，倒三角顶点朝下（指向中心）
+      ctx.moveTo(px, py + triSize);
+      ctx.lineTo(px - triSize, py - triSize);
+      ctx.lineTo(px + triSize, py - triSize);
+    } else if (dx === 1 && dy === 0) { // 右，顶点朝左
+      ctx.moveTo(px - triSize, py);
+      ctx.lineTo(px + triSize, py - triSize);
+      ctx.lineTo(px + triSize, py + triSize);
+    } else if (dx === 0 && dy === 1) { // 下，顶点朝上
+      ctx.moveTo(px, py - triSize);
+      ctx.lineTo(px - triSize, py + triSize);
+      ctx.lineTo(px + triSize, py + triSize);
+    } else { // 左，顶点朝右
+      ctx.moveTo(px + triSize, py);
+      ctx.lineTo(px - triSize, py - triSize);
+      ctx.lineTo(px - triSize, py + triSize);
+    }
+    ctx.closePath();
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+// 集合（三个弧形箭头循环，前端带三角，中心有圆点，固定大小）
+function drawGather(ctx, shape) {
+  const { x, y, w, h, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const r = Math.min(w, h) / 2 - 4;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  const headSize = Math.max(3, 6 / scale);
+  const dotSize = Math.max(2, 4 / scale);
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = lineWidth;
+  const count = 3;
+  for (let i = 0; i < count; i++) {
+    const angle = i * 2 * Math.PI / count - Math.PI / 2;
+    const startA = angle - 0.5;
+    const endA = angle + 0.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startA, endA);
+    ctx.stroke();
+    // 箭头头在末端（前进方向）
+    const endX = cx + r * Math.cos(endA);
+    const endY = cy + r * Math.sin(endA);
+    const ang = endA + Math.PI / 2;
+    ctx.fillStyle = strokeColor || '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(endX + headSize * Math.cos(ang - 0.5), endY + headSize * Math.sin(ang - 0.5));
+    ctx.lineTo(endX + headSize * Math.cos(ang + 0.5), endY + headSize * Math.sin(ang + 0.5));
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = strokeColor || '#ffffff';
+  ctx.beginPath();
+  ctx.arc(cx, cy, dotSize, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// 矿区（3D立方体，固定大小）
+function drawMine(ctx, shape) {
+  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const size = Math.min(w, h) * 0.35; // 使用世界坐标尺寸，但乘以scale后固定？实际上我们希望固定像素大小，所以应该用固定像素值，但这里使用相对大小会随缩放变化。改为固定像素：const size = 30 / scale; 
+  // 修正：为了固定像素，应该用固定像素值，但x,y坐标使用世界坐标，而size使用像素值除以scale。
+  const pixelSize = 30 / scale;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = lineWidth;
+  if (fillColor && fillColor !== 'none') {
+    ctx.fillStyle = fillColor;
+    ctx.globalAlpha = 0.3;
+    ctx.fillRect(cx - pixelSize, cy - pixelSize, pixelSize * 2, pixelSize * 2);
+    ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  }
+  ctx.strokeRect(cx - pixelSize, cy - pixelSize, pixelSize * 2, pixelSize * 2);
+  ctx.beginPath();
+  ctx.moveTo(cx + pixelSize, cy - pixelSize);
+  ctx.lineTo(cx + pixelSize + pixelSize * 0.5, cy - pixelSize - pixelSize * 0.3);
+  ctx.lineTo(cx + pixelSize + pixelSize * 0.5, cy + pixelSize - pixelSize * 0.3);
+  ctx.lineTo(cx + pixelSize, cy + pixelSize);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx - pixelSize, cy - pixelSize);
+  ctx.lineTo(cx - pixelSize + pixelSize * 0.5, cy - pixelSize - pixelSize * 0.3);
+  ctx.lineTo(cx + pixelSize + pixelSize * 0.5, cy - pixelSize - pixelSize * 0.3);
+  ctx.lineTo(cx + pixelSize, cy - pixelSize);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 注意（两个倒三角嵌套，小的等腰，边距相等，固定大小）
+function drawCaution(ctx, shape) {
+  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const outer = Math.min(w, h) / 2 - 4; // 使用世界坐标尺寸，改为固定像素
+  const pixelOuter = 20 / scale; // 固定像素
+  const pixelInner = pixelOuter * 0.7;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.fillStyle = fillColor || '#ff4444';
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = lineWidth;
+  // 外三角（倒三角，顶点朝下）
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + pixelOuter);
+  ctx.lineTo(cx - pixelOuter, cy - pixelOuter);
+  ctx.lineTo(cx + pixelOuter, cy - pixelOuter);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // 内三角
+  ctx.fillStyle = '#0a0c0f';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + pixelInner);
+  ctx.lineTo(cx - pixelInner, cy - pixelInner);
+  ctx.lineTo(cx + pixelInner, cy - pixelInner);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 重点（两个正菱形嵌套，固定大小）
+function drawFocus(ctx, shape) {
+  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const pixelOuter = 20 / scale;
+  const pixelInner = pixelOuter * 0.7;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.fillStyle = fillColor || '#ffaa00';
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = lineWidth;
+  // 外菱形
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - pixelOuter);
+  ctx.lineTo(cx + pixelOuter, cy);
+  ctx.lineTo(cx, cy + pixelOuter);
+  ctx.lineTo(cx - pixelOuter, cy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // 内菱形
+  ctx.fillStyle = '#0a0c0f';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - pixelInner);
+  ctx.lineTo(cx + pixelInner, cy);
+  ctx.lineTo(cx, cy + pixelInner);
+  ctx.lineTo(cx - pixelInner, cy);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+// 标记针（正方形+垂直线，固定大小）
+function drawPin(ctx, shape) {
+  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
+  const cx = x + w/2, cy = y + h/2;
+  const pixelSize = 15 / scale;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  ctx.save();
+  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
+  ctx.fillStyle = fillColor || '#66dd88';
+  ctx.strokeStyle = strokeColor || '#ffffff';
+  ctx.lineWidth = lineWidth;
+  const sqSize = pixelSize * 1.2;
+  ctx.fillRect(cx - sqSize/2, cy - sqSize, sqSize, sqSize);
+  ctx.strokeRect(cx - sqSize/2, cy - sqSize, sqSize, sqSize);
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + 2);
+  ctx.lineTo(cx, cy + h/2 - 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// ---------- 判断形状是否可编辑 ----------
+function isShapeEditable(shape) {
+  if (isGalaxyMode && shape.fromTemplate === true) return false;
+  return true;
+}
+
+// ---------- 判断是否可以删除 ----------
 function canDeleteShape(shape) {
-  // 模板图形不可删除
   if (shape.fromTemplate === true) return false;
   const user = getCurrentUser();
   if (!user) return false;
-  // 如果是管理员，可以删除任何非模板图形
   if (user.isAdmin) return true;
-  // 普通用户只能删除自己创建的图形
   return shape.creator === user.username;
 }
 
 // ---------- 形状预设（根据地图类型动态生成） ----------
 function getShapePresets() {
-  // 基础预设（所有地图共有）
   const base = [
     { category: '矩形', shapes: [{ type: 'rect', name: '矩形' }, { type: 'roundRect', name: '圆角矩形' }] },
     { category: '基本形状', shapes: [
@@ -399,8 +611,6 @@ function getShapePresets() {
       { type: 'arrow', name: '箭头' }
     ]}
   ];
-
-  // 如果是星系地图，用“标记”分类替换“设施”
   if (isGalaxyMode) {
     base.push({
       category: '标记',
@@ -415,7 +625,6 @@ function getShapePresets() {
       ]
     });
   } else {
-    // 模板地图保留“设施”
     base.push({
       category: '设施',
       shapes: [
@@ -470,17 +679,16 @@ function createShapeButtons() {
   });
 }
 
-// ---------- 绘制工具栏图标（包含所有新图形） ----------
+// ---------- 绘制工具栏图标（固定32x32，无需调整） ----------
 function drawShapeIcon(ictx, type, x, y, w, h) {
   const shape = { type, x, y, w, h };
   if (type === 'arrow') {
     shape.x1 = x; shape.y1 = y; shape.x2 = x+w; shape.y2 = y+h;
   } else if (type === 'text') {
-    shape.text = 'T';
-    shape.fontSize = 12;
+    shape.text = 'T'; shape.fontSize = 12;
   }
 
-  // 处理特殊图形（城市、框架等）
+  // 特殊图形
   if (type === 'city') {
     const ctxIcon = ictx;
     ctxIcon.save();
@@ -538,7 +746,7 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
     return;
   }
 
-  // ---- 新增标记图形图标绘制（修正后） ----
+  // 标记图形（固定图标，使用像素值）
   if (type === 'defenseLine') {
     const cx = x + w/2, cy = y + h/2;
     ictx.strokeStyle = '#ffffff';
@@ -575,19 +783,19 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
       const py = cy + dy * (r - 3);
       ictx.fillStyle = '#00c8ff';
       ictx.beginPath();
-      if (dx === 0 && dy === -1) { // 上，倒三角顶点朝下（指向中心）
+      if (dx === 0 && dy === -1) { // 上
         ictx.moveTo(px, py + size);
         ictx.lineTo(px - size, py - size);
         ictx.lineTo(px + size, py - size);
-      } else if (dx === 1 && dy === 0) { // 右，顶点朝左
+      } else if (dx === 1 && dy === 0) { // 右
         ictx.moveTo(px - size, py);
         ictx.lineTo(px + size, py - size);
         ictx.lineTo(px + size, py + size);
-      } else if (dx === 0 && dy === 1) { // 下，顶点朝上
+      } else if (dx === 0 && dy === 1) { // 下
         ictx.moveTo(px, py - size);
         ictx.lineTo(px - size, py + size);
         ictx.lineTo(px + size, py + size);
-      } else { // 左，顶点朝右
+      } else { // 左
         ictx.moveTo(px + size, py);
         ictx.lineTo(px - size, py - size);
         ictx.lineTo(px - size, py + size);
@@ -647,7 +855,7 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
   if (type === 'caution') {
     const cx = x + w/2, cy = y + h/2;
     const outer = Math.min(w,h)/2 - 2;
-    const inner = outer * 0.7; // 靠近外三角
+    const inner = outer * 0.7;
     ictx.fillStyle = '#ff4444';
     ictx.strokeStyle = '#ffffff';
     ictx.lineWidth = 1.5;
@@ -671,7 +879,7 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
   if (type === 'focus') {
     const cx = x + w/2, cy = y + h/2;
     const outer = Math.min(w,h)/2 * 0.6;
-    const inner = outer * 0.7; // 靠近外菱形
+    const inner = outer * 0.7;
     ictx.fillStyle = '#ffaa00';
     ictx.strokeStyle = '#ffffff';
     ictx.lineWidth = 1.5;
@@ -709,12 +917,12 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
     return;
   }
 
-  // 其他普通形状使用路径生成
+  // 其他通用形状
   const p = ShapeGenerator.getPath(shape);
   ictx.fill(p); ictx.stroke(p);
 }
 
-// ---------- 创建形状对象（支持箭头、fromTemplate、creator、remark） ----------
+// ---------- 创建形状对象 ----------
 function createShape(type, x, y, w, h, props={}) {
   const user = getCurrentUser();
   const defaults = {
@@ -769,7 +977,9 @@ function createShape(type, x, y, w, h, props={}) {
   }
   return Object.assign(defaults, props);
 }
+// ========== 下半部分：复制粘贴、定位、渲染、事件、Supabase交互 ==========
 
+// ---------- 复制粘贴功能 ----------
 function copyShape() {
   if (isViewMode) return;
   if (selectedShapeIndex === -1) {
@@ -791,7 +1001,7 @@ function pasteShape() {
     return;
   }
   const newShape = JSON.parse(JSON.stringify(clipboardShape));
-  // 粘贴后的新形状默认可编辑（fromTemplate: false）
+  // 粘贴后的新形状默认可编辑
   newShape.fromTemplate = false;
   const offset = 50;
   if (newShape.x1 !== undefined) {
@@ -839,220 +1049,6 @@ function resizeCanvas() {
   redraw();
 }
 window.addEventListener('resize', resizeCanvas);
-
-// ---------- 特殊标记图形绘制函数（用于画布渲染） ----------
-function drawDefenseLine(ctx, shape) {
-  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
-  const cy = y + h/2;
-  ctx.save();
-  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
-  if (fillColor && fillColor !== 'none') {
-    ctx.fillStyle = fillColor;
-    ctx.globalAlpha = 0.15;
-    ctx.fillRect(x, y, w, h);
-    ctx.globalAlpha = opacity !== undefined ? opacity : 1;
-  }
-  ctx.strokeStyle = strokeColor || '#ffffff';
-  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
-  ctx.beginPath();
-  ctx.moveTo(x + 4, cy);
-  ctx.lineTo(x + w - 4, cy);
-  ctx.stroke();
-  const count = 8;
-  const step = (w - 8) / (count - 1);
-  for (let i = 0; i < count; i++) {
-    const px = x + 4 + i * step;
-    const blockW = Math.max(3, 8 / scale);
-    const blockH = Math.max(4, 10 / scale);
-    ctx.fillStyle = strokeColor || '#ffffff';
-    ctx.fillRect(px - blockW/2, cy - blockH/2 - 2/scale, blockW, blockH/2);
-    ctx.fillRect(px - blockW/4, cy - blockH/2 - 5/scale, blockW/2, 3/scale);
-  }
-  ctx.restore();
-}
-
-function drawTarget(ctx, shape) {
-  const { x, y, w, h, strokeColor, opacity } = shape;
-  const cx = x + w/2, cy = y + h/2;
-  const r = Math.min(w, h) / 2 - 4;
-  ctx.save();
-  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
-  ctx.strokeStyle = strokeColor || '#ffffff';
-  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = strokeColor || '#ffffff';
-  ctx.beginPath();
-  ctx.arc(cx, cy, Math.max(2, 4 / scale), 0, Math.PI * 2);
-  ctx.fill();
-  const dirs = [[0, -1], [1, 0], [0, 1], [-1, 0]];
-  const triSize = Math.max(5, 10 / scale);
-  dirs.forEach(([dx, dy]) => {
-    const px = cx + dx * (r - 4);
-    const py = cy + dy * (r - 4);
-    ctx.fillStyle = strokeColor || '#ffffff';
-    ctx.beginPath();
-    if (dx === 0 && dy === -1) { // 上，倒三角顶点朝下（指向中心）
-      ctx.moveTo(px, py + triSize);
-      ctx.lineTo(px - triSize, py - triSize);
-      ctx.lineTo(px + triSize, py - triSize);
-    } else if (dx === 1 && dy === 0) { // 右，顶点朝左
-      ctx.moveTo(px - triSize, py);
-      ctx.lineTo(px + triSize, py - triSize);
-      ctx.lineTo(px + triSize, py + triSize);
-    } else if (dx === 0 && dy === 1) { // 下，顶点朝上
-      ctx.moveTo(px, py - triSize);
-      ctx.lineTo(px - triSize, py + triSize);
-      ctx.lineTo(px + triSize, py + triSize);
-    } else { // 左，顶点朝右
-      ctx.moveTo(px + triSize, py);
-      ctx.lineTo(px - triSize, py - triSize);
-      ctx.lineTo(px - triSize, py + triSize);
-    }
-    ctx.closePath();
-    ctx.fill();
-  });
-  ctx.restore();
-}
-
-function drawGather(ctx, shape) {
-  const { x, y, w, h, strokeColor, opacity } = shape;
-  const cx = x + w/2, cy = y + h/2;
-  const r = Math.min(w, h) / 2 - 4;
-  ctx.save();
-  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
-  ctx.strokeStyle = strokeColor || '#ffffff';
-  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
-  const count = 3;
-  for (let i = 0; i < count; i++) {
-    const angle = i * 2 * Math.PI / count - Math.PI / 2;
-    const startA = angle - 0.5;
-    const endA = angle + 0.5;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, startA, endA);
-    ctx.stroke();
-    const endX = cx + r * Math.cos(endA);
-    const endY = cy + r * Math.sin(endA);
-    const ang = endA + Math.PI / 2;
-    const headSize = Math.max(3, 6 / scale);
-    ctx.fillStyle = strokeColor || '#ffffff';
-    ctx.beginPath();
-    ctx.moveTo(endX, endY);
-    ctx.lineTo(endX + headSize * Math.cos(ang - 0.5), endY + headSize * Math.sin(ang - 0.5));
-    ctx.lineTo(endX + headSize * Math.cos(ang + 0.5), endY + headSize * Math.sin(ang + 0.5));
-    ctx.closePath();
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
-function drawMine(ctx, shape) {
-  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
-  const cx = x + w/2, cy = y + h/2;
-  const size = Math.min(w, h) * 0.35;
-  ctx.save();
-  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
-  ctx.strokeStyle = strokeColor || '#ffffff';
-  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
-  if (fillColor && fillColor !== 'none') {
-    ctx.fillStyle = fillColor;
-    ctx.globalAlpha = 0.3;
-    ctx.fillRect(cx - size, cy - size, size * 2, size * 2);
-    ctx.globalAlpha = opacity !== undefined ? opacity : 1;
-  }
-  ctx.strokeRect(cx - size, cy - size, size * 2, size * 2);
-  ctx.beginPath();
-  ctx.moveTo(cx + size, cy - size);
-  ctx.lineTo(cx + size + size * 0.5, cy - size - size * 0.3);
-  ctx.lineTo(cx + size + size * 0.5, cy + size - size * 0.3);
-  ctx.lineTo(cx + size, cy + size);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(cx - size, cy - size);
-  ctx.lineTo(cx - size + size * 0.5, cy - size - size * 0.3);
-  ctx.lineTo(cx + size + size * 0.5, cy - size - size * 0.3);
-  ctx.lineTo(cx + size, cy - size);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawCaution(ctx, shape) {
-  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
-  const cx = x + w/2, cy = y + h/2;
-  const outer = Math.min(w, h) / 2 - 4;
-  const inner = outer * 0.7;
-  ctx.save();
-  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
-  ctx.fillStyle = fillColor || '#ff4444';
-  ctx.strokeStyle = strokeColor || '#ffffff';
-  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
-  ctx.beginPath();
-  ctx.moveTo(cx, cy + outer);
-  ctx.lineTo(cx - outer, cy - outer);
-  ctx.lineTo(cx + outer, cy - outer);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = '#0a0c0f';
-  ctx.beginPath();
-  ctx.moveTo(cx, cy + inner);
-  ctx.lineTo(cx - inner, cy - inner);
-  ctx.lineTo(cx + inner, cy - inner);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawFocus(ctx, shape) {
-  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
-  const cx = x + w/2, cy = y + h/2;
-  const outer = Math.min(w, h) / 2 * 0.7;
-  const inner = outer * 0.7;
-  ctx.save();
-  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
-  ctx.fillStyle = fillColor || '#ffaa00';
-  ctx.strokeStyle = strokeColor || '#ffffff';
-  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - outer);
-  ctx.lineTo(cx + outer, cy);
-  ctx.lineTo(cx, cy + outer);
-  ctx.lineTo(cx - outer, cy);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = '#0a0c0f';
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - inner);
-  ctx.lineTo(cx + inner, cy);
-  ctx.lineTo(cx, cy + inner);
-  ctx.lineTo(cx - inner, cy);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawPin(ctx, shape) {
-  const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
-  const cx = x + w/2, cy = y + h/2;
-  const size = Math.min(w, h) * 0.25;
-  ctx.save();
-  ctx.globalAlpha = opacity !== undefined ? opacity : 1;
-  ctx.fillStyle = fillColor || '#66dd88';
-  ctx.strokeStyle = strokeColor || '#ffffff';
-  ctx.lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
-  const sqSize = size * 1.2;
-  ctx.fillRect(cx - sqSize/2, cy - sqSize, sqSize, sqSize);
-  ctx.strokeRect(cx - sqSize/2, cy - sqSize, sqSize, sqSize);
-  ctx.beginPath();
-  ctx.moveTo(cx, cy + 2);
-  ctx.lineTo(cx, cy + h/2 - 2);
-  ctx.stroke();
-  ctx.restore();
-}
 
 // ---------- 绘制用户名+备注标签 ----------
 function drawShapeLabel(ctx, shape) {
@@ -1142,6 +1138,7 @@ function redraw() {
       ctx.translate(-cx, -cy);
     }
 
+    // 特殊图形调用独立绘制函数
     if (isDefense) {
       drawDefenseLine(ctx, shape);
     } else if (isTarget) {
@@ -1157,6 +1154,7 @@ function redraw() {
     } else if (isPin) {
       drawPin(ctx, shape);
     } else {
+      // 通用形状
       const path = ShapeGenerator.getPath(shape);
       ctx.globalAlpha = shape.opacity !== undefined ? shape.opacity : 1;
       if (shape.fill !== 'none' && !isText && !isFrame && !isBrokenFrame && !isArc) {
@@ -1175,6 +1173,7 @@ function redraw() {
         ctx.fill(path);
       }
 
+      // 描边
       if (isCity) {
         // 已绘制
       } else if (isFrame) {
@@ -1194,11 +1193,15 @@ function redraw() {
     }
     ctx.restore();
 
+    // 文本绘制
     if (isText && shape.text) drawTextOnCanvas(shape);
+    // 箭头距离
     if (shape.type === 'arrow') drawArrowDistance(ctx, shape);
+    // 选中手柄（仅可编辑图形）
     if (!isViewMode && index === selectedShapeIndex && isShapeEditable(shape)) {
       drawSelectionHandles(shape);
     }
+    // 用户名+备注标签
     drawShapeLabel(ctx, shape);
   });
 
@@ -1560,11 +1563,11 @@ function hitHandle(shape, wx, wy) {
   return null;
 }
 
-// 椭圆仅轮廓可选中（同时检查可编辑性）
+// ---------- 形状碰撞检测（含椭圆轮廓、直线精确检测） ----------
 function isPointInShape(wx, wy, shape) {
   if (!isShapeEditable(shape)) return false;
 
-  // ---- 椭圆特殊处理（仅轮廓） ----
+  // 椭圆特殊处理（仅轮廓）
   if (shape.type === 'ellipse') {
     const cx = shape.x + shape.w / 2;
     const cy = shape.y + shape.h / 2;
@@ -1586,7 +1589,7 @@ function isPointInShape(wx, wy, shape) {
     return Math.abs(norm - 1) < tolerance;
   }
 
-  // ---- 直线 和 箭头：精确计算点到线段的距离 ----
+  // 直线和箭头：精确计算点到线段距离
   if (shape.type === 'line' || shape.type === 'arrow') {
     if (shape.x1 === undefined || shape.x2 === undefined) return false;
     const x1 = shape.x1, y1 = shape.y1;
@@ -1601,20 +1604,16 @@ function isPointInShape(wx, wy, shape) {
     }
     const t = ((wx - x1) * dx + (wy - y1) * dy) / (len * len);
     let projX, projY;
-    if (t < 0) {
-      projX = x1; projY = y1;
-    } else if (t > 1) {
-      projX = x2; projY = y2;
-    } else {
-      projX = x1 + t * dx; projY = y1 + t * dy;
-    }
+    if (t < 0) { projX = x1; projY = y1; }
+    else if (t > 1) { projX = x2; projY = y2; }
+    else { projX = x1 + t * dx; projY = y1 + t * dy; }
     const dist = Math.sqrt((wx - projX) * (wx - projX) + (wy - projY) * (wy - projY));
     const strokeWidth = shape.strokeWidth || 2;
     const threshold = Math.max(3, strokeWidth / 2 + 3) / scale;
     return dist < threshold;
   }
 
-  // ---- 其他形状（矩形、圆形、多边形、自由曲线等）使用路径检测 ----
+  // 其他形状使用路径检测
   const path = ShapeGenerator.getPath(shape);
   ctx.save();
   ctx.translate(0, canvas.height);
@@ -1654,12 +1653,14 @@ function loadShapeProperties(shape) {
     textProps.style.display = 'none';
   }
 
+  // 备注字段
   const remarkInput = document.getElementById('remarkInput');
   if (remarkInput) {
     remarkInput.value = shape.remark || '';
     remarkInput.disabled = !editable;
   }
 
+  // 禁用/启用控件
   const inputs = ['fillColor', 'fillType', 'strokeColor', 'strokeWidth', 'opacity', 'textContent', 'fontSize'];
   inputs.forEach(id => {
     const el = document.getElementById(id);
@@ -1683,6 +1684,7 @@ container.addEventListener('wheel', e => {
 
 // ---------- UI 事件（仅编辑模式） ----------
 if (!isViewMode) {
+  // 填充类型
   document.getElementById('fillType').addEventListener('change', e => {
     document.getElementById('textureUpload').style.display = e.target.value === 'texture' ? 'block' : 'none';
     if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
@@ -1690,6 +1692,7 @@ if (!isViewMode) {
       redraw();
     }
   });
+  // 颜色、线宽、透明度
   document.getElementById('fillColor').addEventListener('input', e => {
     if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
       shapes[selectedShapeIndex].fillColor = e.target.value;
@@ -1714,6 +1717,7 @@ if (!isViewMode) {
       redraw();
     }
   });
+  // 备注输入
   document.getElementById('remarkInput').addEventListener('input', function() {
     if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
       const val = this.value.slice(0, 30);
@@ -1722,7 +1726,7 @@ if (!isViewMode) {
     }
   });
 
-  // ---------- 删除形状（使用 canDeleteShape 权限控制） ----------
+  // 删除形状（使用 canDeleteShape 权限控制）
   document.getElementById('deleteShapeBtn').addEventListener('click', () => {
     if (selectedShapeIndex !== -1 && canDeleteShape(shapes[selectedShapeIndex])) {
       shapes.splice(selectedShapeIndex, 1);
@@ -1736,6 +1740,7 @@ if (!isViewMode) {
     }
   });
 
+  // 纹理上传
   document.getElementById('textureFile').addEventListener('change', e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1753,6 +1758,7 @@ if (!isViewMode) {
     };
     reader.readAsDataURL(file);
   });
+  // 文本内容
   document.getElementById('textContent').addEventListener('input', e => {
     if (selectedShapeIndex !== -1 && isShapeEditable(shapes[selectedShapeIndex])) {
       shapes[selectedShapeIndex].text = e.target.value;
@@ -1768,6 +1774,7 @@ if (!isViewMode) {
   });
   document.getElementById('fontSize').addEventListener('change', saveState);
 
+  // 工具切换
   document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
@@ -1775,10 +1782,12 @@ if (!isViewMode) {
       currentTool = btn.dataset.tool;
     });
   });
+  // 撤销/重做/复制/粘贴
   document.getElementById('btnUndo').addEventListener('click', undo);
   document.getElementById('btnRedo').addEventListener('click', redo);
   document.getElementById('btnCopy').addEventListener('click', copyShape);
   document.getElementById('btnPaste').addEventListener('click', pasteShape);
+  // 坐标定位
   document.getElementById('btnLocate').addEventListener('click', () => {
     const x = parseInt(document.getElementById('locateX').value);
     const y = parseInt(document.getElementById('locateY').value);
@@ -1816,6 +1825,7 @@ if (!isViewMode) {
   });
 }
 
+// 工具栏折叠
 toolbar.addEventListener('click', e => {
   if (isViewMode) return;
   const title = e.target.closest('.section-title');
