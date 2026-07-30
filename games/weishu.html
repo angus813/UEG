@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>卫戍协议 · 星河防线</title>
+    <link rel="stylesheet" href="weishu.css" />
+</head>
+<body>
+
+    <div class="game-container">
+
+        <!-- 左侧面板（现为蓝图/引导切换区） -->
+        <div class="left-panel" id="leftPanel">
+            <div class="welcome" id="welcomeContent">
+                <span class="big-icon">🚀</span>
+                <h2>卫戍协议</h2>
+                <p>星河防线 · 塔防战略</p>
+                <div class="hint">🛡️ 点击「独立模拟」开始作战</div>
+            </div>
+        </div>
+
+        <!-- 右侧面板：功能 -->
+        <div class="right-panel">
+            <div class="func-list">
+                <div class="func-item" id="btnSupply">
+                    <span class="icon">📦</span>
+                    <div class="info">
+                        <div class="name">物资调配处</div>
+                        <div class="desc">调整资源分配 · 增益</div>
+                    </div>
+                    <span class="badge">调配</span>
+                </div>
+                <div class="func-item" id="btnBlueprint">
+                    <span class="icon">📐</span>
+                    <div class="info">
+                        <div class="name">蓝图数据库</div>
+                        <div class="desc">科技研发 · 解锁</div>
+                    </div>
+                    <span class="badge">研究</span>
+                </div>
+                <div class="func-item" id="btnInvite">
+                    <span class="icon">🤝</span>
+                    <div class="info">
+                        <div class="name">模拟邀约</div>
+                        <div class="desc">外交 · 联合</div>
+                    </div>
+                    <span class="badge">邀约</span>
+                </div>
+            </div>
+
+            <!-- 两个大按钮 -->
+            <div class="mode-buttons">
+                <div class="mode-btn primary" id="btnSolo">
+                    <span class="big-icon">🛡️</span>
+                    <span class="label">独立模拟</span>
+                    <span class="sub">孤军奋战</span>
+                </div>
+                <div class="mode-btn" id="btnAlliance">
+                    <span class="big-icon">⚔️</span>
+                    <span class="label">同盟模拟</span>
+                    <span class="sub">联合作战</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 通用模态弹窗（仅用于其他功能） -->
+        <div class="modal" id="genericModal">
+            <div class="modal-content">
+                <button class="close-btn" id="modalCloseBtn">✕</button>
+                <h3 id="modalTitle">标题</h3>
+                <div id="modalBody"></div>
+            </div>
+        </div>
+
+        <!-- 强化选择弹窗（全局） -->
+        <div class="modal" id="upgradeModal">
+            <div class="modal-content">
+                <h3>📡 选择强化协议</h3>
+                <div id="upgradeOptions"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="weishu.js"></script>
+</body>
+</html>
