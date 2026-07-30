@@ -91,7 +91,6 @@
       box-shadow: 0 0 15px rgba(0,200,255,0.4);
     }
 
-    /* 移动端适配 */
     @media (max-width: 600px) {
       .container { max-width: 100%; margin: 10px; min-height: auto; }
       .menu-title { font-size: 2rem; letter-spacing: 6px; }
@@ -110,12 +109,14 @@
       <div class="menu-title">小游戏</div>
       <div class="menu-subtitle">UNITED EARTH GOVNMENT 3 YEARS</div>
       <div class="menu-options">
-        <a href="UEG/games/games/sc.html" class="menu-card">
+        <!-- 色块拼图：直接位于 games/ 下 -->
+        <a href="games/sc.html" class="menu-card">
           <div class="menu-card-icon">🧩</div>
           <div class="menu-card-text">色块拼图</div>
           <div class="menu-card-desc">经典色块拼图游戏</div>
         </a>
-        <a href="UEG/games/games/weishu.html" class="menu-card">
+        <!-- 卫戍协议：也直接位于 games/ 下，不再有 weishu 子文件夹 -->
+        <a href="games/weishu.html" class="menu-card">
           <div class="menu-card-icon">🛡️</div>
           <div class="menu-card-text">卫戍协议</div>
           <div class="menu-card-desc">塔防策略对战</div>
