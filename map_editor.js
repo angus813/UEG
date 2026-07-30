@@ -41,6 +41,25 @@ let isTouchPinch = false;
 // ---------- 模板图形只读标记 ----------
 let isGalaxyMode = false;
 
+// ---------- 动画相关 ----------
+let gatherRotation = 0;           // 集合图形旋转角度（弧度）
+let animationInterval = null;     // 动画定时器
+
+function startAnimation() {
+  if (animationInterval) return;
+  animationInterval = setInterval(() => {
+    gatherRotation += 0.02;       // 每帧约 0.02 弧度，约 6 秒转一圈
+    redraw();
+  }, 50);                         // 20 FPS
+}
+
+function stopAnimation() {
+  if (animationInterval) {
+    clearInterval(animationInterval);
+    animationInterval = null;
+  }
+}
+
 // ---------- 当前用户 ----------
 function getCurrentUser() {
   const cu = localStorage.getItem('ueg_current_user');
@@ -419,30 +438,40 @@ function drawTarget(ctx, shape) {
   ctx.restore();
 }
 
-// 集合（三个弧形箭头循环，前端带三角，中心有圆点，固定大小）
+// 集合（三个弧形箭头循环，前端带三角，中心有圆点，固定大小，且带旋转动画）
 function drawGather(ctx, shape) {
   const { x, y, w, h, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const r = Math.min(w, h) / 2 - 4;
+
+  // 固定像素尺寸（不随世界缩放变化）
+  const pixelR = 20 / scale;          // 弧半径（屏幕像素）
   const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
   const headSize = Math.max(3, 6 / scale);
   const dotSize = Math.max(2, 4 / scale);
+
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.strokeStyle = strokeColor || '#ffffff';
   ctx.lineWidth = lineWidth;
+
   const count = 3;
+  const baseAngle = gatherRotation;   // 整体旋转角度
+
   for (let i = 0; i < count; i++) {
-    const angle = i * 2 * Math.PI / count - Math.PI / 2;
-    const startA = angle - 0.5;
-    const endA = angle + 0.5;
+    // 每个弧的起始角度偏移 2π/3
+    const offset = i * 2 * Math.PI / count;
+    const startA = baseAngle + offset - 0.5;
+    const endA   = baseAngle + offset + 0.5;
+
     ctx.beginPath();
-    ctx.arc(cx, cy, r, startA, endA);
+    ctx.arc(cx, cy, pixelR, startA, endA);
     ctx.stroke();
-    // 箭头头在末端（前进方向）
-    const endX = cx + r * Math.cos(endA);
-    const endY = cy + r * Math.sin(endA);
-    const ang = endA + Math.PI / 2;
+
+    // 箭头头（三角形）在弧的末端
+    const endX = cx + pixelR * Math.cos(endA);
+    const endY = cy + pixelR * Math.sin(endA);
+    const ang = endA + Math.PI / 2;   // 切线方向（指向圆心为 -π/2）
+
     ctx.fillStyle = strokeColor || '#ffffff';
     ctx.beginPath();
     ctx.moveTo(endX, endY);
@@ -451,10 +480,13 @@ function drawGather(ctx, shape) {
     ctx.closePath();
     ctx.fill();
   }
+
+  // 中心圆点
   ctx.fillStyle = strokeColor || '#ffffff';
   ctx.beginPath();
   ctx.arc(cx, cy, dotSize, 0, Math.PI * 2);
   ctx.fill();
+
   ctx.restore();
 }
 
@@ -462,8 +494,6 @@ function drawGather(ctx, shape) {
 function drawMine(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const size = Math.min(w, h) * 0.35; // 使用世界坐标尺寸，但乘以scale后固定？实际上我们希望固定像素大小，所以应该用固定像素值，但这里使用相对大小会随缩放变化。改为固定像素：const size = 30 / scale; 
-  // 修正：为了固定像素，应该用固定像素值，但x,y坐标使用世界坐标，而size使用像素值除以scale。
   const pixelSize = 30 / scale;
   const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
   ctx.save();
@@ -496,8 +526,7 @@ function drawMine(ctx, shape) {
 function drawCaution(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const outer = Math.min(w, h) / 2 - 4; // 使用世界坐标尺寸，改为固定像素
-  const pixelOuter = 20 / scale; // 固定像素
+  const pixelOuter = 20 / scale;
   const pixelInner = pixelOuter * 0.7;
   const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
   ctx.save();
@@ -977,6 +1006,7 @@ function createShape(type, x, y, w, h, props={}) {
   }
   return Object.assign(defaults, props);
 }
+
 // ========== 下半部分：复制粘贴、定位、渲染、事件、Supabase交互 ==========
 
 // ---------- 复制粘贴功能 ----------
@@ -1588,7 +1618,7 @@ function isPointInShape(wx, wy, shape) {
     return Math.abs(norm - 1) < tolerance;
   }
 
-  // 直线和箭头：精确检测
+  // 直线和箭头：精确检测（阈值扩大，+3 改为 +5）
   if (shape.type === 'line' || shape.type === 'arrow') {
     if (shape.x1 === undefined || shape.x2 === undefined) return false;
     const x1 = shape.x1, y1 = shape.y1;
@@ -1598,7 +1628,7 @@ function isPointInShape(wx, wy, shape) {
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len === 0) {
       const dist = Math.sqrt((wx - x1) * (wx - x1) + (wy - y1) * (wy - y1));
-      const threshold = Math.max(3, (shape.strokeWidth || 2) / 2 + 2) / scale;
+      const threshold = Math.max(3, (shape.strokeWidth || 2) / 2 + 5) / scale; // 原+3，现+5
       return dist < threshold;
     }
     const t = ((wx - x1) * dx + (wy - y1) * dy) / (len * len);
@@ -1608,7 +1638,7 @@ function isPointInShape(wx, wy, shape) {
     else { projX = x1 + t * dx; projY = y1 + t * dy; }
     const dist = Math.sqrt((wx - projX) * (wx - projX) + (wy - projY) * (wy - projY));
     const strokeWidth = shape.strokeWidth || 2;
-    const threshold = Math.max(3, strokeWidth / 2 + 3) / scale;
+    const threshold = Math.max(3, strokeWidth / 2 + 5) / scale; // 原+3，现+5
     return dist < threshold;
   }
 
@@ -1884,6 +1914,12 @@ async function init() {
 
   resizeCanvas();
   redraw();
+
+  // 启动动画（所有模式下运行）
+  startAnimation();
+
+  // 页面卸载时停止动画
+  window.addEventListener('beforeunload', stopAnimation);
 }
 
 init();
