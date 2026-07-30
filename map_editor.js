@@ -41,14 +41,14 @@ let isTouchPinch = false;
 // ---------- 模板图形只读标记 ----------
 let isGalaxyMode = false;
 
-// ---------- 动画相关 ----------
-let gatherRotation = 0;           // 集合图形旋转角度（弧度）
-let animationInterval = null;     // 动画定时器
+// ---------- 动画相关（集合旋转） ----------
+let gatherRotation = 0;           // 当前旋转角度（弧度）
+let animationInterval = null;     // 定时器句柄
 
 function startAnimation() {
   if (animationInterval) return;
   animationInterval = setInterval(() => {
-    gatherRotation += 0.02;       // 每帧约 0.02 弧度，约 6 秒转一圈
+    gatherRotation += 0.02;       // 每帧约 0.02 弧度（约 6 秒转一圈）
     redraw();
   }, 50);                         // 20 FPS
 }
@@ -438,13 +438,13 @@ function drawTarget(ctx, shape) {
   ctx.restore();
 }
 
-// 集合（三个弧形箭头循环，前端带三角，中心有圆点，固定大小，且带旋转动画）
+// ===== 集合（三个弧形箭头循环，固定像素 + 旋转动画 + 倒三角形箭头） =====
 function drawGather(ctx, shape) {
   const { x, y, w, h, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
 
   // 固定像素尺寸（不随世界缩放变化）
-  const pixelR = 20 / scale;          // 弧半径（屏幕像素）
+  const pixelR = 20 / scale;          // 弧半径
   const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
   const headSize = Math.max(3, 6 / scale);
   const dotSize = Math.max(2, 4 / scale);
@@ -455,28 +455,38 @@ function drawGather(ctx, shape) {
   ctx.lineWidth = lineWidth;
 
   const count = 3;
-  const baseAngle = gatherRotation;   // 整体旋转角度
+  const baseAngle = gatherRotation;   // 整体旋转角度（由动画更新）
 
   for (let i = 0; i < count; i++) {
-    // 每个弧的起始角度偏移 2π/3
     const offset = i * 2 * Math.PI / count;
     const startA = baseAngle + offset - 0.5;
     const endA   = baseAngle + offset + 0.5;
 
+    // 绘制弧线
     ctx.beginPath();
     ctx.arc(cx, cy, pixelR, startA, endA);
     ctx.stroke();
 
-    // 箭头头（三角形）在弧的末端
+    // 绘制倒三角形箭头（顶点指向圆心）
+    // 末端点坐标
     const endX = cx + pixelR * Math.cos(endA);
     const endY = cy + pixelR * Math.sin(endA);
-    const ang = endA + Math.PI / 2;   // 切线方向（指向圆心为 -π/2）
+    // 顶点沿半径向内偏移 headSize（指向圆心）
+    const tipX = cx + (pixelR - headSize) * Math.cos(endA);
+    const tipY = cy + (pixelR - headSize) * Math.sin(endA);
+    // 底边两点在末端沿切线方向偏移
+    const tangentAngle = endA + Math.PI / 2;
+    const baseOffset = headSize * 0.5;
+    const baseX1 = endX + baseOffset * Math.cos(tangentAngle);
+    const baseY1 = endY + baseOffset * Math.sin(tangentAngle);
+    const baseX2 = endX - baseOffset * Math.cos(tangentAngle);
+    const baseY2 = endY - baseOffset * Math.sin(tangentAngle);
 
     ctx.fillStyle = strokeColor || '#ffffff';
     ctx.beginPath();
-    ctx.moveTo(endX, endY);
-    ctx.lineTo(endX + headSize * Math.cos(ang - 0.5), endY + headSize * Math.sin(ang - 0.5));
-    ctx.lineTo(endX + headSize * Math.cos(ang + 0.5), endY + headSize * Math.sin(ang + 0.5));
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(baseX1, baseY1);
+    ctx.lineTo(baseX2, baseY2);
     ctx.closePath();
     ctx.fill();
   }
@@ -522,7 +532,7 @@ function drawMine(ctx, shape) {
   ctx.restore();
 }
 
-// 注意（两个倒三角嵌套，小的等腰，边距相等，固定大小）
+// 注意（两个倒三角嵌套，固定大小）
 function drawCaution(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
@@ -1006,7 +1016,6 @@ function createShape(type, x, y, w, h, props={}) {
   }
   return Object.assign(defaults, props);
 }
-
 // ========== 下半部分：复制粘贴、定位、渲染、事件、Supabase交互 ==========
 
 // ---------- 复制粘贴功能 ----------
@@ -1173,7 +1182,7 @@ function redraw() {
     } else if (isTarget) {
       drawTarget(ctx, shape);        // 内部已除以 scale
     } else if (isGather) {
-      drawGather(ctx, shape);        // 内部已除以 scale
+      drawGather(ctx, shape);        // 内部已除以 scale，且含动画和倒三角
     } else if (isMine) {
       drawMine(ctx, shape);          // 内部已除以 scale
     } else if (isCaution) {
@@ -1618,27 +1627,41 @@ function isPointInShape(wx, wy, shape) {
     return Math.abs(norm - 1) < tolerance;
   }
 
-  // 直线和箭头：精确检测（阈值扩大，+3 改为 +5）
+  // 直线和箭头：精确检测（已修复旋转 bug，并扩大判定范围）
   if (shape.type === 'line' || shape.type === 'arrow') {
     if (shape.x1 === undefined || shape.x2 === undefined) return false;
-    const x1 = shape.x1, y1 = shape.y1;
-    const x2 = shape.x2, y2 = shape.y2;
+    let x1 = shape.x1, y1 = shape.y1;
+    let x2 = shape.x2, y2 = shape.y2;
+    // 如果形状有旋转，将检测点逆旋转到未旋转的坐标系
+    if (shape.rotation) {
+      const cos = Math.cos(-shape.rotation);
+      const sin = Math.sin(-shape.rotation);
+      const cx = (x1 + x2) / 2;
+      const cy = (y1 + y2) / 2;
+      const dx = wx - cx, dy = wy - cy;
+      wx = cx + dx * cos - dy * sin;
+      wy = cy + dx * sin + dy * cos;
+      // 同时将线段端点也逆旋转（但旋转中心与形状中心一致，线段相对中心不变，所以端点无需变换）
+      // 因为旋转是绕形状中心，逆旋转后端点恢复原位置，而检测点已逆旋转，所以直接用原始 x1,y1,x2,y2 即可
+    }
+    // 重新赋值给局部变量以便使用
+    const px = wx, py = wy;
     const dx = x2 - x1;
     const dy = y2 - y1;
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len === 0) {
-      const dist = Math.sqrt((wx - x1) * (wx - x1) + (wy - y1) * (wy - y1));
-      const threshold = Math.max(3, (shape.strokeWidth || 2) / 2 + 5) / scale; // 原+3，现+5
+      const dist = Math.sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
+      const threshold = Math.max(3, (shape.strokeWidth || 2) / 2 + 5) / scale; // 扩大阈值（原+3改为+5）
       return dist < threshold;
     }
-    const t = ((wx - x1) * dx + (wy - y1) * dy) / (len * len);
+    const t = ((px - x1) * dx + (py - y1) * dy) / (len * len);
     let projX, projY;
     if (t < 0) { projX = x1; projY = y1; }
     else if (t > 1) { projX = x2; projY = y2; }
     else { projX = x1 + t * dx; projY = y1 + t * dy; }
-    const dist = Math.sqrt((wx - projX) * (wx - projX) + (wy - projY) * (wy - projY));
+    const dist = Math.sqrt((px - projX) * (px - projX) + (py - projY) * (py - projY));
     const strokeWidth = shape.strokeWidth || 2;
-    const threshold = Math.max(3, strokeWidth / 2 + 5) / scale; // 原+3，现+5
+    const threshold = Math.max(3, strokeWidth / 2 + 5) / scale; // 扩大阈值
     return dist < threshold;
   }
 
@@ -1912,11 +1935,11 @@ async function init() {
     createShapeButtons();
   }
 
+  // 启动集合动画
+  startAnimation();
+
   resizeCanvas();
   redraw();
-
-  // 启动动画（所有模式下运行）
-  startAnimation();
 
   // 页面卸载时停止动画
   window.addEventListener('beforeunload', stopAnimation);
