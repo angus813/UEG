@@ -488,25 +488,73 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
     }
 
     // ============================================================
-    //  ★ 修改重点：航母图标替换为本地图片
+    //  ★ 所有舰船图标已替换为指定图片
     // ============================================================
     const ships = [
         {
             id: 'carrier',
             name: '航母',
-            // 将 Emoji 🚀 替换为 <img> 标签，使用用户提供的图片路径
             icon: '<img src="./photo/微信图片_20260731000935_177_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
             desc: '旗舰级作战单位，提升整体攻击力',
             effect: (level) => `攻击 +${level * 3}`,
             apply: () => { globalDamageBonus += 3; }
         },
-        { id: 'support', name: '支援舰', icon: '🛡️', desc: '后勤保障，提升能量回复速度', effect: (level) => `能量回复 +${(level * 0.5).toFixed(1)}`, apply: () => { energyRegen += 0.5; } },
-        { id: 'battlecruiser', name: '战列巡洋舰', icon: '⚔️', desc: '重型火力，提升射速', effect: (level) => `射速 +${level * 5}%`, apply: () => { globalAttackSpeed *= 1.05; } },
-        { id: 'cruiser', name: '巡洋舰', icon: '🛳️', desc: '多功能战舰，提升攻击力', effect: (level) => `攻击 +${level * 2}`, apply: () => { globalDamageBonus += 2; } },
-        { id: 'destroyer', name: '驱逐舰', icon: '🚢', desc: '快速打击，提升攻击速度', effect: (level) => `攻速 +${level * 3}%`, apply: () => { globalAttackSpeed *= 1.03; } },
-        { id: 'frigate', name: '护卫舰', icon: '⚓', desc: '基础防御，提升生命上限', effect: (level) => `生命 +${level * 2}`, apply: () => { life += 2; updateLife(); } },
-        { id: 'corvette', name: '护航艇', icon: '🛥️', desc: '护航支援，提升能量回复', effect: (level) => `能量回复 +${(level * 0.3).toFixed(1)}`, apply: () => { energyRegen += 0.3; } },
-        { id: 'fighter', name: '战机', icon: '✈️', desc: '空中优势，提升攻击力', effect: (level) => `攻击 +${level * 1}`, apply: () => { globalDamageBonus += 1; } }
+        {
+            id: 'support',
+            name: '支援舰',
+            icon: '<img src="./photo/微信图片_20260731113333_179_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
+            desc: '后勤保障，提升能量回复速度',
+            effect: (level) => `能量回复 +${(level * 0.5).toFixed(1)}`,
+            apply: () => { energyRegen += 0.5; }
+        },
+        {
+            id: 'battlecruiser',
+            name: '战列巡洋舰',
+            icon: '<img src="./photo/微信图片_20260731113857_181_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
+            desc: '重型火力，提升射速',
+            effect: (level) => `射速 +${level * 5}%`,
+            apply: () => { globalAttackSpeed *= 1.05; }
+        },
+        {
+            id: 'cruiser',
+            name: '巡洋舰',
+            icon: '<img src="./photo/微信图片_20260731113858_182_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
+            desc: '多功能战舰，提升攻击力',
+            effect: (level) => `攻击 +${level * 2}`,
+            apply: () => { globalDamageBonus += 2; }
+        },
+        {
+            id: 'destroyer',
+            name: '驱逐舰',
+            icon: '<img src="./photo/微信图片_20260731114137_183_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
+            desc: '快速打击，提升攻击速度',
+            effect: (level) => `攻速 +${level * 3}%`,
+            apply: () => { globalAttackSpeed *= 1.03; }
+        },
+        {
+            id: 'frigate',
+            name: '护卫舰',
+            icon: '<img src="./photo/微信图片_20260731114208_184_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
+            desc: '基础防御，提升生命上限',
+            effect: (level) => `生命 +${level * 2}`,
+            apply: () => { life += 2; updateLife(); }
+        },
+        {
+            id: 'corvette',
+            name: '护航艇',
+            icon: '<img src="./photo/微信图片_20260731114434_185_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
+            desc: '护航支援，提升能量回复',
+            effect: (level) => `能量回复 +${(level * 0.3).toFixed(1)}`,
+            apply: () => { energyRegen += 0.3; }
+        },
+        {
+            id: 'fighter',
+            name: '战机',
+            icon: '<img src="./photo/微信图片_20260731114451_186_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
+            desc: '空中优势，提升攻击力',
+            effect: (level) => `攻击 +${level * 1}`,
+            apply: () => { globalDamageBonus += 1; }
+        }
     ];
 
     let currentShipId = 'frigate';
