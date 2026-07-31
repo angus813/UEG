@@ -412,7 +412,7 @@ document.getElementById('btnSolo').addEventListener('click', buildSoloGame);
 //  3. 其他右侧功能（物资调配、邀约、同盟模拟）
 // ============================================================
 
-// ---- 物资调配处（调用 ships.js 中的兑换函数） ----
+// ---- 物资调配处（仅一个全局兑换按钮） ----
 document.getElementById('btnSupply').addEventListener('click', () => {
     const alloc = { attack: 0, defense: 0, speed: 0 };
     const renderSupply = () => {
@@ -434,12 +434,12 @@ document.getElementById('btnSupply').addEventListener('click', () => {
                 </div>
                 <div class="item-row">
                     <span class="left"><span class="ico">⚡➜🔧</span> 能量兑换升级点</span>
-                    <span><button class="action-btn" onclick="window.exchangeEnergyToPoints()">3能量 → 2升级点</button></span>
+                    <span><button class="action-btn" onclick="window.exchangeEnergyToPoints()">3能量 → 2升级点 (全局通用)</button></span>
                 </div>
             </div>
             <div style="font-size:0.75rem;color:#4a6a7e;margin-top:8px;border-top:1px solid #1a222b;padding-top:10px;">
                 ⚡ 当前调配：攻击 +${alloc.attack} ｜ 防御 +${alloc.defense} ｜ 速度 +${alloc.speed}
-                ${typeof window.ioaState !== 'undefined' ? ` ｜ 升级点：${window.ioaState.points}` : ''}
+                ｜ 全局强化点数：${window.ioaGlobalPoints || 0}
             </div>
         `;
         openModal('📦 物资调配处', html);
@@ -460,24 +460,38 @@ document.getElementById('btnSupply').addEventListener('click', () => {
     renderSupply();
 });
 
-// ---- 蓝图数据库（内嵌面板，艾奥按钮调用 ships.js 中的函数） ----
+// ---- 重置左侧面板到欢迎界面 ----
+const welcomeHTML = `
+    <div class="welcome" id="welcomeContent">
+        <span class="big-icon">🚀</span>
+        <h2>卫戍协议</h2>
+        <p>星河防线 · 塔防战略</p>
+        <div class="hint">🛡️ 点击「独立模拟」开始作战</div>
+    </div>
+`;
+
+window.resetToWelcome = function() {
+    const leftPanel = document.getElementById('leftPanel');
+    leftPanel.innerHTML = welcomeHTML;
+    leftPanel.dataset.mode = 'welcome';
+    if (window._bpInterval) {
+        clearInterval(window._bpInterval);
+        window._bpInterval = null;
+    }
+    if (window._ioaInterval) {
+        clearInterval(window._ioaInterval);
+        window._ioaInterval = null;
+    }
+};
+
+// ---- 蓝图数据库（内嵌面板） ----
 document.getElementById('btnBlueprint').addEventListener('click', function() {
     const leftPanel = document.getElementById('leftPanel');
-    const welcome = document.getElementById('welcomeContent');
-    if (leftPanel.dataset.blueprint === 'true') {
-        leftPanel.innerHTML = `
-            <div class="welcome" id="welcomeContent">
-                <span class="big-icon">🚀</span>
-                <h2>卫戍协议</h2>
-                <p>星河防线 · 塔防战略</p>
-                <div class="hint">🛡️ 点击「独立模拟」开始作战</div>
-            </div>
-        `;
-        leftPanel.dataset.blueprint = 'false';
-        if (window._bpInterval) {
-            clearInterval(window._bpInterval);
-            window._bpInterval = null;
-        }
+    if (leftPanel.dataset.mode === 'ioa') {
+        window.resetToWelcome();
+    }
+    if (leftPanel.dataset.mode === 'blueprint') {
+        window.resetToWelcome();
         return;
     }
 
@@ -543,26 +557,52 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
 
     let currentShipId = 'frigate';
 
+    // 辅助函数：获取版本号并生成金色样式
+    function getVersionStyle(shipId) {
+        const version = window.ioaStates?.[shipId]?.version || 1.00;
+        if (version >= 2.00) {
+            return 'style="color:#ffd700;text-shadow:0 0 10px #ffd70088;font-weight:700;"';
+        }
+        return '';
+    }
+
     function renderShipDetail(shipId) {
         const ship = ships.find(s => s.id === shipId);
         if (!ship) return '<div>未知舰种</div>';
 
         if (shipId === 'cruiser' && ship.hasIoa) {
-            const ioaIcon = '<img src="./photo/微信图片_20260731162845_1_945.png" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">';
+            // 各子型号ID列表
+            const subtypes = [
+             { id: 'ioa-a', name: '艾奥-A型', desc: '木星工业 · 重型巡洋舰' },
+             { id: 'ioa-b', name: '艾奥-B型', desc: '木星工业 · 快速离子炮巡洋舰' },
+             { id: 'ioa-c', name: '艾奥-C型', desc: '木星工业 · 攻城离子炮巡洋舰' },
+             { id: 'konara', name: '康纳马拉混沌级-A', desc: '木星工业 · 轨道炮巡洋舰' },
+             { id: 'konara-b', name: '康纳马拉混沌级-B', desc: '木星工业 · 等离子巡洋舰' },
+             { id: 'kalisto', name: '卡利斯托-A', desc: '木星工业 · 集束鱼雷巡洋舰' },
+             { id: 'kalisto-b', name: '卡利斯托-B', desc: '木星工业 · 重型鱼雷巡洋舰' }
+            ];
+
+            const subtypeHtml = subtypes.map(sub => {
+                const style = getVersionStyle(sub.id);
+                return `
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="font-size:1.1rem;" ${style}>${sub.name}</span>
+                        <span style="color:#6a8a9e;font-size:0.85rem;">${sub.desc}</span>
+                        <button class="btn-research" onclick="window.openIoaModal('${sub.id}')">🔧 强化</button>
+                    </div>
+                `;
+            }).join('');
+
             return `
                 <div class="ship-name">${ship.icon} ${ship.name}</div>
                 <div class="ship-desc">${ship.desc}</div>
                 <div style="color:#6a8a9e;font-size:0.85rem;margin-top:4px;">分类：${ship.category}</div>
                 <hr style="border-color:#1f2833;margin:12px 0;">
-                <div style="display:flex;align-items:center;gap:10px;">
-                    <span style="font-size:1.1rem;">${ioaIcon} 艾奥-A型</span>
-                    <span style="color:#6a8a9e;font-size:0.85rem;">木星工业 · 重型巡洋舰</span>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                    ${subtypeHtml}
                 </div>
-                <div style="margin-top:8px;">
-                    <button class="btn-research" onclick="window.openIoaModal()">🔧 打开强化配置</button>
-                </div>
-                <div style="margin-top:6px;font-size:0.85rem;color:#6a8a9e;">
-                    ⚡ 点击查看详细武器系统与装甲强化
+                <div style="margin-top:8px;font-size:0.85rem;color:#6a8a9e;">
+                    ⚡ 点击对应按钮打开强化配置（版本号≥2.00时名称变为金色）
                 </div>
             `;
         }
@@ -624,10 +664,10 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
     }
 
     leftPanel.innerHTML = buildBlueprintHTML();
-    leftPanel.dataset.blueprint = 'true';
+    leftPanel.dataset.mode = 'blueprint';
 
     document.getElementById('bpBackBtn').addEventListener('click', function() {
-        document.getElementById('btnBlueprint').click();
+        window.resetToWelcome();
     });
 
     document.querySelectorAll('.bp-tab-btn').forEach(btn => {
@@ -742,8 +782,9 @@ document.getElementById('btnAlliance').addEventListener('click', () => {
 });
 
 // ============================================================
-//  4. 初始化
+//  4. 初始化与全局暴露
 // ============================================================
 
 console.log('🚀 卫戍协议 · 星河防线 已加载（核心）');
 window.restartGame = restartGame;
+window.openModal = openModal;
