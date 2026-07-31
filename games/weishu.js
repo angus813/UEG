@@ -452,7 +452,153 @@ document.getElementById('btnSupply').addEventListener('click', () => {
     renderSupply();
 });
 
-// ---- 蓝图数据库（内嵌面板） ----
+// ============================================================
+//  4. 艾奥-A型 强化系统
+// ============================================================
+
+// 全局状态
+if (typeof window.ioaState === 'undefined') {
+    window.ioaState = {
+        version: 1.00,
+        points: 0,
+        currentSystem: 'm',
+        systems: {
+            m: { 命中: 0, 伤害: 0, 冷却: 0, 暴击: 0 },
+            a: { 命中: 0, 伤害: 0, 冷却: 0, 暴击: 0 },
+            b: { 命中: 0, 伤害: 0, 冷却: 0, 暴击: 0 },
+            armor: { 结构值: 0, 抵抗伤害: 0, 受维修量加成: 0, 护盾值: 0 }
+        }
+    };
+}
+
+// 获取点数
+function addIoaPoints() {
+    const cost = 10;
+    if (energy < cost) { alert(`能量不足，需要 ${cost} 能量`); return; }
+    energy -= cost;
+    updateEnergy();
+    window.ioaState.points += 1;
+    renderIoaModal();
+}
+
+// 升级强化项
+function upgradeIoaItem(systemKey, itemName) {
+    const state = window.ioaState;
+    const system = state.systems[systemKey];
+    const currentLevel = system[itemName];
+    if (currentLevel >= 5) { alert('已达最高等级！'); return; }
+    const items = Object.keys(system);
+    const idx = items.indexOf(itemName);
+    if (idx > 0) {
+        const prevItem = items[idx - 1];
+        if (system[prevItem] < currentLevel + 1) {
+            alert(`需要先升级「${prevItem}」至 ${currentLevel+1} 级`);
+            return;
+        }
+    }
+    if (state.points < 2) { alert('强化点数不足，需要 2 点'); return; }
+    state.points -= 2;
+    system[itemName] = currentLevel + 1;
+    state.version = Math.round((state.version + 0.01) * 100) / 100;
+    renderIoaModal();
+}
+
+// 渲染强化界面
+function renderIoaModal() {
+    const state = window.ioaState;
+    const currentSys = state.currentSystem;
+    const systemNames = {
+        m: 'M系统',
+        a: 'A系统',
+        b: 'B系统',
+        armor: '装甲系统'
+    };
+    const itemLabels = {
+        m: ['命中', '伤害', '冷却', '暴击'],
+        a: ['命中', '伤害', '冷却', '暴击'],
+        b: ['命中', '伤害', '冷却', '暴击'],
+        armor: ['结构值', '抵抗伤害', '受维修量加成', '护盾值']
+    };
+    const systemData = state.systems[currentSys];
+    const items = itemLabels[currentSys] || [];
+
+    let treeHtml = items.map((item, idx) => {
+        const level = systemData[item] || 0;
+        const isMax = level >= 5;
+        let disabled = isMax || state.points < 2;
+        if (!isMax && idx > 0) {
+            const prevItem = items[idx - 1];
+            if (systemData[prevItem] < level + 1) disabled = true;
+        }
+        return `
+            <div class="ioa-tree-item">
+                <span class="name">${item}</span>
+                <span class="level">Lv.${level}/5</span>
+                <button class="btn-upgrade" ${disabled ? 'disabled' : ''} onclick="upgradeIoaItem('${currentSys}','${item}')">
+                    ${isMax ? '已满' : '升级 (2点)'}
+                </button>
+            </div>
+        `;
+    }).join('');
+
+    const versionClass = state.version >= 2.00 ? 'gold' : '';
+
+    const html = `
+        <div class="modal-two-col">
+            <div class="modal-left-col">
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    ${Object.keys(systemNames).map(key => `
+                        <div class="ioa-system ${key === currentSys ? 'active' : ''}" onclick="switchIoaSystem('${key}')">${systemNames[key]}</div>
+                    `).join('')}
+                </div>
+                <div style="margin-top:auto;font-size:0.8rem;color:#6a8a9e;border-top:1px solid #1f2833;padding-top:8px;">
+                    <div>版本号：<span class="${versionClass}" style="font-weight:700;">${state.version.toFixed(2)}</span></div>
+                    <div>强化点数：${state.points}</div>
+                    <button class="btn-get-points" onclick="addIoaPoints()">+1 点数 (消耗10能量)</button>
+                </div>
+            </div>
+            <div class="modal-right-col">
+                <div style="flex:1;overflow-y:auto;">
+                    ${treeHtml}
+                </div>
+                <div class="ioa-stats">
+                    <div><span class="stat-label">站位：</span><span class="stat-value">中排</span></div>
+                    <div><span class="stat-label">单舰人口：</span><span class="stat-value">18</span></div>
+                    <div><span class="stat-label">防空火力：</span><span class="stat-value">787 /分钟</span></div>
+                    <div><span class="stat-label">对舰火力：</span><span class="stat-value">28585 /分钟</span></div>
+                    <div><span class="stat-label">结构值：</span><span class="stat-value">62120</span></div>
+                    <div><span class="stat-label">服役限制：</span><span class="stat-value">8</span></div>
+                    <div><span class="stat-label">抵抗伤害：</span><span class="stat-value">50</span></div>
+                    <div><span class="stat-label">受维修量加成：</span><span class="stat-value">+10.0%</span></div>
+                    <div><span class="stat-label">护盾值：</span><span class="stat-value">10.0%</span></div>
+                </div>
+                <div class="ioa-weapon-detail">
+                    <strong>武器系统：</strong><br>
+                    M：双联装离子炮 | 对舰 24000/分 | 能量 | 优先大型 | 直射 | 单发600<br>
+                    A：快速火炮 | 防空 787/分 | 实弹 | 优先舰载机 | 直射 | 单发35 (反击防空)<br>
+                    B：反舰导弹阵列 | 对舰 3085/分 | 实弹 | 优先小型 | 投射 | 单发100
+                </div>
+            </div>
+        </div>
+    `;
+
+    const fullHtml = `<div style="padding:0;">${html}</div>`;
+    openModal('🚀 艾奥-A型 · 强化配置', fullHtml);
+}
+
+function switchIoaSystem(systemKey) {
+    window.ioaState.currentSystem = systemKey;
+    renderIoaModal();
+}
+
+function openIoaModal() {
+    renderIoaModal();
+}
+
+// ============================================================
+//  5. 蓝图数据库（内嵌面板） - 艾奥-A型放在巡洋舰详情中
+// ============================================================
+
 document.getElementById('btnBlueprint').addEventListener('click', function() {
     const leftPanel = document.getElementById('leftPanel');
     const welcome = document.getElementById('welcomeContent');
@@ -473,137 +619,102 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
         return;
     }
 
-    // 初始化舰船等级对象
-    if (typeof window.shipLevels === 'undefined') {
-        window.shipLevels = {
-            carrier: 0,
-            support: 0,
-            battlecruiser: 0,
-            cruiser: 0,
-            destroyer: 0,
-            frigate: 0,
-            corvette: 0,
-            fighter: 0
-        };
-    }
-
-    // ============================================================
-    //  ★ 所有舰船图标已替换为指定图片
-    // ============================================================
+    // 舰船数据（不再单独列出艾奥-A型）
     const ships = [
         {
             id: 'carrier',
             name: '航母',
             icon: '<img src="./photo/微信图片_20260731000935_177_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
-            desc: '旗舰级作战单位，提升整体攻击力',
-            effect: (level) => `攻击 +${level * 3}`,
-            apply: () => { globalDamageBonus += 3; }
+            desc: '超主力舰 · 大型',
+            category: '超主力舰'
         },
         {
             id: 'support',
             name: '支援舰',
             icon: '<img src="./photo/微信图片_20260731113333_179_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
-            desc: '后勤保障，提升能量回复速度',
-            effect: (level) => `能量回复 +${(level * 0.5).toFixed(1)}`,
-            apply: () => { energyRegen += 0.5; }
+            desc: '超主力舰 · 大型',
+            category: '超主力舰'
         },
         {
             id: 'battlecruiser',
             name: '战列巡洋舰',
             icon: '<img src="./photo/微信图片_20260731113857_181_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
-            desc: '重型火力，提升射速',
-            effect: (level) => `射速 +${level * 5}%`,
-            apply: () => { globalAttackSpeed *= 1.05; }
+            desc: '超主力舰 · 大型',
+            category: '超主力舰'
         },
         {
             id: 'cruiser',
             name: '巡洋舰',
             icon: '<img src="./photo/微信图片_20260731113858_182_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
-            desc: '多功能战舰，提升攻击力',
-            effect: (level) => `攻击 +${level * 2}`,
-            apply: () => { globalDamageBonus += 2; }
+            desc: '主力舰 · 大型',
+            category: '主力舰',
+            hasIoa: true  // 标记此舰种包含艾奥-A型
         },
         {
             id: 'destroyer',
             name: '驱逐舰',
             icon: '<img src="./photo/微信图片_20260731114137_183_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
-            desc: '快速打击，提升攻击速度',
-            effect: (level) => `攻速 +${level * 3}%`,
-            apply: () => { globalAttackSpeed *= 1.03; }
+            desc: '主力舰 · 小型',
+            category: '主力舰'
         },
         {
             id: 'frigate',
             name: '护卫舰',
             icon: '<img src="./photo/微信图片_20260731114208_184_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
-            desc: '基础防御，提升生命上限',
-            effect: (level) => `生命 +${level * 2}`,
-            apply: () => { life += 2; updateLife(); }
+            desc: '主力舰 · 小型',
+            category: '主力舰'
         },
         {
             id: 'corvette',
             name: '护航艇',
             icon: '<img src="./photo/微信图片_20260731114434_185_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
-            desc: '护航支援，提升能量回复',
-            effect: (level) => `能量回复 +${(level * 0.3).toFixed(1)}`,
-            apply: () => { energyRegen += 0.3; }
+            desc: '舰载机 · 小型',
+            category: '舰载机'
         },
         {
             id: 'fighter',
             name: '战机',
             icon: '<img src="./photo/微信图片_20260731114451_186_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
-            desc: '空中优势，提升攻击力',
-            effect: (level) => `攻击 +${level * 1}`,
-            apply: () => { globalDamageBonus += 1; }
+            desc: '舰载机 · 小型',
+            category: '舰载机'
         }
     ];
 
     let currentShipId = 'frigate';
 
+    // 渲染详情
     function renderShipDetail(shipId) {
         const ship = ships.find(s => s.id === shipId);
         if (!ship) return '<div>未知舰种</div>';
-        const level = window.shipLevels[shipId] || 0;
-        const cost = 30 + level * 10;
-        const isMax = level >= 5;
-        const effectText = ship.effect(level);
-        const nextEffect = level < 5 ? ship.effect(level + 1) : '已满级';
-        const levelPercent = (level / 5) * 100;
+
+        // 如果是巡洋舰，显示巡洋舰信息 + 艾奥-A型子项
+        if (shipId === 'cruiser' && ship.hasIoa) {
+            const ioaIcon = '<img src="./photo/微信图片_20260731162845_1_945.png" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">';
+            return `
+                <div class="ship-name">${ship.icon} ${ship.name}</div>
+                <div class="ship-desc">${ship.desc}</div>
+                <div style="color:#6a8a9e;font-size:0.85rem;margin-top:4px;">分类：${ship.category}</div>
+                <hr style="border-color:#1f2833;margin:12px 0;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:1.1rem;">${ioaIcon} 艾奥-A型</span>
+                    <span style="color:#6a8a9e;font-size:0.85rem;">木星工业 · 重型巡洋舰</span>
+                </div>
+                <div style="margin-top:8px;">
+                    <button class="btn-research" onclick="openIoaModal()">🔧 打开强化配置</button>
+                </div>
+                <div style="margin-top:6px;font-size:0.85rem;color:#6a8a9e;">
+                    ⚡ 点击查看详细武器系统与装甲强化
+                </div>
+            `;
+        }
+
+        // 常规舰船
         return `
             <div class="ship-name">${ship.icon} ${ship.name}</div>
             <div class="ship-desc">${ship.desc}</div>
-            <div class="ship-level">等级：${level} / 5</div>
-            <div class="level-bar"><div class="fill" style="width:${levelPercent}%;"></div></div>
-            <div class="ship-effect">当前增益：${effectText}</div>
-            <div class="ship-next">下一级增益：${nextEffect}</div>
-            <div class="ship-cost">研究消耗：${cost} ⚡</div>
-            <button class="btn-research" ${isMax ? 'disabled' : ''} onclick="researchShip('${shipId}')">
-                ${isMax ? '✅ 已满级' : '🔬 研究'}
-            </button>
+            <div style="color:#6a8a9e;font-size:0.85rem;margin-top:6px;">分类：${ship.category}</div>
         `;
     }
-
-    window.researchShip = function(shipId) {
-        const ship = ships.find(s => s.id === shipId);
-        if (!ship) return;
-        const level = window.shipLevels[shipId] || 0;
-        if (level >= 5) { alert('该舰种已达最高等级！'); return; }
-        const cost = 30 + level * 10;
-        if (energy < cost) { alert(`⚡ 能量不足，需要 ${cost} 能量`); return; }
-        energy -= cost;
-        updateEnergy();
-        ship.apply();
-        window.shipLevels[shipId] = level + 1;
-        // 更新详情
-        const detailEl = document.getElementById('shipDetail');
-        if (detailEl) {
-            detailEl.innerHTML = renderShipDetail(shipId);
-        }
-        // 更新左侧徽章
-        const badge = document.querySelector(`.bp-ship-item[data-ship="${shipId}"] .level-badge`);
-        if (badge) badge.textContent = `Lv.${window.shipLevels[shipId]}`;
-        updateEnergy();
-        alert(`✅ ${ship.name} 研究成功！当前等级 ${window.shipLevels[shipId]}`);
-    };
 
     // 构建蓝图面板HTML
     function buildBlueprintHTML() {
@@ -624,7 +735,7 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
                             ${ships.map(s => `
                                 <div class="bp-ship-item ${s.id === currentShipId ? 'active' : ''}" data-ship="${s.id}">
                                     <span>${s.icon} ${s.name}</span>
-                                    <span class="level-badge">Lv.${window.shipLevels[s.id] || 0}</span>
+                                    <span class="level-badge">${s.hasIoa ? '⚙️' : ''}</span>
                                 </div>
                             `).join('')}
                         </div>
@@ -639,7 +750,7 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
                         <div class="ally-item"><span>⚔️ 铁血同盟</span><span class="status-ok">已结盟</span><span class="bonus">攻击 +6</span></div>
                         <div class="ally-item"><span>🛸 星云联邦</span><span class="status-ok">已结盟</span><span class="bonus">能量 +30</span></div>
                         <div class="ally-item"><span>🌌 暗影议会</span><span class="status-pending">待邀请</span><span class="bonus">攻速 +10%</span></div>
-                        <button class="action-btn" style="margin-top:12px;background:#00b8ff;border:none;color:#fff;padding:6px 16px;border-radius:20px;cursor:pointer;" onclick="alert('🌌 向暗影议会发出同盟邀请...')">邀请暗影议会</button>
+                        <button class="action-btn" style="margin-top:12px;background:#00c8ff;border:none;color:#000;padding:6px 16px;border-radius:4px;cursor:pointer;" onclick="alert('🌌 向暗影议会发出同盟邀请...')">邀请暗影议会</button>
                     </div>
                 </div>
                 <div class="bp-tab-content" id="bpTabEnemy">
@@ -778,8 +889,13 @@ document.getElementById('btnAlliance').addEventListener('click', () => {
 });
 
 // ============================================================
-//  4. 初始化
+//  6. 初始化
 // ============================================================
 
 console.log('🚀 卫戍协议 · 星河防线 已加载（独立模拟模式）');
 window.restartGame = restartGame;
+// 暴露艾奥函数（确保按钮可以调用）
+window.openIoaModal = openIoaModal;
+window.addIoaPoints = addIoaPoints;
+window.upgradeIoaItem = upgradeIoaItem;
+window.switchIoaSystem = switchIoaSystem;

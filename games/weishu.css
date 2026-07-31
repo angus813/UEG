@@ -20,17 +20,37 @@ body {
 .game-container {
     width: 100%;
     max-width: 1100px;
-    background: linear-gradient(145deg, #13171c 0%, #0d1014 100%);
+    background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
     border: 1px solid #2a3340;
-    box-shadow: 0 0 40px rgba(0, 160, 255, 0.12);
+    box-shadow: 0 0 30px rgba(0,160,255,0.1);
     display: flex;
     flex-direction: row;
     overflow: hidden;
-    border-radius: 12px;
+    border-radius: 0; /* 与index保持一致，无圆角 */
     position: relative;
 }
+.game-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 60px;
+    height: 60px;
+    border-top: 2px solid #00c8ff;
+    border-left: 2px solid #00c8ff;
+}
+.game-container::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 60px;
+    height: 60px;
+    border-bottom: 2px solid #00c8ff;
+    border-right: 2px solid #00c8ff;
+}
 
-/* ===== 左侧面板（引导区） ===== */
+/* ===== 左侧面板 ===== */
 .left-panel {
     flex: 0 0 62%;
     min-width: 0;
@@ -76,7 +96,7 @@ body {
     font-size: 0.9rem;
 }
 
-/* ===== 右侧面板：功能卡片 ===== */
+/* ===== 右侧面板 ===== */
 .right-panel {
     flex: 1;
     min-width: 180px;
@@ -86,11 +106,6 @@ body {
     flex-direction: column;
     gap: 10px;
 }
-
-.header {
-    display: none;
-}
-
 .func-list {
     display: flex;
     flex-direction: column;
@@ -100,23 +115,17 @@ body {
 .func-item {
     background: rgba(18, 24, 32, 0.7);
     border: 1px solid #1f2a33;
-    border-radius: 8px;
     padding: 10px 12px;
     cursor: pointer;
     transition: 0.2s;
     display: flex;
     align-items: center;
     gap: 10px;
-    position: relative;
-    overflow: hidden;
 }
 .func-item:hover {
     border-color: #3a6a8a;
     background: rgba(24, 34, 46, 0.8);
     transform: translateX(3px);
-}
-.func-item:active {
-    transform: scale(0.97);
 }
 .func-item .icon {
     font-size: 1.4rem;
@@ -150,7 +159,6 @@ body {
     line-height: 1.8;
     flex-shrink: 0;
 }
-
 .mode-buttons {
     display: flex;
     gap: 10px;
@@ -161,7 +169,6 @@ body {
     flex: 1;
     background: linear-gradient(145deg, #1a2633, #0f171f);
     border: 1px solid #2a3a48;
-    border-radius: 10px;
     padding: 14px 6px;
     text-align: center;
     cursor: pointer;
@@ -176,9 +183,6 @@ body {
     background: #1f2e3d;
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(0, 120, 255, 0.15);
-}
-.mode-btn:active {
-    transform: scale(0.96);
 }
 .mode-btn .big-icon {
     font-size: 2rem;
@@ -203,7 +207,7 @@ body {
     background: #0f3348;
 }
 
-/* ===== 模态弹窗（通用） ===== */
+/* ===== 模态框通用（与index一致） ===== */
 .modal {
     display: none;
     position: fixed;
@@ -211,45 +215,34 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0,0,0,0.85);
     justify-content: center;
     align-items: center;
     z-index: 200;
-    backdrop-filter: blur(4px);
-    animation: fadeIn 0.25s ease;
 }
-.modal.active {
-    display: flex;
-}
-@keyframes fadeIn {
-    0% { opacity: 0; transform: scale(0.95); }
-    100% { opacity: 1; transform: scale(1); }
-}
-
 .modal-content {
-    background: #141c26;
-    border: 1px solid #2a3a48;
-    border-radius: 14px;
-    padding: 20px 24px 24px 24px;
-    width: 720px;
-    max-width: 96%;
-    max-height: 92vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    background: #13171c;
+    border: 1px solid #2a3340;
+    width: 700px;
+    max-width: 94%;
+    max-height: 90vh;
+    box-shadow: 0 0 40px rgba(0,160,255,0.3);
+    display: flex;
+    flex-direction: column; /* 默认垂直，对于特殊左右布局可在js中覆盖 */
+    overflow: hidden;
     position: relative;
 }
 .modal-content .close-btn {
     position: absolute;
-    top: 12px;
-    right: 18px;
+    top: 10px;
+    right: 15px;
     font-size: 1.6rem;
     color: #6a8a9e;
     cursor: pointer;
-    transition: 0.2s;
     background: none;
     border: none;
-    font-family: inherit;
     z-index: 10;
+    transition: 0.2s;
 }
 .modal-content .close-btn:hover {
     color: #ff6a4a;
@@ -258,12 +251,38 @@ body {
 .modal-content h3 {
     color: #ff8c2e;
     font-size: 1.3rem;
-    margin-bottom: 14px;
+    margin: 16px 24px 12px 24px;
     display: flex;
     align-items: center;
     gap: 10px;
     border-bottom: 1px solid #1f2a33;
     padding-bottom: 10px;
+}
+.modal-body {
+    padding: 0 24px 24px 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+/* 左右两栏布局（用于艾奥模态框） */
+.modal-two-col {
+    display: flex;
+    flex-direction: row;
+}
+.modal-left-col {
+    flex: 1;
+    padding: 20px 16px;
+    background: #0d1116;
+    border-right: 1px solid #1f2833;
+    display: flex;
+    flex-direction: column;
+}
+.modal-right-col {
+    flex: 1.2;
+    padding: 20px 16px;
+    background: linear-gradient(135deg, #0f1a24, #0a0e12);
+    display: flex;
+    flex-direction: column;
 }
 
 /* ===== 独立模拟内的游戏样式 ===== */
@@ -309,7 +328,6 @@ body {
     color: #ff8c2e;
     min-width: 18px;
 }
-
 #miniGameContainer .grid-wrap {
     padding: 4px 0;
 }
@@ -370,7 +388,6 @@ body {
     transition: width 0.1s;
     border: 1px solid #ff886688;
 }
-
 #miniGameContainer .btn-start-wrap {
     text-align: center;
     padding: 6px 0 4px 0;
@@ -396,7 +413,6 @@ body {
 #miniGameContainer .btn-start:active {
     transform: scale(0.96);
 }
-
 #miniGameContainer .tower-bar {
     display: flex;
     gap: 8px;
@@ -471,7 +487,6 @@ body {
 .upgrade-option:active {
     transform: scale(0.97);
 }
-
 #miniGameContainer .game-over {
     display: none;
     position: absolute;
@@ -515,34 +530,64 @@ body {
 }
 
 /* ======================================================
-   蓝图数据库专属样式（全新界面）
+   蓝图数据库专属样式（与index风格一致）
    ====================================================== */
-.blueprint-container {
+.bp-panel {
+    width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    height: 100%;
-    min-height: 400px;
+    padding: 4px 0;
 }
-
-/* 选项卡栏 */
+.bp-panel .bp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #1f2a33;
+    padding-bottom: 8px;
+}
+.bp-panel .bp-header .bp-title {
+    color: #ff8c2e;
+    font-size: 1.3rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.bp-panel .bp-header .bp-back {
+    background: rgba(10, 14, 18, 0.6);
+    border: 1px solid #2a3a48;
+    color: #b0c7d6;
+    padding: 4px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: 0.2s;
+}
+.bp-panel .bp-header .bp-back:hover {
+    background: #1a2a36;
+    color: #fff;
+}
 .bp-tab-bar {
     display: flex;
     gap: 2px;
     background: rgba(10, 14, 18, 0.6);
     border-radius: 8px;
     padding: 4px;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     border: 1px solid #1a222b;
+    flex-shrink: 0;
 }
 .bp-tab-btn {
     flex: 1;
     background: transparent;
     border: none;
     color: #6a8a9e;
-    padding: 8px 12px;
+    padding: 6px 10px;
     cursor: pointer;
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     border-radius: 6px;
     transition: 0.2s;
     text-align: center;
@@ -565,13 +610,11 @@ body {
     flex-direction: column;
     height: 100%;
 }
-
-/* 蓝图数据主布局 */
 .bp-main {
     display: flex;
-    gap: 16px;
+    gap: 12px;
     flex: 1;
-    min-height: 280px;
+    min-height: 200px;
 }
 .bp-ship-list {
     width: 140px;
@@ -583,12 +626,12 @@ body {
     padding: 4px 0;
 }
 .bp-ship-item {
-    padding: 8px 12px;
+    padding: 6px 10px;
     cursor: pointer;
     border-bottom: 1px solid #1a222b;
     color: #b0c7d6;
     transition: 0.15s;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -606,7 +649,7 @@ body {
     background: #2a3a48;
     border-radius: 12px;
     padding: 0 8px;
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     color: #88ccff;
 }
 .bp-detail-card {
@@ -614,72 +657,67 @@ body {
     background: rgba(10, 14, 18, 0.4);
     border-radius: 8px;
     border: 1px solid #1a222b;
-    padding: 16px 20px;
+    padding: 12px 16px;
     display: flex;
     flex-direction: column;
     justify-content: center;
 }
 .bp-detail-card .ship-name {
-    font-size: 1.4rem;
+    font-size: 1.2rem;
     font-weight: 700;
     color: #00c8ff;
     margin-bottom: 2px;
 }
 .bp-detail-card .ship-desc {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: #8aacbe;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
 }
 .bp-detail-card .ship-level {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     color: #ffaa44;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 .bp-detail-card .ship-effect {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     color: #88ccff;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 .bp-detail-card .ship-next {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: #6a8a9e;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
 }
 .bp-detail-card .ship-cost {
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: #b0c7d6;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 .bp-detail-card .btn-research {
-    background: linear-gradient(135deg, #00b8ff, #0077cc);
+    background: #00c8ff;
     border: none;
-    color: #fff;
-    padding: 8px 28px;
-    border-radius: 24px;
+    color: #000;
+    padding: 6px 20px;
+    border-radius: 4px;
     cursor: pointer;
     font-weight: 700;
-    font-size: 1rem;
+    font-size: 0.9rem;
     transition: 0.2s;
     align-self: flex-start;
-    box-shadow: 0 0 20px rgba(0, 136, 255, 0.3);
 }
 .bp-detail-card .btn-research:hover:not(:disabled) {
-    transform: scale(1.04);
-    box-shadow: 0 0 30px rgba(0, 136, 255, 0.6);
+    background: #00a3ff;
 }
 .bp-detail-card .btn-research:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
 }
-/* 等级进度条 */
 .level-bar {
     width: 100%;
     height: 6px;
     background: #1a222b;
     border-radius: 4px;
-    margin: 6px 0 10px 0;
+    margin: 4px 0 6px 0;
     overflow: hidden;
 }
 .level-bar .fill {
@@ -688,21 +726,19 @@ body {
     border-radius: 4px;
     transition: width 0.3s;
 }
-
-/* 盟约报告 & 敌方资料 */
 .bp-alliance, .bp-enemy {
     background: rgba(10, 14, 18, 0.4);
     border-radius: 8px;
     border: 1px solid #1a222b;
-    padding: 16px 20px;
+    padding: 12px 16px;
     flex: 1;
 }
 .bp-alliance .ally-item, .bp-enemy .enemy-stat {
     display: flex;
     justify-content: space-between;
-    padding: 6px 0;
+    padding: 4px 0;
     border-bottom: 1px solid #0d141c;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 .bp-alliance .ally-item:last-child, .bp-enemy .enemy-stat:last-child {
     border-bottom: none;
@@ -710,39 +746,185 @@ body {
 .bp-alliance .status-ok { color: #44cc88; }
 .bp-alliance .status-pending { color: #ff8844; }
 .bp-alliance .bonus { color: #88ccff; }
-
 .bp-enemy .stat-label { color: #6a8a9e; }
 .bp-enemy .stat-value { color: #ffaa44; font-weight: 700; }
 
-/* 响应式调整 */
+/* ======================================================
+   艾奥-A型 强化模态框（左右两栏，与index风格一致）
+   ====================================================== */
+.ioa-modal-wrap {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+.ioa-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0d1116;
+    padding: 8px 16px;
+    border-bottom: 1px solid #1f2833;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.ioa-header .version {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #ffaa44;
+}
+.ioa-header .version.gold {
+    color: #ffd700;
+    text-shadow: 0 0 20px #ffd70088;
+}
+.ioa-header .points {
+    color: #88ccff;
+}
+.ioa-header .btn-get-points {
+    background: #00c8ff;
+    border: none;
+    color: #000;
+    padding: 4px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.2s;
+}
+.ioa-header .btn-get-points:hover {
+    background: #00a3ff;
+}
+.ioa-body {
+    display: flex;
+    flex: 1;
+    min-height: 280px;
+}
+.ioa-left {
+    width: 120px;
+    flex-shrink: 0;
+    background: #0d1116;
+    border-right: 1px solid #1f2833;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 0;
+}
+.ioa-system {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #1f2833;
+    color: #b0c7d6;
+    transition: 0.15s;
+    font-size: 0.9rem;
+}
+.ioa-system:hover {
+    background: #1a2a36;
+    color: #fff;
+}
+.ioa-system.active {
+    background: #1f3340;
+    border-left: 3px solid #00c8ff;
+    color: #88ccff;
+}
+.ioa-right {
+    flex: 1;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #0f1a24, #0a0e12);
+    overflow-y: auto;
+}
+.ioa-tree-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+    border-bottom: 1px solid #0d141c;
+}
+.ioa-tree-item .name {
+    color: #b0c7d6;
+}
+.ioa-tree-item .level {
+    color: #ffaa44;
+    margin: 0 10px;
+}
+.ioa-tree-item .btn-upgrade {
+    background: #00c8ff;
+    border: none;
+    color: #000;
+    padding: 2px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.2s;
+    font-size: 0.8rem;
+}
+.ioa-tree-item .btn-upgrade:hover:not(:disabled) {
+    background: #00a3ff;
+}
+.ioa-tree-item .btn-upgrade:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.ioa-stats {
+    background: #0d1116;
+    border-top: 1px solid #1f2833;
+    padding: 10px 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 4px 16px;
+    font-size: 0.85rem;
+}
+.ioa-stats .stat-label {
+    color: #6a8a9e;
+}
+.ioa-stats .stat-value {
+    color: #ffaa44;
+    font-weight: 700;
+}
+.ioa-weapon-detail {
+    background: #0d1116;
+    border-top: 1px solid #1f2833;
+    padding: 8px 16px;
+    font-size: 0.8rem;
+    color: #6a8a9e;
+    line-height: 1.6;
+}
+.ioa-weapon-detail strong {
+    color: #b0c7d6;
+}
+
+/* ===== 响应式 ===== */
 @media (max-width: 820px) {
-    .modal-content { width: 96%; padding: 16px; }
+    .game-container { flex-direction: column; max-width: 520px; }
+    .left-panel { flex: none; border-right: none; border-bottom: 1px solid #1f2833; padding: 20px 16px; min-height: 200px; }
+    .right-panel { flex: none; flex-direction: row; flex-wrap: wrap; padding: 10px 12px; gap: 8px; }
+    .func-list { flex-direction: row; flex: 1 1 100%; gap: 6px; }
+    .func-item { flex: 1; padding: 8px 10px; min-width: 70px; }
+    .func-item .info .desc { display: none; }
+    .func-item .badge { display: none; }
+    .mode-buttons { flex: 1 1 100%; gap: 8px; }
+    .mode-btn { padding: 10px 4px; }
+    .mode-btn .big-icon { font-size: 1.4rem; }
+    .mode-btn .label { font-size: 0.85rem; }
+    .modal-content { width: 96%; padding: 0; }
     .bp-main { flex-direction: column; }
-    .bp-ship-list {
-        width: 100%;
-        display: flex;
-        flex-wrap: nowrap;
-        overflow-x: auto;
-        height: 50px;
-        padding: 2px;
-        border-radius: 6px;
-    }
-    .bp-ship-item {
-        white-space: nowrap;
-        padding: 6px 14px;
-        border-bottom: none;
-        border-right: 1px solid #1a222b;
-        font-size: 0.8rem;
-    }
-    .bp-ship-item.active {
-        border-left: none;
-        border-bottom: 2px solid #00c8ff;
-    }
+    .bp-ship-list { width: 100%; display: flex; flex-wrap: nowrap; overflow-x: auto; height: 50px; padding: 2px; border-radius: 6px; border: 1px solid #1a222b; }
+    .bp-ship-item { white-space: nowrap; padding: 6px 14px; border-bottom: none; border-right: 1px solid #1a222b; font-size: 0.8rem; }
+    .bp-ship-item.active { border-left: none; border-bottom: 2px solid #00c8ff; }
     .bp-detail-card { min-height: 200px; }
-    .bp-tab-btn { font-size: 0.8rem; padding: 6px 8px; }
+    .bp-tab-btn { font-size: 0.75rem; padding: 4px 6px; }
+    .ioa-body { flex-direction: column; }
+    .ioa-left { width: 100%; flex-direction: row; overflow-x: auto; height: 44px; border-right: none; border-bottom: 1px solid #1f2833; }
+    .ioa-system { white-space: nowrap; border-bottom: none; border-right: 1px solid #1f2833; padding: 4px 12px; }
+    .ioa-system.active { border-left: none; border-bottom: 2px solid #00c8ff; }
+    .ioa-stats { grid-template-columns: 1fr 1fr; }
+    .modal-two-col { flex-direction: column; }
+    .modal-left-col { border-right: none; border-bottom: 1px solid #1f2833; }
 }
 
 @media (max-width: 480px) {
+    body { padding: 4px; }
+    .game-container { border-radius: 0; }
+    .left-panel .welcome .big-icon { font-size: 2.5rem; }
+    .left-panel .welcome h2 { font-size: 1.2rem; }
+    .left-panel .welcome p { font-size: 0.85rem; }
+    .modal-content { padding: 0; }
     .bp-ship-item { padding: 4px 10px; font-size: 0.7rem; }
-    .bp-detail-card .ship-name { font-size: 1.2rem; }
+    .bp-detail-card .ship-name { font-size: 1rem; }
 }
