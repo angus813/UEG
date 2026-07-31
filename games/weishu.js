@@ -300,10 +300,12 @@ const modalClose = document.getElementById('modalCloseBtn');
 function openModal(title, html) {
     modalTitle.textContent = title;
     modalBody.innerHTML = html;
+    modal.style.display = 'flex';
     modal.classList.add('active');
 }
 
 modalClose.addEventListener('click', () => {
+    modal.style.display = 'none';
     modal.classList.remove('active');
     if (gameLoopInterval) clearInterval(gameLoopInterval);
     if (spawnInterval) clearInterval(spawnInterval);
@@ -313,6 +315,7 @@ modalClose.addEventListener('click', () => {
 });
 modal.addEventListener('click', (e) => {
     if (e.target === modal) {
+        modal.style.display = 'none';
         modal.classList.remove('active');
         if (gameLoopInterval) clearInterval(gameLoopInterval);
         if (spawnInterval) clearInterval(spawnInterval);
@@ -406,10 +409,10 @@ function buildSoloGame() {
 document.getElementById('btnSolo').addEventListener('click', buildSoloGame);
 
 // ============================================================
-//  3. 其他右侧功能（物资调配、邀约、同盟模拟保留模态框）
+//  3. 其他右侧功能（物资调配、邀约、同盟模拟）
 // ============================================================
 
-// ---- 物资调配处 ----
+// ---- 物资调配处（调用 ships.js 中的兑换函数） ----
 document.getElementById('btnSupply').addEventListener('click', () => {
     const alloc = { attack: 0, defense: 0, speed: 0 };
     const renderSupply = () => {
@@ -429,9 +432,14 @@ document.getElementById('btnSupply').addEventListener('click', () => {
                     <span class="left"><span class="ico">💨</span> 移速强化</span>
                     <span><button class="action-btn" onclick="allocSupply('speed',10)">+10 ⚡</button></span>
                 </div>
+                <div class="item-row">
+                    <span class="left"><span class="ico">⚡➜🔧</span> 能量兑换升级点</span>
+                    <span><button class="action-btn" onclick="window.exchangeEnergyToPoints()">3能量 → 2升级点</button></span>
+                </div>
             </div>
             <div style="font-size:0.75rem;color:#4a6a7e;margin-top:8px;border-top:1px solid #1a222b;padding-top:10px;">
                 ⚡ 当前调配：攻击 +${alloc.attack} ｜ 防御 +${alloc.defense} ｜ 速度 +${alloc.speed}
+                ${typeof window.ioaState !== 'undefined' ? ` ｜ 升级点：${window.ioaState.points}` : ''}
             </div>
         `;
         openModal('📦 物资调配处', html);
@@ -452,153 +460,7 @@ document.getElementById('btnSupply').addEventListener('click', () => {
     renderSupply();
 });
 
-// ============================================================
-//  4. 艾奥-A型 强化系统
-// ============================================================
-
-// 全局状态
-if (typeof window.ioaState === 'undefined') {
-    window.ioaState = {
-        version: 1.00,
-        points: 0,
-        currentSystem: 'm',
-        systems: {
-            m: { 命中: 0, 伤害: 0, 冷却: 0, 暴击: 0 },
-            a: { 命中: 0, 伤害: 0, 冷却: 0, 暴击: 0 },
-            b: { 命中: 0, 伤害: 0, 冷却: 0, 暴击: 0 },
-            armor: { 结构值: 0, 抵抗伤害: 0, 受维修量加成: 0, 护盾值: 0 }
-        }
-    };
-}
-
-// 获取点数
-function addIoaPoints() {
-    const cost = 10;
-    if (energy < cost) { alert(`能量不足，需要 ${cost} 能量`); return; }
-    energy -= cost;
-    updateEnergy();
-    window.ioaState.points += 1;
-    renderIoaModal();
-}
-
-// 升级强化项
-function upgradeIoaItem(systemKey, itemName) {
-    const state = window.ioaState;
-    const system = state.systems[systemKey];
-    const currentLevel = system[itemName];
-    if (currentLevel >= 5) { alert('已达最高等级！'); return; }
-    const items = Object.keys(system);
-    const idx = items.indexOf(itemName);
-    if (idx > 0) {
-        const prevItem = items[idx - 1];
-        if (system[prevItem] < currentLevel + 1) {
-            alert(`需要先升级「${prevItem}」至 ${currentLevel+1} 级`);
-            return;
-        }
-    }
-    if (state.points < 2) { alert('强化点数不足，需要 2 点'); return; }
-    state.points -= 2;
-    system[itemName] = currentLevel + 1;
-    state.version = Math.round((state.version + 0.01) * 100) / 100;
-    renderIoaModal();
-}
-
-// 渲染强化界面
-function renderIoaModal() {
-    const state = window.ioaState;
-    const currentSys = state.currentSystem;
-    const systemNames = {
-        m: 'M系统',
-        a: 'A系统',
-        b: 'B系统',
-        armor: '装甲系统'
-    };
-    const itemLabels = {
-        m: ['命中', '伤害', '冷却', '暴击'],
-        a: ['命中', '伤害', '冷却', '暴击'],
-        b: ['命中', '伤害', '冷却', '暴击'],
-        armor: ['结构值', '抵抗伤害', '受维修量加成', '护盾值']
-    };
-    const systemData = state.systems[currentSys];
-    const items = itemLabels[currentSys] || [];
-
-    let treeHtml = items.map((item, idx) => {
-        const level = systemData[item] || 0;
-        const isMax = level >= 5;
-        let disabled = isMax || state.points < 2;
-        if (!isMax && idx > 0) {
-            const prevItem = items[idx - 1];
-            if (systemData[prevItem] < level + 1) disabled = true;
-        }
-        return `
-            <div class="ioa-tree-item">
-                <span class="name">${item}</span>
-                <span class="level">Lv.${level}/5</span>
-                <button class="btn-upgrade" ${disabled ? 'disabled' : ''} onclick="upgradeIoaItem('${currentSys}','${item}')">
-                    ${isMax ? '已满' : '升级 (2点)'}
-                </button>
-            </div>
-        `;
-    }).join('');
-
-    const versionClass = state.version >= 2.00 ? 'gold' : '';
-
-    const html = `
-        <div class="modal-two-col">
-            <div class="modal-left-col">
-                <div style="display:flex;flex-direction:column;gap:6px;">
-                    ${Object.keys(systemNames).map(key => `
-                        <div class="ioa-system ${key === currentSys ? 'active' : ''}" onclick="switchIoaSystem('${key}')">${systemNames[key]}</div>
-                    `).join('')}
-                </div>
-                <div style="margin-top:auto;font-size:0.8rem;color:#6a8a9e;border-top:1px solid #1f2833;padding-top:8px;">
-                    <div>版本号：<span class="${versionClass}" style="font-weight:700;">${state.version.toFixed(2)}</span></div>
-                    <div>强化点数：${state.points}</div>
-                    <button class="btn-get-points" onclick="addIoaPoints()">+1 点数 (消耗10能量)</button>
-                </div>
-            </div>
-            <div class="modal-right-col">
-                <div style="flex:1;overflow-y:auto;">
-                    ${treeHtml}
-                </div>
-                <div class="ioa-stats">
-                    <div><span class="stat-label">站位：</span><span class="stat-value">中排</span></div>
-                    <div><span class="stat-label">单舰人口：</span><span class="stat-value">18</span></div>
-                    <div><span class="stat-label">防空火力：</span><span class="stat-value">787 /分钟</span></div>
-                    <div><span class="stat-label">对舰火力：</span><span class="stat-value">28585 /分钟</span></div>
-                    <div><span class="stat-label">结构值：</span><span class="stat-value">62120</span></div>
-                    <div><span class="stat-label">服役限制：</span><span class="stat-value">8</span></div>
-                    <div><span class="stat-label">抵抗伤害：</span><span class="stat-value">50</span></div>
-                    <div><span class="stat-label">受维修量加成：</span><span class="stat-value">+10.0%</span></div>
-                    <div><span class="stat-label">护盾值：</span><span class="stat-value">10.0%</span></div>
-                </div>
-                <div class="ioa-weapon-detail">
-                    <strong>武器系统：</strong><br>
-                    M：双联装离子炮 | 对舰 24000/分 | 能量 | 优先大型 | 直射 | 单发600<br>
-                    A：快速火炮 | 防空 787/分 | 实弹 | 优先舰载机 | 直射 | 单发35 (反击防空)<br>
-                    B：反舰导弹阵列 | 对舰 3085/分 | 实弹 | 优先小型 | 投射 | 单发100
-                </div>
-            </div>
-        </div>
-    `;
-
-    const fullHtml = `<div style="padding:0;">${html}</div>`;
-    openModal('🚀 艾奥-A型 · 强化配置', fullHtml);
-}
-
-function switchIoaSystem(systemKey) {
-    window.ioaState.currentSystem = systemKey;
-    renderIoaModal();
-}
-
-function openIoaModal() {
-    renderIoaModal();
-}
-
-// ============================================================
-//  5. 蓝图数据库（内嵌面板） - 艾奥-A型放在巡洋舰详情中
-// ============================================================
-
+// ---- 蓝图数据库（内嵌面板，艾奥按钮调用 ships.js 中的函数） ----
 document.getElementById('btnBlueprint').addEventListener('click', function() {
     const leftPanel = document.getElementById('leftPanel');
     const welcome = document.getElementById('welcomeContent');
@@ -619,7 +481,6 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
         return;
     }
 
-    // 舰船数据（不再单独列出艾奥-A型）
     const ships = [
         {
             id: 'carrier',
@@ -648,7 +509,7 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
             icon: '<img src="./photo/微信图片_20260731113858_182_7.jpg" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">',
             desc: '主力舰 · 大型',
             category: '主力舰',
-            hasIoa: true  // 标记此舰种包含艾奥-A型
+            hasIoa: true
         },
         {
             id: 'destroyer',
@@ -682,12 +543,10 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
 
     let currentShipId = 'frigate';
 
-    // 渲染详情
     function renderShipDetail(shipId) {
         const ship = ships.find(s => s.id === shipId);
         if (!ship) return '<div>未知舰种</div>';
 
-        // 如果是巡洋舰，显示巡洋舰信息 + 艾奥-A型子项
         if (shipId === 'cruiser' && ship.hasIoa) {
             const ioaIcon = '<img src="./photo/微信图片_20260731162845_1_945.png" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:2px;">';
             return `
@@ -700,7 +559,7 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
                     <span style="color:#6a8a9e;font-size:0.85rem;">木星工业 · 重型巡洋舰</span>
                 </div>
                 <div style="margin-top:8px;">
-                    <button class="btn-research" onclick="openIoaModal()">🔧 打开强化配置</button>
+                    <button class="btn-research" onclick="window.openIoaModal()">🔧 打开强化配置</button>
                 </div>
                 <div style="margin-top:6px;font-size:0.85rem;color:#6a8a9e;">
                     ⚡ 点击查看详细武器系统与装甲强化
@@ -708,7 +567,6 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
             `;
         }
 
-        // 常规舰船
         return `
             <div class="ship-name">${ship.icon} ${ship.name}</div>
             <div class="ship-desc">${ship.desc}</div>
@@ -716,7 +574,6 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
         `;
     }
 
-    // 构建蓝图面板HTML
     function buildBlueprintHTML() {
         return `
             <div class="bp-panel">
@@ -769,12 +626,10 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
     leftPanel.innerHTML = buildBlueprintHTML();
     leftPanel.dataset.blueprint = 'true';
 
-    // 绑定返回按钮
     document.getElementById('bpBackBtn').addEventListener('click', function() {
         document.getElementById('btnBlueprint').click();
     });
 
-    // 绑定选项卡切换
     document.querySelectorAll('.bp-tab-btn').forEach(btn => {
         btn.addEventListener('click', function() {
             document.querySelectorAll('.bp-tab-btn').forEach(b => b.classList.remove('active'));
@@ -786,7 +641,6 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
         });
     });
 
-    // 绑定舰种点击
     document.querySelectorAll('.bp-ship-item').forEach(item => {
         item.addEventListener('click', function() {
             const shipId = this.dataset.ship;
@@ -800,7 +654,6 @@ document.getElementById('btnBlueprint').addEventListener('click', function() {
         });
     });
 
-    // 启动定时器更新敌方数据
     if (window._bpInterval) clearInterval(window._bpInterval);
     window._bpInterval = setInterval(() => {
         const waveDisplay = document.getElementById('enemyWaveDisplay');
@@ -889,13 +742,8 @@ document.getElementById('btnAlliance').addEventListener('click', () => {
 });
 
 // ============================================================
-//  6. 初始化
+//  4. 初始化
 // ============================================================
 
-console.log('🚀 卫戍协议 · 星河防线 已加载（独立模拟模式）');
+console.log('🚀 卫戍协议 · 星河防线 已加载（核心）');
 window.restartGame = restartGame;
-// 暴露艾奥函数（确保按钮可以调用）
-window.openIoaModal = openIoaModal;
-window.addIoaPoints = addIoaPoints;
-window.upgradeIoaItem = upgradeIoaItem;
-window.switchIoaSystem = switchIoaSystem;
