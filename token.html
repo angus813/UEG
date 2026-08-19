@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Token 设置 - UEG小网站</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0c0f; color: #e0e8f0;
+      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 16px;
+    }
+    .card {
+      width: 100%; max-width: 520px;
+      background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
+      border: 1px solid #2a3340; box-shadow: 0 0 30px rgba(0,160,255,0.1);
+      padding: 30px 26px; position: relative; overflow: hidden;
+    }
+    .card::before { content:''; position:absolute; top:0; left:0; width:50px; height:50px; border-top:2px solid #00c8ff; border-left:2px solid #00c8ff; }
+    .card::after { content:''; position:absolute; bottom:0; right:0; width:50px; height:50px; border-bottom:2px solid #00c8ff; border-right:2px solid #00c8ff; }
+    h2 { color: #fff; letter-spacing: 3px; font-size: 1.3rem; margin-bottom: 18px; text-shadow: 0 0 12px #00a3ff; }
+    label { display: block; color: #7a8b9a; font-size: 0.85rem; margin: 14px 0 5px; }
+    input, textarea {
+      width: 100%; background: #1a1e24; border: 1px solid #3a5060;
+      color: #fff; padding: 10px; font-family: inherit; font-size: 0.9rem;
+    }
+    textarea { height: 70px; resize: vertical; font-family: monospace; font-size: 0.75rem; }
+    .row { display: flex; gap: 10px; margin-top: 18px; }
+    .btn {
+      flex: 1; padding: 11px; border: none; cursor: pointer; font-weight: 700;
+      font-family: inherit; letter-spacing: 1px; transition: 0.2s; font-size: 0.9rem;
+    }
+    .btn.primary { background: #00c8ff; color: #000; }
+    .btn.primary:hover { background: #00a3ff; box-shadow: 0 0 12px rgba(0,200,255,0.4); }
+    .btn.ghost { background: transparent; border: 1px solid #3a5060; color: #b0c7d6; }
+    .btn.ghost:hover { border-color: #00c8ff; color: #fff; }
+    .btn.danger { background: transparent; border: 1px solid #5a3a2a; color: #ff8844; }
+    .btn.danger:hover { border-color: #ff8844; }
+    .check { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #8aacbe; font-size: 0.8rem; }
+    .check input { width: auto; }
+    .status {
+      margin-top: 16px; padding: 10px 12px; min-height: 38px;
+      background: rgba(0,200,255,0.04); border: 1px solid #1f2a33;
+      color: #ffaa44; font-size: 0.82rem; white-space: pre-wrap; line-height: 1.6;
+    }
+    .status.ok { color: #44cc88; }
+    .status.err { color: #ff6a6a; }
+    .link-back { display: inline-block; margin-top: 14px; color: #00c8ff; text-decoration: none; font-size: 0.85rem; border: 1px solid #00c8ff; padding: 6px 14px; }
+    .link-back:hover { background: rgba(0,200,255,0.1); }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🔑 Token 加密设置</h2>
+
+    <label>GitHub Token</label>
+    <textarea id="tokenInput" placeholder="github_pat_xxx 或 ghp_xxx"></textarea>
+
+    <label>主密码</label>
+    <input type="password" id="pwInput" placeholder="至少 8 位">
+    <label>确认主密码</label>
+    <input type="password" id="pwInput2" placeholder="再次输入">
+
+    <div class="check"><input type="checkbox" id="rememberChk" checked> 解锁后本浏览器会话内记住</div>
+
+    <div class="row">
+      <button class="btn primary" onclick="saveToken()">加密保存</button>
+      <button class="btn ghost" onclick="unlockToken()">解锁 + 测试</button>
+    </div>
+    <div class="row">
+      <button class="btn ghost" onclick="lockNow()">锁定 Token</button>
+      <button class="btn danger" onclick="clearAll()">清除全部设置</button>
+    </div>
+
+    <div class="status" id="status">就绪</div>
+
+    <a class="link-back" href="../index.html">← 返回主页</a>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="github-db.js"></script>
+  <script>
+    function setStatus(msg, cls) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status' + (cls ? ' ' + cls : '');
+    }
+
+    async function saveToken() {
+      const token = document.getElementById('tokenInput').value.trim();
+      const pw = document.getElementById('pwInput').value;
+      const pw2 = document.getElementById('pwInput2').value;
+      if (!token) { setStatus('❌ 请输入 GitHub Token', 'err'); return; }
+      if (pw.length < 8) { setStatus('❌ 主密码至少 8 位', 'err'); return; }
+      if (pw !== pw2) { setStatus('❌ 两次输入的主密码不一致', 'err'); return; }
+      if (DB.hasToken()) {
+        if (!confirm('本机已保存过 Token，覆盖将使其失效。是否继续？')) return;
+      }
+      try {
+        await DB.setToken(pw, token);
+        setStatus('✅ Token 已加密保存', 'ok');
+        document.getElementById('tokenInput').value = '';
+      } catch (e) { setStatus('❌ 保存失败: ' + e.message, 'err'); }
+    }
+
+    async function unlockToken() {
+      const pw = document.getElementById('pwInput').value;
+      if (!pw) { setStatus('❌ 请输入主密码', 'err'); return; }
+      try {
+        const remember = document.getElementById('rememberChk').checked;
+        await DB.unlockToken(pw, remember);
+        setStatus('⏳ 解锁成功，正在测试连接...', 'ok');
+        const r = await DB.testConnection();
+        if (r.ok) setStatus('✅ 解锁成功，私有仓库可访问', 'ok');
+        else setStatus('❌ 解锁成功，但仓库访问失败: ' + (r.error || '未知错误'), 'err');
+      } catch (e) { setStatus('❌ 解锁失败: ' + e.message, 'err'); }
+    }
+
+    function lockNow() {
+      DB.lockToken();
+      setStatus('🔒 Token 已锁定', 'ok');
+    }
+
+    function clearAll() {
+      if (!confirm('确定清除本机保存的加密 Token 吗？')) return;
+      localStorage.removeItem('ueg_token_enc');
+      sessionStorage.removeItem('ueg_token_session');
+      DB.lockToken();
+      setStatus('🗑 已清除全部 Token 相关设置', 'ok');
+    }
+
+    // 初始化状态显示
+    (function init() {
+      if (DB.hasToken()) setStatus('ℹ️ 本机已保存加密 Token' + (DB.getSession().has ? '，当前已解锁' : '，尚未解锁'), 'ok');
+      else setStatus('ℹ️ 尚未设置 Token', '');
+    })();
+  </script>
+</body>
+</html>

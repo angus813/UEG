@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>卫戍协议 - UEG小网站</title>
+  <link rel="stylesheet" href="weishu.css">
+</head>
+<body>
+  <div class="page">
+    <!-- 左侧主面板（欢迎 / 蓝图数据库 / 游戏由 JS 动态注入） -->
+    <div class="side-panel" id="leftPanel" data-mode="welcome">
+      <div class="welcome" id="welcomeContent">
+        <span class="big-icon">🚀</span>
+        <h2>卫戍协议</h2>
+        <p>星河防线 · 塔防战略</p>
+        <div class="hint">🛡️ 点击「独立模拟」开始作战</div>
+      </div>
+    </div>
+
+    <!-- 右侧按钮区 -->
+    <div class="action-panel">
+      <button class="action-btn primary" id="btnSolo">⚔️ 独立模拟</button>
+      <button class="action-btn" id="btnSupply">📦 物资调配</button>
+      <button class="action-btn" id="btnBlueprint">📐 蓝图数据库</button>
+      <button class="action-btn" id="btnInvite">🤝 模拟邀约</button>
+      <button class="action-btn" id="btnAlliance">⚔️ 同盟模拟</button>
+      <a class="back-link" href="../games.html">← 返回小游戏</a>
+    </div>
+  </div>
+
+  <!-- 通用模态框（模拟弹窗 / 独立模拟 / 物资调配 / 邀约 / 同盟） -->
+  <div class="modal" id="genericModal">
+    <div class="modal-box">
+      <button class="modal-close" id="modalCloseBtn">✕</button>
+      <h3 id="modalTitle">标题</h3>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- 波次升级模态框 -->
+  <div class="modal" id="upgradeModal" style="display:none;">
+    <div class="modal-box">
+      <h3>🌊 波次升级</h3>
+      <div id="upgradeOptions"></div>
+    </div>
+  </div>
+
+  <!-- 数据与逻辑 -->
+  <script src="ships_data.js"></script>
+  <script src="../supabase-client.js"></script>
+  <script src="weishu.js"></script>
+</body>
+</html>

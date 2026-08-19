@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>战略地图 - 公会</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0c0f;
+      color: #e0e8f0;
+      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      margin: 0;
+      padding: 10px;
+    }
+    .container {
+      width: 100%;
+      max-width: 900px;
+      background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
+      border: 1px solid #2a3340;
+      box-shadow: 0 0 30px rgba(0,160,255,0.1);
+      position: relative;
+      overflow-y: auto;
+      height: auto;
+      padding: 25px 20px;
+      margin: 10px auto;
+    }
+    .container::before {
+      content: ''; position: absolute; top: 0; left: 0;
+      width: 60px; height: 60px;
+      border-top: 2px solid #00c8ff; border-left: 2px solid #00c8ff;
+    }
+    .container::after {
+      content: ''; position: absolute; bottom: 0; right: 0;
+      width: 60px; height: 60px;
+      border-bottom: 2px solid #00c8ff; border-right: 2px solid #00c8ff;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #2a3340;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .title {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: #fff;
+      text-shadow: 0 0 15px #00a3ff;
+    }
+    .back-btn {
+      color: #00c8ff;
+      text-decoration: none;
+      font-size: 1rem;
+      border: 1px solid #00c8ff;
+      padding: 6px 15px;
+      transition: 0.3s;
+      letter-spacing: 2px;
+      white-space: nowrap;
+    }
+    .back-btn:hover {
+      background: rgba(0,200,255,0.1);
+      box-shadow: 0 0 15px rgba(0,200,255,0.4);
+    }
+    .admin-actions {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 25px;
+      flex-wrap: wrap;
+    }
+    .btn-create {
+      background: #ff6a00;
+      border: 1px solid #ff6a00;
+      color: #000;
+      padding: 10px 20px;
+      font-family: inherit;
+      font-weight: bold;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-create:hover {
+      background: #ff8c33;
+      box-shadow: 0 0 15px rgba(255,106,0,0.4);
+    }
+    .map-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 15px;
+      min-height: 200px;
+    }
+    .skeleton-card {
+      background: rgba(20,26,33,0.5);
+      border: 1px solid #2a3a4a;
+      padding: 20px;
+      height: 160px;
+      animation: pulse 1.5s ease-in-out infinite;
+      border-radius: 4px;
+    }
+    @keyframes pulse {
+      0% { opacity: 0.5; }
+      50% { opacity: 0.8; }
+      100% { opacity: 0.5; }
+    }
+    .skeleton-card .line {
+      height: 12px;
+      background: rgba(255,255,255,0.08);
+      margin-bottom: 10px;
+      border-radius: 2px;
+    }
+    .skeleton-card .line.short { width: 60%; }
+    .skeleton-card .line.long { width: 90%; }
+    .map-card-wrapper {
+      position: relative;
+    }
+    .map-card {
+      background: rgba(20,26,33,0.9);
+      border: 1px solid #2e3b47;
+      padding: 20px;
+      transition: 0.3s;
+      position: relative;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+      height: 100%;
+    }
+    .map-card:hover {
+      border-color: #00c8ff;
+      box-shadow: 0 0 20px rgba(0,200,255,0.3);
+    }
+    .delete-map-btn {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: #ff4444;
+      color: #fff;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 5;
+      display: none;
+      transition: 0.2s;
+    }
+    .delete-map-btn:hover {
+      background: #ff0000;
+      transform: scale(1.2);
+    }
+    .edit-map-btn {
+      position: absolute;
+      top: 20px;
+      right: -8px;
+      background: #ffaa00;
+      color: #000;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 5;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      transition: 0.2s;
+    }
+    .edit-map-btn:hover {
+      background: #ff8c00;
+      transform: scale(1.2);
+    }
+    .map-type {
+      font-size: 0.75rem;
+      color: #7a8b9a;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+    }
+    .map-name {
+      font-size: 1.3rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .map-info {
+      font-size: 0.8rem;
+      color: #5e7a8c;
+    }
+    .map-protocol {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      color: #ffaa00;
+      background: rgba(255,170,0,0.1);
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 2px;
+    }
+    .empty-state {
+      text-align: center;
+      color: #4a5a6a;
+      padding: 50px;
+      font-size: 1.1rem;
+      grid-column: 1 / -1;
+    }
+    .load-more-wrap {
+      text-align: center;
+      margin-top: 30px;
+    }
+    .btn-load-more {
+      background: transparent;
+      border: 1px solid #3a5060;
+      color: #b0c7d6;
+      padding: 10px 30px;
+      font-family: inherit;
+      font-size: 1rem;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-load-more:hover {
+      border-color: #00c8ff;
+      color: #fff;
+      background: rgba(0,200,255,0.05);
+    }
+    .btn-load-more:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+    .modal-content {
+      background: #13171c;
+      border: 1px solid #2a3340;
+      padding: 30px;
+      width: 90%;
+      max-width: 450px;
+      box-shadow: 0 0 30px rgba(0,160,255,0.3);
+    }
+    .modal-content h3 {
+      margin-bottom: 20px;
+      color: #ff6a00;
+      letter-spacing: 2px;
+    }
+    .modal-input {
+      width: 100%;
+      background: #1a1e24;
+      border: 1px solid #3a5060;
+      color: #fff;
+      padding: 10px;
+      margin-bottom: 15px;
+      font-family: inherit;
+    }
+    .modal-select {
+      width: 100%;
+      background: #1a1e24;
+      border: 1px solid #3a5060;
+      color: #fff;
+      padding: 10px;
+      margin-bottom: 15px;
+      font-family: inherit;
+    }
+    .protocol-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 15px;
+    }
+    .protocol-option {
+      flex: 1 1 calc(33.333% - 8px);
+      min-width: 80px;
+      text-align: center;
+      background: #1a1e24;
+      border: 1px solid #3a5060;
+      color: #b0c7d6;
+      padding: 8px 0;
+      cursor: pointer;
+      transition: 0.2s;
+      font-family: inherit;
+      font-size: 0.85rem;
+    }
+    .protocol-option.selected {
+      border-color: #ff6a00;
+      color: #ff6a00;
+      background: rgba(255,106,0,0.15);
+    }
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .btn-modal {
+      padding: 10px 20px;
+      border: none;
+      font-family: inherit;
+      font-weight: bold;
+      cursor: pointer;
+      letter-spacing: 1px;
+    }
+    .btn-save {
+      background: #ff6a00;
+      color: #000;
+    }
+    .btn-cancel {
+      background: #3a5060;
+      color: #fff;
+    }
+    @media (max-width: 600px) {
+      body { align-items: flex-start; }
+      .container { padding: 15px; margin: 5px; }
+      .title { font-size: 1.6rem; }
+      .map-list { grid-template-columns: 1fr; }
+      .protocol-option { flex: 1 1 calc(50% - 8px); }
+      .map-card { padding: 15px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">🗺️ 战略地图</div>
+      <a href="guild.html" class="back-btn">← 返回公会</a>
+    </div>
+
+    <div class="admin-actions" id="adminActions" style="display: none;">
+      <button class="btn-create" id="btnTemplateMap">新建模板地图</button>
+      <button class="btn-create" id="btnGalaxyMap">新建星系地图</button>
+    </div>
+
+    <div class="map-list" id="mapList">
+      <!-- 骨架屏由 JS 动态生成 -->
+    </div>
+
+    <div class="load-more-wrap" id="loadMoreWrap" style="display: none;">
+      <button class="btn-load-more" id="btnLoadMore">加载更多</button>
+    </div>
+
+    <div class="modal" id="mapModal">
+      <div class="modal-content">
+        <h3 id="modalTitle">新建地图</h3>
+        <input type="text" id="mapNameInput" class="modal-input" placeholder="输入地图名称">
+        <div id="templateSelectWrap" style="display: none;">
+          <label style="display:block; margin-bottom:8px; color:#7a8b9a;">从模板复制</label>
+          <select id="templateSelect" class="modal-select">
+            <option value="">-- 不使用模板 --</option>
+          </select>
+        </div>
+        <div id="protocolSection" style="display: none;">
+          <label style="display:block; margin-bottom:8px; color:#7a8b9a;">选择协议</label>
+          <div class="protocol-options" id="protocolOptions">
+            <button class="protocol-option selected" data-protocol="2.0">2.0</button>
+            <button class="protocol-option" data-protocol="3.0">3.0</button>
+            <button class="protocol-option" data-protocol="红矿">红矿</button>
+            <button class="protocol-option" data-protocol="救援">救援</button>
+            <button class="protocol-option" data-protocol="节点">节点</button>
+            <button class="protocol-option" data-protocol="净化">净化</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-modal btn-cancel" id="btnCancel">取消</button>
+          <button class="btn-modal btn-save" id="btnSave">创建</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 引入 Supabase 客户端 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-client.js"></script>
+
+  <script>
+    // ==================== 全局配置 ====================
+    const PAGE_SIZE = 12;
+    const ADMIN_CACHE_KEY = 'ueg_admin_cache';
+    const ADMIN_CACHE_TTL = 300000;
+
+    let currentPage = 0;
+    let isLoading = false;
+    let hasMore = true;
+    let allMaps = [];
+    let isAdmin = false;
+
+    const mapListEl = document.getElementById('mapList');
+    const loadMoreWrap = document.getElementById('loadMoreWrap');
+    const btnLoadMore = document.getElementById('btnLoadMore');
+    const adminActions = document.getElementById('adminActions');
+
+    // ==================== 工具函数 ====================
+    function getCurrentUsername() {
+      const cu = localStorage.getItem('ueg_current_user');
+      if (!cu) return null;
+      try { return JSON.parse(cu).username; } catch { return null; }
+    }
+
+    // ==================== 管理员状态 ====================
+    async function fetchIsAdmin() {
+      const username = getCurrentUsername();
+      if (!username) return false;
+      const cached = localStorage.getItem(ADMIN_CACHE_KEY);
+      if (cached) {
+        try {
+          const data = JSON.parse(cached);
+          if (Date.now() - data.timestamp < ADMIN_CACHE_TTL) return data.isAdmin;
+        } catch (e) {}
+      }
+      const { data, error } = await supabase
+        .from('users')
+        .select('is_admin')
+        .eq('username', username)
+        .maybeSingle();
+      const result = !error && data && data.is_admin === true;
+      localStorage.setItem(ADMIN_CACHE_KEY, JSON.stringify({ isAdmin: result, timestamp: Date.now() }));
+      return result;
+    }
+
+    // ==================== 加载地图（分页） ====================
+    async function loadMaps(page = 0, append = true) {
+      if (isLoading) return;
+      isLoading = true;
+      btnLoadMore.disabled = true;
+      if (!append) renderSkeletons();
+      try {
+        const from = page * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+        const { data, error } = await supabase
+          .from('guild_maps')
+          .select('id, name, type, protocol, creator, created_at')
+          .order('created_at', { ascending: false })
+          .range(from, to);
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          hasMore = false;
+          if (page === 0) mapListEl.innerHTML = '<div class="empty-state">暂无地图，等待管理员创建</div>';
+          return;
+        }
+        hasMore = data.length === PAGE_SIZE;
+        if (append) allMaps = allMaps.concat(data);
+        else allMaps = data;
+        renderMaps(allMaps);
+        if (hasMore) {
+          loadMoreWrap.style.display = 'block';
+          btnLoadMore.disabled = false;
+        } else {
+          loadMoreWrap.style.display = 'none';
+        }
+        currentPage = page;
+      } catch (err) {
+        console.error('加载地图失败:', err);
+        if (page === 0) mapListEl.innerHTML = '<div class="empty-state">加载失败，请刷新重试</div>';
+      } finally {
+        isLoading = false;
+        btnLoadMore.disabled = !hasMore;
+      }
+    }
+
+    function renderSkeletons() {
+      let html = '';
+      for (let i = 0; i < PAGE_SIZE; i++) {
+        html += `
+          <div class="skeleton-card">
+            <div class="line short"></div>
+            <div class="line long"></div>
+            <div class="line short"></div>
+            <div class="line" style="width:40%;"></div>
+          </div>
+        `;
+      }
+      mapListEl.innerHTML = html;
+    }
+
+    function renderMaps(maps) {
+      if (!maps || maps.length === 0) {
+        mapListEl.innerHTML = '<div class="empty-state">暂无地图</div>';
+        loadMoreWrap.style.display = 'none';
+        return;
+      }
+      let html = '';
+      maps.forEach(map => {
+        const date = new Date(map.created_at);
+        const timeStr = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+        const typeLabel = map.type === 'template' ? '模板地图' : '星系地图';
+        html += `
+          <div class="map-card-wrapper">
+            <a href="map/map_editor.html?mode=view&id=${map.id}" class="map-card">
+              <div class="map-type">${typeLabel}</div>
+              <div class="map-name">${map.name}</div>
+              ${map.protocol ? `<div class="map-protocol">协议：${map.protocol}</div>` : ''}
+              <div class="map-info">创建者：${map.creator} · ${timeStr}</div>
+            </a>
+        `;
+        // 编辑按钮：星系地图对所有用户显示，模板地图仅管理员显示
+        if (map.type === 'galaxy' || isAdmin) {
+          html += `
+            <a href="map/map_editor.html?mode=edit&id=${map.id}" class="edit-map-btn" style="display:flex;" title="编辑地图">✎</a>
+          `;
+        }
+        // 删除按钮：仅管理员
+        if (isAdmin) {
+          html += `
+            <button class="delete-map-btn" style="display:block;" onclick="deleteMap('${map.id}')">✕</button>
+          `;
+        }
+        html += `</div>`;
+      });
+      mapListEl.innerHTML = html;
+    }
+
+    // ==================== 删除地图 ====================
+    async function deleteMap(mapId) {
+      if (!confirm('确定要删除此地图吗？此操作不可恢复！')) return;
+      if (!isAdmin) { alert('您没有管理员权限'); return; }
+      const { error } = await supabase.from('guild_maps').delete().eq('id', mapId);
+      if (error) { alert('删除失败: ' + error.message); return; }
+      allMaps = allMaps.filter(m => m.id !== mapId);
+      renderMaps(allMaps);
+      if (allMaps.length === 0 && hasMore) loadMaps(currentPage + 1, true);
+    }
+    window.deleteMap = deleteMap;
+
+    // ==================== 创建地图（支持从模板复制） ====================
+    async function createMap(name, type, protocol = null, templateId = null) {
+      const username = getCurrentUsername();
+      if (!username) { alert('请先登录'); return false; }
+      let shapes = [];
+      if (templateId) {
+        const { data: template, error } = await supabase
+          .from('guild_maps')
+          .select('shapes')
+          .eq('id', templateId)
+          .maybeSingle();
+        if (error || !template) {
+          alert('模板地图不存在');
+          return false;
+        }
+        shapes = (template.shapes || []).map(s => ({ ...s, fromTemplate: true }));
+      }
+      const newMap = {
+        name,
+        type,
+        protocol: type === 'template' ? protocol : null,
+        creator: username,
+        shapes
+      };
+      const { data, error } = await supabase
+        .from('guild_maps')
+        .insert([newMap])
+        .select('id, name, type, protocol, creator, created_at');
+      if (error) { alert('创建失败: ' + error.message); return false; }
+      if (data && data.length > 0) {
+        allMaps.unshift(data[0]);
+        renderMaps(allMaps);
+      }
+      return true;
+    }
+
+    // ==================== 模态框逻辑 ====================
+    let currentMapType = 'template';
+    let selectedProtocol = '2.0';
+    let templateMaps = [];
+
+    async function loadTemplateMaps() {
+      const { data, error } = await supabase
+        .from('guild_maps')
+        .select('id, name')
+        .eq('type', 'template')
+        .order('name');
+      if (error) { console.error('加载模板列表失败:', error); return []; }
+      return data || [];
+    }
+
+    function resetProtocolSelection() {
+      document.querySelectorAll('.protocol-option').forEach(btn => btn.classList.remove('selected'));
+      const first = document.querySelector('.protocol-option[data-protocol="2.0"]');
+      if (first) first.classList.add('selected');
+      selectedProtocol = '2.0';
+    }
+
+    async function showModal(type) {
+      currentMapType = type;
+      document.getElementById('modalTitle').textContent = type === 'template' ? '新建模板地图' : '新建星系地图';
+      document.getElementById('mapNameInput').value = '';
+      const protocolSection = document.getElementById('protocolSection');
+      const templateWrap = document.getElementById('templateSelectWrap');
+      const templateSelect = document.getElementById('templateSelect');
+      if (type === 'template') {
+        protocolSection.style.display = 'block';
+        templateWrap.style.display = 'none';
+        resetProtocolSelection();
+        selectedProtocol = '2.0';
+      } else {
+        protocolSection.style.display = 'none';
+        templateWrap.style.display = 'block';
+        templateMaps = await loadTemplateMaps();
+        templateSelect.innerHTML = '<option value="">-- 不使用模板 --</option>';
+        templateMaps.forEach(t => {
+          templateSelect.innerHTML += `<option value="${t.id}">${t.name}</option>`;
+        });
+        selectedProtocol = null;
+      }
+      document.getElementById('mapModal').style.display = 'flex';
+    }
+
+    // ==================== 初始化 ====================
+    async function init() {
+      isAdmin = await fetchIsAdmin();
+      if (isAdmin) adminActions.style.display = 'flex';
+      await loadMaps(0, false);
+
+      document.getElementById('btnTemplateMap').addEventListener('click', () => showModal('template'));
+      document.getElementById('btnGalaxyMap').addEventListener('click', () => showModal('galaxy'));
+
+      document.getElementById('protocolOptions').addEventListener('click', (e) => {
+        if (e.target.classList.contains('protocol-option')) {
+          document.querySelectorAll('.protocol-option').forEach(btn => btn.classList.remove('selected'));
+          e.target.classList.add('selected');
+          selectedProtocol = e.target.dataset.protocol;
+        }
+      });
+
+      document.getElementById('btnCancel').addEventListener('click', () => {
+        document.getElementById('mapModal').style.display = 'none';
+      });
+
+      document.getElementById('btnSave').addEventListener('click', async () => {
+        const name = document.getElementById('mapNameInput').value.trim();
+        if (!name) { alert('请输入地图名称'); return; }
+        let templateId = null;
+        if (currentMapType === 'galaxy') {
+          const select = document.getElementById('templateSelect');
+          templateId = select.value || null;
+        }
+        const success = await createMap(name, currentMapType, selectedProtocol, templateId);
+        if (success) {
+          document.getElementById('mapModal').style.display = 'none';
+        }
+      });
+
+      btnLoadMore.addEventListener('click', () => {
+        if (!isLoading && hasMore) loadMaps(currentPage + 1, true);
+      });
+    }
+    init();
+  </script>
+</body>
+</html>

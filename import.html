@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据导入工具 - UEG小网站</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0c0f; color: #e0e8f0;
+      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      padding: 30px;
+    }
+    .card {
+      max-width: 720px; margin: 0 auto;
+      background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
+      border: 1px solid #2a3340; padding: 30px; position: relative;
+    }
+    h2 { color: #ff6a00; letter-spacing: 2px; margin-bottom: 8px; }
+    .sub { color: #7a8b9a; font-size: 0.85rem; margin-bottom: 20px; line-height: 1.7; }
+    .lock-box {
+      background: #0d1116; border: 1px solid #2a4a5a; padding: 14px 16px; margin-bottom: 20px;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .lock-box .state { color: #88ccff; font-size: 0.85rem; }
+    .lock-box input { background: #1a1e24; border: 1px solid #3a5060; color: #fff; padding: 8px; width: 200px; }
+    .btn { background: #00c8ff; border: none; color: #000; padding: 8px 16px; cursor: pointer; font-weight: 700; font-family: inherit; }
+    .btn.ghost { background: transparent; border: 1px solid #3a5060; color: #b0c7d6; }
+    h3 { color: #00c8ff; margin-top: 20px; margin-bottom: 8px; font-size: 0.95rem; letter-spacing: 1px; }
+    textarea { width: 100%; height: 120px; background: #1a1e24; color: #fff; border: 1px solid #3a5060; padding: 10px; font-family: monospace; font-size: 0.75rem; margin-bottom: 8px; }
+    .status { margin-top: 16px; padding: 10px; border: 1px solid #1f2a33; background: rgba(0,200,255,0.04); color: #ffaa44; white-space: pre-wrap; }
+    .link-back { display: inline-block; margin-top: 16px; color: #00c8ff; text-decoration: none; border: 1px solid #00c8ff; padding: 6px 14px; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>📥 数据导入工具</h2>
+    <div class="sub">将备份数据通过 GitHub API 直连写入私有仓库 ueg-data（纯前端方案）</div>
+
+    <div class="lock-box">
+      <span class="state" id="lockState">检测中...</span>
+      <input type="password" id="pwInput" placeholder="主密码解锁 Token">
+      <button class="btn" onclick="doUnlock()">解锁</button>
+      <button class="btn ghost" onclick="doLock()">锁定</button>
+    </div>
+
+    <h3>📄 ships_data.js（舰船数据）</h3>
+    <textarea id="shipsInput" placeholder="粘贴 ships_data.js 内容（window.SHIPS_DATA = {...}）"></textarea>
+    <button class="btn" onclick="importShips()">导入舰船数据</button>
+
+    <h3>👥 users.json</h3>
+    <textarea id="usersInput" placeholder='粘贴 users.json 内容'></textarea>
+    <button class="btn" onclick="importUsers()">导入用户数据</button>
+
+    <h3>🗺️ guild_maps.json</h3>
+    <textarea id="mapsInput" placeholder='粘贴 guild_maps.json 内容'></textarea>
+    <button class="btn" onclick="importMaps()">导入地图数据</button>
+
+    <div class="status" id="status">就绪</div>
+    <a class="link-back" href="../index.html">← 返回主页</a>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="github-db.js"></script>
+  <script>
+    function setStatus(msg) { document.getElementById('status').textContent = msg; }
+    function refreshState() {
+      const el = document.getElementById('lockState');
+      if (!DB.hasToken()) el.textContent = '⚠️ 未设置 Token（请先到 token.html 设置）';
+      else if (DB.getSession().has) el.textContent = '✅ Token 已解锁';
+      else el.textContent = '🔒 Token 已保存但未解锁';
+    }
+    async function doUnlock() {
+      const pw = document.getElementById('pwInput').value;
+      if (!pw) { setStatus('❌ 请输入主密码'); return; }
+      try {
+        await DB.unlockToken(pw, true);
+        setStatus('✅ 解锁成功，可以导入');
+        refreshState();
+      } catch (e) { setStatus('❌ ' + e.message); }
+    }
+    function doLock() {
+      DB.lockToken();
+      setStatus('🔒 已锁定');
+      refreshState();
+    }
+    async function importShips() {
+      const c = document.getElementById('shipsInput').value.trim();
+      if (!c) { setStatus('❌ 请先粘贴内容'); return; }
+      setStatus('⏳ 导入中...');
+      const r = await DB.importShipsFromJs(c);
+      setStatus(r.ok ? '✅ 成功（' + r.count + ' 艘）' : '❌ ' + r.msg);
+    }
+    async function importUsers() {
+      const c = document.getElementById('usersInput').value.trim();
+      if (!c) { setStatus('❌ 请先粘贴内容'); return; }
+      setStatus('⏳ 导入中...');
+      const r = await DB.importUsersJson(c);
+      setStatus(r.ok ? '✅ 成功（' + r.count + ' 人）' : '❌ ' + r.msg);
+    }
+    async function importMaps() {
+      const c = document.getElementById('mapsInput').value.trim();
+      if (!c) { setStatus('❌ 请先粘贴内容'); return; }
+      setStatus('⏳ 导入中...');
+      const r = await DB.importMapsJson(c);
+      setStatus(r.ok ? '✅ 成功（' + r.count + ' 张）' : '❌ ' + r.msg);
+    }
+    refreshState();
+  </script>
+</body>
+</html>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>舰船强化 - 拉格朗日UEG</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0c0f; color: #e0e8f0;
+      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      min-height: 100vh; padding: 12px;
+    }
+    .app {
+      max-width: 1280px; margin: 0 auto;
+      background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
+      border: 1px solid #2a3340;
+      box-shadow: 0 0 30px rgba(0,160,255,0.1);
+      position: relative; overflow: hidden;
+    }
+    .app::before { content:''; position:absolute; top:0; left:0; width:60px; height:60px; border-top:2px solid #00c8ff; border-left:2px solid #00c8ff; }
+    .app::after { content:''; position:absolute; bottom:0; right:0; width:60px; height:60px; border-bottom:2px solid #00c8ff; border-right:2px solid #00c8ff; }
+
+    /* ===== 顶栏 ===== */
+    .top-bar {
+      display: flex; align-items: center; gap: 16px;
+      padding: 12px 22px; border-bottom: 1px solid #2a3340;
+      background: rgba(20,25,30,0.8); flex-wrap: wrap;
+    }
+    .top-bar h1 { font-size: 1.25rem; letter-spacing: 3px; color: #fff; text-shadow: 0 0 12px #00a3ff; }
+    .top-bar .sub { color: #5e7a8c; font-size: 0.78rem; letter-spacing: 2px; }
+    .points-box {
+      margin-left: auto; display: flex; align-items: center; gap: 10px;
+      background: rgba(0,200,255,0.06); border: 1px solid #1f4a5a;
+      padding: 6px 14px;
+    }
+    .points-box .label { color: #7a8b9a; font-size: 0.8rem; }
+    .points-box .num { color: #00c8ff; font-weight: 700; font-size: 1.15rem; letter-spacing: 1px; }
+    .btn {
+      background: #00c8ff; border: none; color: #000; padding: 6px 14px;
+      cursor: pointer; font-weight: 700; font-family: inherit; letter-spacing: 1px;
+      transition: 0.2s;
+    }
+    .btn:hover { background: #00a3ff; box-shadow: 0 0 12px rgba(0,200,255,0.4); }
+    .btn.ghost { background: transparent; border: 1px solid #3a5060; color: #b0c7d6; }
+    .btn.ghost:hover { border-color: #00c8ff; color: #fff; background: rgba(0,200,255,0.08); }
+    .btn.back { background: transparent; border: 1px solid #3a5060; color: #b0c7d6; text-decoration: none; }
+    .btn.back:hover { border-color: #00c8ff; color: #fff; }
+
+    /* ===== 主体 ===== */
+    .main { display: flex; min-height: 600px; }
+    .ship-list {
+      flex: 0 0 300px; border-right: 1px solid #1f2833;
+      max-height: calc(100vh - 90px); overflow-y: auto;
+      background: rgba(10,14,18,0.6);
+    }
+    .type-group { border-bottom: 1px solid #16202a; }
+    .type-header {
+      padding: 7px 14px; color: #ff8c2e; font-size: 0.78rem; font-weight: 700;
+      letter-spacing: 2px; background: rgba(255,140,46,0.06);
+      display: flex; justify-content: space-between; cursor: pointer;
+      border-bottom: 1px solid #1a222b;
+    }
+    .type-header .cnt { color: #5e7a8c; font-weight: 400; }
+    .ship-item {
+      padding: 8px 14px; cursor: pointer; transition: 0.15s;
+      border-bottom: 1px solid #101820;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .ship-item:hover { background: rgba(0,200,255,0.06); }
+    .ship-item.active { background: rgba(0,200,255,0.14); border-left: 3px solid #00c8ff; }
+    .ship-item .ico { font-size: 1.05rem; }
+    .ship-item .nm { font-size: 0.88rem; color: #dbe8f2; }
+    .ship-item .model { font-size: 0.72rem; color: #6a8a9e; }
+    .ship-item .co { margin-left: auto; font-size: 0.68rem; color: #4a6a7e; }
+
+    /* ===== 强化面板 ===== */
+    .panel { flex: 1; padding: 18px 22px; min-width: 0; }
+    .ship-head {
+      display: flex; align-items: center; gap: 14px;
+      padding-bottom: 14px; border-bottom: 1px solid #1f2833; margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .ship-head .big-ico { font-size: 2.2rem; }
+    .ship-head .nm { font-size: 1.35rem; font-weight: 700; color: #fff; letter-spacing: 1px; }
+    .ship-head .model { color: #00c8ff; font-size: 0.9rem; margin-left: 6px; }
+    .ship-head .meta { color: #6a8a9e; font-size: 0.8rem; margin-top: 3px; }
+    .ship-head .tag {
+      border: 1px solid #2a5060; color: #88ccff; font-size: 0.72rem;
+      padding: 2px 10px; margin-left: 8px; letter-spacing: 1px;
+    }
+
+    .sys-block { margin-bottom: 14px; border: 1px solid #1f2833; background: rgba(16,22,28,0.6); }
+    .sys-header {
+      padding: 9px 14px; cursor: pointer; user-select: none;
+      display: flex; align-items: center; gap: 8px;
+      border-bottom: 1px solid #16202a;
+    }
+    .sys-header:hover { background: rgba(0,200,255,0.05); }
+    .sys-header .arrow { color: #4a6a7e; transition: 0.2s; }
+    .sys-header.open .arrow { transform: rotate(90deg); }
+    .sys-header .nm { font-weight: 700; color: #ffaa44; font-size: 0.95rem; letter-spacing: 1px; }
+    .sys-header .wn { color: #44cc88; font-size: 0.7rem; margin-left: auto; }
+    .sys-body { padding: 8px 14px 14px; }
+
+    /* 科技项 */
+    .tech-item {
+      border: 1px solid #1a2a33; background: rgba(12,18,24,0.8);
+      padding: 10px 12px; margin-top: 8px; position: relative;
+    }
+    .tech-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .tech-name { font-weight: 600; color: #b0c7d6; font-size: 0.92rem; }
+    .tech-max { color: #5e7a8c; font-size: 0.7rem; }
+    .tech-ops { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+    .op-btn {
+      width: 26px; height: 26px; border: 1px solid #2a5060; background: transparent;
+      color: #00c8ff; cursor: pointer; font-size: 1rem; line-height: 1;
+      transition: 0.15s;
+    }
+    .op-btn:hover:not(:disabled) { background: rgba(0,200,255,0.15); border-color: #00c8ff; }
+    .op-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .op-btn.minus { color: #ff8844; border-color: #5a3a2a; }
+    .op-btn.minus:hover:not(:disabled) { background: rgba(255,136,68,0.12); border-color: #ff8844; }
+    .lv-text { color: #88ccff; font-size: 0.85rem; font-weight: 700; min-width: 74px; text-align: center; }
+
+    .lv-dots { display: flex; gap: 4px; margin-top: 8px; }
+    .lv-dot {
+      width: 12px; height: 12px; border: 1px solid #2a3a4a; border-radius: 50%;
+      background: transparent; transition: 0.15s;
+    }
+    .lv-dot.on { background: #00c8ff; border-color: #00c8ff; box-shadow: 0 0 6px rgba(0,200,255,0.6); }
+    .lv-dot.maxed { background: #ffaa44; border-color: #ffaa44; box-shadow: 0 0 6px rgba(255,170,68,0.6); }
+
+    .tech-desc { color: #8aacbe; font-size: 0.8rem; margin-top: 6px; line-height: 1.6; }
+    .tech-detail { color: #5e7a8c; font-size: 0.75rem; margin-top: 4px; line-height: 1.6; }
+    .tech-detail summary { cursor: pointer; color: #4a8aaa; outline: none; }
+
+    /* 实际效果标签 */
+    .fx-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .fx-tag {
+      font-size: 0.72rem; padding: 2px 8px; border: 1px solid #1f4a3a;
+      background: rgba(68,204,136,0.08); color: #44cc88; letter-spacing: 0.5px;
+    }
+    .fx-tag b { color: #8dffb5; }
+    .fx-tag .w { color: #4a6a7e; margin-left: 4px; }
+    .empty { color: #4a6a7e; text-align: center; padding: 60px 20px; font-size: 0.9rem; }
+
+    /* 武器标签 */
+    .weapon-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .wp-tag {
+      font-size: 0.7rem; padding: 2px 8px; border: 1px solid #2a3a5a;
+      background: rgba(80,120,255,0.06); color: #88aaff;
+    }
+
+    .panel-foot { margin-top: 18px; text-align: center; color: #4a6a7e; font-size: 0.75rem; padding-bottom: 10px; }
+
+    @media (max-width: 860px) {
+      .main { flex-direction: column; }
+      .ship-list { flex: none; max-height: 260px; border-right: none; border-bottom: 1px solid #1f2833; }
+      .top-bar h1 { font-size: 1rem; }
+      .points-box { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="top-bar">
+      <a class="btn back" href="../games.html">← 返回</a>
+      <h1>舰船强化</h1>
+      <span class="sub">BLUEPRINT ENHANCEMENT</span>
+      <div class="points-box">
+        <span class="label">⚡ 技术点</span>
+        <span class="num" id="pointsNum">0</span>
+        <button class="btn ghost" id="btnAddPoints" title="调试用：增加技术点">+100</button>
+      </div>
+    </div>
+    <div class="main">
+      <div class="ship-list" id="shipList"></div>
+      <div class="panel" id="panel">
+        <div class="empty">← 请选择一艘舰船开始强化</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="ships_data.js"></script>
+  <script src="enhance.js"></script>
+</body>
+</html>
