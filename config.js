@@ -1,28 +1,35 @@
 // ============================================================
-//  全局配置 —— 纯前端 + 自建 Python 后端版
-//  认证四件套形式（URL / PUBLISHABLE_KEY / SECRET_KEY / JWKS_URL）：
-//    · 前端只持有 URL、PUBLISHABLE_KEY（公开）、JWKS_URL（展示用）
-//    · SECRET_KEY 与 GITHUB_TOKEN 仅存在于后端 .env，绝不下发浏览器
-//  数据层：后端 Python 读写私有仓库 angus813/ueg-data（GITHUB_TOKEN 服务端保管）
+// UEG 全局配置 —— 双后端模式
+//   默认 Supabase（云端，手机/任何人可访问），本地 Python 后端关闭（备选）
+//   本地后端仅作为"定期同步工具"使用（每 3-4 天向 Supabase API 同步 2 个地图文件）
 // ============================================================
 window.UEG_CONFIG = {
-  api: {
-    url: 'http://127.0.0.1:8000',            // ★ Python 后端地址（本机/内网/VPS）
-    publishableKey: 'ueg-public-key-0001',   // ★ 与后端 .env 的 PUBLISHABLE_KEY 一致
-    jwksUrl: 'http://127.0.0.1:8000/.well-known/jwks.json'
+  // 数据源模式：'supabase'（默认） | 'local'（本地 Python 后端，默认关闭）
+  mode: 'supabase',
+
+  // ---- Supabase（主数据源，前端直连） ----
+  supabase: {
+    url: 'https://ruwjkbscaotnyhmduviz.supabase.co',
+    publishableKey: 'sb_publishable_pfDTII6yQ_Behq9Y6wYkHw_UbLW0z7m', // 公开 Key（前端可用）
+    jwksUrl: 'https://ruwjkbscaotnyhmduviz.supabase.co/auth/v1/.well-known/jwks.json'
+    // SECRET_KEY 仅存在于后端 .env，绝不下发浏览器
   },
+
+  // ---- 本地 Python 后端（默认关闭；切回 mode:'local' 时使用） ----
+  api: {
+    url: 'http://127.0.0.1:8000',
+    publishableKey: 'ueg-public-key-0001'
+  },
+
+  // ---- 私有 GitHub 数据仓库（本地后端同步工具使用） ----
   github: {
-    owner: 'angus813',            // 仓库拥有者（后端也会读取自己的配置）
-    repo: 'ueg-data',             // 私有仓库名（存储数据）
-    branch: 'main',               // 分支
-    files: {
-      users: 'users.json',        // 用户数据
-      maps: 'guild_maps.json',    // 公会地图
-      ships: 'ships_data.json'    // 舰船数据
-    },
-    adminUser: 'angus'            // 管理员用户名（注册同名账号自动成为管理员）
+    owner: 'angus813',
+    repo: 'ueg-data',
+    branch: 'main',
+    files: { users: 'users.json', maps: 'guild_maps.json', ships: 'ships_data.json' },
+    adminUser: 'angus'
   }
 };
 
-// 兼容旧模块引用（supabase-client.js 等仍读取 GITHUB_CONFIG）
+// 兼容旧模块（supabase-client.js 等仍读 GITHUB_CONFIG）
 window.GITHUB_CONFIG = window.UEG_CONFIG.github;
