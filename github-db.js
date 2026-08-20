@@ -1,309 +1,199 @@
 // ============================================================
-//  github-db.js —— 纯前端版（GitHub API 直接读写私有仓库）
-//  依赖：config.js（owner/repo/branch/files）
+//  github-db.js —— 纯前端 + 自建 Python 后端版
+//  依赖：config.js（api.url / api.publishableKey / github.*）
 //
-//  ★ 安全模型（纯前端可达的最强）★
-//   · GitHub Token 不存明文：在 token.html 用"主密码"加密后
-//     存 localStorage（PBKDF2-SHA256 10万次迭代 → AES-GCM-256）
-//   · 主密码不持久化；解密后的 Token 仅存内存变量，
-//     可选"本次浏览器会话内记住"（sessionStorage，关闭标签页即清）
-//   · 读写直连 GitHub Contents API，写操作自动带 sha 防冲突
-//   · 未解锁 Token 时：读操作返回空数据，写操作返回错误提示
-//
-//  ⚠️ 限制说明：纯前端方案中，持有 Token 者即拥有全部读写权限，
-//     且 users.json 内密码为明文（与既有数据兼容）。
-//     本方案定位"个人/内部使用"（对应项目文档第 2 阶段）。
+//  ★ 安全模型 ★
+//   · GitHub Token 不再出现在前端：由后端 Python 服务保管，
+//     前端只持有后端返回的 JWT 会话（localStorage 明文存储）
+//   · 登录 → 后端签发 JWT（HS256，7 天有效）→ 所有请求带
+//     Authorization: Bearer <JWT> + X-Publishable-Key 公开标识
+//   · 密码 bcrypt 哈希存储在后端（老明文密码登录时自动升级）
+//   · 管理员权限由后端依据 users.json 的 is_admin 校验
 //
 //  ★ DB 方法签名与之前版本完全一致，页面调用无需改动 ★
 // ============================================================
 (function () {
-  const CFG = window.GITHUB_CONFIG;
+  const CFG = window.UEG_CONFIG || window.GITHUB_CONFIG;
 
-  if (!CFG || !CFG.owner || !CFG.repo) {
-    console.error('❌ 请先配置 config.js（owner/repo/branch/files）');
+  if (!CFG || !CFG.api || !CFG.api.url) {
+    console.error('❌ 请先配置 config.js（api.url / api.publishableKey）');
     return;
   }
 
-  // ============================================================
-  //  Token 加密存储（AES-GCM-256 + PBKDF2）
-  // ============================================================
-  const SALT = 'ueg-lagrange-v1';
-  const LS_ENC = 'ueg_token_enc';        // localStorage 密文
+  const API = String(CFG.api.url).replace(/\/+$/, '');
+  const LS_TOKEN = 'ueg_token';          // localStorage 会话 JWT
   const SS_SESSION = 'ueg_token_session'; // sessionStorage 会话缓存
-  let memToken = null;                    // 内存中的解密 Token
+  let memToken = null;                    // 内存中的 JWT
 
-  const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
-  const unb64 = (s) => decodeURIComponent(escape(atob(s)));
-  const b64urlBytes = (bytes) => {
-    let s = '';
-    bytes.forEach(b => { s += String.fromCharCode(b); });
-    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  };
-  const unb64urlBytes = (s) => {
-    const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
-    const u = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-    return u;
-  };
-
-  async function deriveKey(password) {
-    const enc = new TextEncoder();
-    const km = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']);
-    return crypto.subtle.deriveKey(
-      { name: 'PBKDF2', salt: enc.encode(SALT), iterations: 100000, hash: 'SHA-256' },
-      km,
-      { name: 'AES-GCM', length: 256 },
-      false,
-      ['encrypt', 'decrypt']
-    );
-  }
-
-  async function encryptToken(password, token) {
-    const key = await deriveKey(password);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(token));
-    const payload = new Uint8Array(iv.length + ct.byteLength);
-    payload.set(iv, 0);
-    payload.set(new Uint8Array(ct), iv.length);
-    localStorage.setItem(LS_ENC, b64urlBytes(payload));
-  }
-
-  async function decryptToken(password) {
-    const raw = localStorage.getItem(LS_ENC);
-    if (!raw) throw new Error('尚未保存 Token，请先访问 token.html 设置');
-    const data = unb64urlBytes(raw);
-    const iv = data.slice(0, 12);
-    const ct = data.slice(12);
-    try {
-      const key = await deriveKey(password);
-      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
-      return new TextDecoder().decode(pt);
-    } catch (e) {
-      throw new Error('主密码错误，无法解密 Token');
-    }
-  }
-
-  async function getToken() {
+  // ============================================================
+  //  会话管理（JWT）
+  // ============================================================
+  function getToken() {
     if (memToken) return memToken;
-    const s = sessionStorage.getItem(SS_SESSION);
-    if (s) { memToken = s; return s; }
-    throw new Error('Token 未解锁：请先在 token.html 输入主密码解锁');
+    const t = localStorage.getItem(LS_TOKEN) || sessionStorage.getItem(SS_SESSION);
+    if (t) memToken = t;
+    return t;
+  }
+
+  function setSession(token) {
+    memToken = token;
+    localStorage.setItem(LS_TOKEN, token);   // 内部站点：直接持久化会话
+  }
+
+  function clearSession() {
+    memToken = null;
+    localStorage.removeItem(LS_TOKEN);
+    sessionStorage.removeItem(SS_SESSION);
+  }
+
+  function tokenExpired(token) {
+    try {
+      const part = token.split('.')[1];
+      const claims = JSON.parse(decodeURIComponent(escape(atob(part.replace(/-/g, '+').replace(/_/g, '/')))));
+      return !claims.exp || claims.exp * 1000 < Date.now();
+    } catch (e) { return true; }
   }
 
   // ============================================================
-  //  GitHub Contents API 直连
+  //  后端请求封装
   // ============================================================
-  const GH = `https://api.github.com/repos/${CFG.owner}/${CFG.repo}/contents`;
-  const HDR = (token) => ({
-    'Authorization': `Bearer ${token}`,
-    'Accept': 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28'
-  });
+  async function api(path, body, method) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (CFG.api.publishableKey) headers['X-Publishable-Key'] = CFG.api.publishableKey;
+    const t = getToken();
+    if (t) headers['Authorization'] = 'Bearer ' + t;
 
-  async function ghGet(file) {
-    const token = await getToken();
-    const res = await fetch(`${GH}/${encodeURIComponent(file)}?ref=${encodeURIComponent(CFG.branch)}`, { headers: HDR(token) });
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`GitHub 读取失败（${res.status}）`);
-    return res.json();
-  }
-
-  async function readJson(file) {
-    const j = await ghGet(file);
-    if (!j) return null;
-    return { data: JSON.parse(unb64(j.content)), sha: j.sha };
-  }
-
-  async function ghPut(file, obj, sha) {
-    const token = await getToken();
-    const content = b64(JSON.stringify(obj, null, 2));
-    const build = (s) => ({ message: `[UEG] update ${file}`, content, branch: CFG.branch, ...(s ? { sha: s } : {}) });
-    const put = (b) => fetch(`${GH}/${encodeURIComponent(file)}`, {
-      method: 'PUT',
-      headers: { ...HDR(token), 'Content-Type': 'application/json' },
-      body: JSON.stringify(b)
-    });
-    let body = build(sha);
-    let res = await put(body);
-    // 并发冲突 409：重读最新 sha 重试一次
-    if (res.status === 409) {
-      const latest = await ghGet(file);
-      if (latest) { body = build(latest.sha); res = await put(body); }
+    let res;
+    try {
+      res = await fetch(API + path, {
+        method: method || (body === undefined ? 'GET' : 'POST'),
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body)
+      });
+    } catch (e) {
+      return { code: 500, msg: '无法连接后端（' + API + '），请确认 Python 服务已启动' };
     }
-    if (!res.ok) {
-      const t = (await res.text()).slice(0, 200);
-      throw new Error(`GitHub 写入失败（${res.status}）${t}`);
-    }
-    return { ok: true };
+
+    let j = null;
+    try { j = await res.json(); } catch (e) { /* 非 JSON 响应 */ }
+
+    if (res.ok) return j || { code: 200 };
+    if (j && typeof j.code === 'number') return j;
+    const detail = j && j.detail;
+    return {
+      code: res.status,
+      msg: (typeof detail === 'string' && detail) || (j && j.msg) || ('请求失败（HTTP ' + res.status + '）')
+    };
   }
 
-  // 带默认结构的数据读写（读失败返回空，写失败返回 {ok:false,error}）
+  // ============================================================
+  //  数据接口（对应后端 REST 端点）
+  // ============================================================
   async function getUsers() {
-    try { const r = await readJson(CFG.files.users); return r?.data?.users || []; }
-    catch (e) { console.warn('读取用户失败:', e.message); return []; }
+    const r = await api('/api/users');
+    if (r.code === 200 && Array.isArray(r.data)) return r.data;
+    console.warn('读取用户失败:', r.msg);
+    return [];
   }
   async function saveUsers(users) {
-    try { const cur = await readJson(CFG.files.users); await ghPut(CFG.files.users, { users }, cur?.sha); return { ok: true }; }
-    catch (e) { return { ok: false, error: e.message }; }
+    const r = await api('/api/users/save', { users });
+    return r.code === 200 ? { ok: true } : { ok: false, error: r.msg };
   }
   async function getMaps() {
-    try { const r = await readJson(CFG.files.maps); return r?.data?.maps || []; }
-    catch (e) { console.warn('读取地图失败:', e.message); return []; }
+    const r = await api('/api/maps');
+    if (r.code === 200 && Array.isArray(r.data)) return r.data;
+    console.warn('读取地图失败:', r.msg);
+    return [];
   }
   async function saveMaps(maps) {
-    try { const cur = await readJson(CFG.files.maps); await ghPut(CFG.files.maps, { maps }, cur?.sha); return { ok: true }; }
-    catch (e) { return { ok: false, error: e.message }; }
+    const r = await api('/api/maps/save', { maps });
+    return r.code === 200 ? { ok: true } : { ok: false, error: r.msg };
   }
   async function getShips() {
-    try { const r = await readJson(CFG.files.ships); return r?.data?.ships || {}; }
-    catch (e) { console.warn('读取舰船数据失败:', e.message); return {}; }
+    const r = await api('/api/ships');
+    if (r.code === 200 && r.data && typeof r.data === 'object') return r.data;
+    console.warn('读取舰船数据失败:', r.msg);
+    return {};
   }
   async function saveShips(ships) {
-    try { const cur = await readJson(CFG.files.ships); await ghPut(CFG.files.ships, { ships }, cur?.sha); return { ok: true }; }
-    catch (e) { return { ok: false, error: e.message }; }
+    const r = await api('/api/ships/save', { ships });
+    return r.code === 200 ? { ok: true } : { ok: false, error: r.msg };
   }
 
   // ============================================================
-  //  业务逻辑（前端实现，与旧版行为一致）
+  //  业务接口（后端 services，返回 {code,msg,data}）
   // ============================================================
-  const isAdminName = (u) => u === CFG.adminUser || u === 'admin';
-
   async function register(username, password) {
-    username = (username || '').trim();
-    if (!/^[\u4e00-\u9fa5A-Za-z0-9_]{2,20}$/.test(username)) return { code: 400, msg: '用户名需为 2-20 位中文/字母/数字/下划线' };
-    if (!password || password.length < 6) return { code: 400, msg: '密码长度至少 6 位' };
-    const users = await getUsers();
-    if (users.some(u => u.username === username)) return { code: 400, msg: '用户名已存在' };
-    const user = { username, password, is_admin: isAdminName(username), highest_record: 0 };
-    users.push(user);
-    const r = await saveUsers(users);
-    if (!r.ok) return { code: 500, msg: '保存失败: ' + r.error };
-    return { code: 200, msg: '注册成功', data: { username: user.username, is_admin: user.is_admin, highest_record: user.highest_record } };
+    return api('/api/auth/register', { username, password });
   }
 
   async function login(username, password) {
-    const users = await getUsers();
-    const user = users.find(u => u.username === username);
-    if (!user) return { code: 400, msg: '用户名不存在' };
-    if (user.password !== password) return { code: 400, msg: '密码错误' };
-    return { code: 200, msg: '登录成功', data: { username: user.username, is_admin: user.is_admin, highest_record: user.highest_record } };
+    const r = await api('/api/auth/login', { username, password });
+    if (r.code === 200 && r.data && r.data.token) {
+      setSession(r.data.token);
+      delete r.data.token; // token 不进 localStorage 的 ueg_current_user
+    }
+    return r;
   }
 
   async function getUserProfile(username) {
-    const users = await getUsers();
-    const u = users.find(x => x.username === username);
-    if (!u) return { code: 404, msg: '用户不存在' };
-    return { code: 200, data: { username: u.username, is_admin: u.is_admin, highest_record: u.highest_record } };
+    return api('/api/auth/profile?username=' + encodeURIComponent(username || ''));
   }
 
   async function updateRecord(username, record) {
-    const users = await getUsers();
-    const u = users.find(x => x.username === username);
-    if (!u) return { code: 404, msg: '用户不存在' };
-    u.highest_record = Math.max(u.highest_record || 0, Number(record) || 0);
-    const r = await saveUsers(users);
-    if (!r.ok) return { code: 500, msg: '保存失败: ' + r.error };
-    return { code: 200, msg: '更新成功', data: { highest_record: u.highest_record } };
+    return api('/api/auth/record', { username, record: Number(record) || 0 });
+  }
+
+  /** 直接设置用户字段（admin.html 使用；白名单由后端校验） */
+  async function updateUser(username, patch) {
+    return api('/api/users/update', { username, patch });
   }
 
   async function changePassword(username, oldPw, newPw) {
-    if (!newPw || newPw.length < 6) return { code: 400, msg: '新密码长度至少 6 位' };
-    const users = await getUsers();
-    const u = users.find(x => x.username === username);
-    if (!u) return { code: 404, msg: '用户不存在' };
-    if (u.password !== oldPw) return { code: 400, msg: '旧密码错误' };
-    u.password = newPw;
-    const r = await saveUsers(users);
-    if (!r.ok) return { code: 500, msg: '保存失败: ' + r.error };
-    return { code: 200, msg: '密码修改成功' };
+    return api('/api/auth/password', { username, old_password: oldPw || '', new_password: newPw });
   }
 
   async function deleteUser(username) {
-    const users = await getUsers();
-    const target = users.find(u => u.username === username);
-    if (!target) return { code: 404, msg: '用户不存在' };
-    if (target.is_admin) return { code: 400, msg: '不可删除管理员' };
-    const r = await saveUsers(users.filter(u => u.username !== username));
-    if (!r.ok) return { code: 500, msg: '删除失败: ' + r.error };
-    return { code: 200, msg: '删除成功' };
+    return api('/api/auth/user/' + encodeURIComponent(username || ''), undefined, 'DELETE');
   }
 
   async function getAllUsers() {
-    const users = await getUsers();
-    return { code: 200, data: users.map(u => ({ username: u.username, is_admin: u.is_admin, highest_record: u.highest_record })) };
+    const r = await api('/api/users');
+    if (r.code === 200 && Array.isArray(r.data)) return r;
+    return r;
   }
 
   async function createMap(mapData, creator) {
-    mapData = mapData || {};
-    const maps = await getMaps();
-    const newMap = {
-      id: 'map_' + Date.now(),
-      name: mapData.name || '未命名地图',
-      type: mapData.type || 'template',
-      protocol: mapData.protocol || null,
-      creator: (creator || '未知').toString().slice(0, 50),
-      created_at: new Date().toISOString(),
-      shapes: Array.isArray(mapData.shapes) ? mapData.shapes : []
-    };
-    maps.unshift(newMap);
-    const r = await saveMaps(maps);
-    if (!r.ok) return { code: 500, msg: '创建失败: ' + r.error };
-    return { code: 200, msg: '创建成功', data: newMap };
+    return api('/api/maps', mapData || {});
   }
 
   async function updateMap(id, mapData, username) {
-    const maps = await getMaps();
-    const idx = maps.findIndex(m => m.id === id);
-    if (idx === -1) return { code: 404, msg: '地图不存在' };
-    const map = maps[idx];
-    if (map.type === 'template' && !isAdminName(username)) return { code: 403, msg: '无权限修改模板地图' };
-    maps[idx] = { ...map, ...(mapData || {}), id: map.id };
-    const r = await saveMaps(maps);
-    if (!r.ok) return { code: 500, msg: '更新失败: ' + r.error };
-    return { code: 200, msg: '更新成功', data: maps[idx] };
+    return api('/api/maps/' + encodeURIComponent(id || ''), mapData || {}, 'PUT');
   }
 
   async function deleteMap(id, username) {
-    const maps = await getMaps();
-    const map = maps.find(m => m.id === id);
-    if (!map) return { code: 404, msg: '地图不存在' };
-    if (map.type === 'template' && !isAdminName(username)) return { code: 403, msg: '无权限删除模板地图' };
-    const r = await saveMaps(maps.filter(m => m.id !== id));
-    if (!r.ok) return { code: 500, msg: '删除失败: ' + r.error };
-    return { code: 200, msg: '删除成功' };
+    return api('/api/maps/' + encodeURIComponent(id || ''), undefined, 'DELETE');
   }
 
+  // ============================================================
+  //  批量导入（管理员）
+  // ============================================================
   async function importShipsFromJs(jsContent) {
-    const m = String(jsContent || '').match(/window\.SHIPS_DATA\s*=\s*(\{[\s\S]*\})/);
-    if (!m) return { ok: false, msg: '未找到 window.SHIPS_DATA' };
-    try {
-      const ships = JSON.parse(m[1]);
-      const r = await saveShips(ships);
-      if (!r.ok) return { ok: false, msg: r.error };
-      return { ok: true, count: Object.keys(ships).length };
-    } catch (e) { return { ok: false, msg: '解析失败: ' + e.message }; }
+    const r = await api('/api/import/ships', { content: String(jsContent || '') });
+    if (r.code === 200) return { ok: true, count: r.data.count };
+    return { ok: false, msg: r.msg };
   }
 
   async function importUsersJson(jsonString) {
-    try {
-      const parsed = JSON.parse(jsonString);
-      const list = Array.isArray(parsed) ? parsed : parsed.users;
-      if (!Array.isArray(list)) return { ok: false, msg: '格式不正确' };
-      const r = await saveUsers(list);
-      if (!r.ok) return { ok: false, msg: r.error };
-      return { ok: true, count: list.length };
-    } catch (e) { return { ok: false, msg: '解析失败: ' + e.message }; }
+    const r = await api('/api/import/users', { content: String(jsonString || '') });
+    if (r.code === 200) return { ok: true, count: r.data.count };
+    return { ok: false, msg: r.msg };
   }
 
   async function importMapsJson(jsonString) {
-    try {
-      const parsed = JSON.parse(jsonString);
-      const list = Array.isArray(parsed) ? parsed : parsed.maps;
-      if (!Array.isArray(list)) return { ok: false, msg: '格式不正确' };
-      const r = await saveMaps(list);
-      if (!r.ok) return { ok: false, msg: r.error };
-      return { ok: true, count: list.length };
-    } catch (e) { return { ok: false, msg: '解析失败: ' + e.message }; }
+    const r = await api('/api/import/maps', { content: String(jsonString || '') });
+    if (r.code === 200) return { ok: true, count: r.data.count };
+    return { ok: false, msg: r.msg };
   }
 
   // ============================================================
@@ -311,47 +201,41 @@
   // ============================================================
   window.DB = {
 
-    // ---------- Token 管理 ----------
-    hasToken() { return !!localStorage.getItem(LS_ENC); },
-    getSession() { return { has: !!(memToken || sessionStorage.getItem(SS_SESSION)) }; },
+    // ---------- 会话管理 ----------
+    hasToken() { return !!getToken(); },
+    getSession() { return { has: !!getToken() }; },
 
-    /** 加密保存 Token（token.html 调用） */
-    async setToken(password, token) {
-      if (!password || password.length < 8) throw new Error('主密码至少 8 位');
-      if (!token || token.length < 10) throw new Error('Token 无效');
-      await encryptToken(password, token.trim());
-      return { ok: true };
-    },
-
-    /** 主密码解锁 Token 到内存（remember=true 时本会话内记住） */
-    async unlockToken(password, remember) {
-      const token = await decryptToken(password);
-      memToken = token;
-      if (remember) sessionStorage.setItem(SS_SESSION, token);
-      return { ok: true };
-    },
+    /** 已废弃：GitHub Token 方案移除，登录由后端签发 JWT */
+    async setToken() { return { ok: false, error: '已废弃：GitHub Token 不再需要，请直接注册/登录账号' }; },
+    /** 已废弃：无需解锁 Token */
+    async unlockToken() { return { ok: false, error: '已废弃：无需解锁 Token，请直接注册/登录账号' }; },
 
     lockToken() {
-      memToken = null;
-      sessionStorage.removeItem(SS_SESSION);
+      clearSession();
       return { ok: true };
     },
     logout() { return this.lockToken(); },
-    async checkSession() { return { ok: this.getSession().has }; },
 
-    /** 验证 Token 是否可访问私有仓库 */
+    async checkSession() {
+      const t = getToken();
+      if (!t) return { ok: false };
+      if (tokenExpired(t)) { clearSession(); return { ok: false }; }
+      return { ok: true };
+    },
+
+    /** 连通性测试：后端可达性 + 登录态 */
     async testConnection() {
-      try {
-        const token = await getToken();
-        const res = await fetch(`${GH}/${encodeURIComponent(CFG.files.users)}?ref=${encodeURIComponent(CFG.branch)}`, { headers: HDR(token) });
-        if (res.status === 404) return { ok: true, note: '仓库可访问（users.json 尚不存在，写入时自动创建）' };
-        if (res.ok) return { ok: true };
-        return { ok: false, error: 'HTTP ' + res.status };
-      } catch (e) { return { ok: false, error: e.message }; }
+      const h = await api('/api/health');
+      if (h.code !== 200) return { ok: false, error: h.msg };
+      if (!getToken()) return { ok: true, note: '后端可达，尚未登录' };
+      const me = await api('/api/auth/me');
+      if (me.code === 200) return { ok: true, note: '后端可达，已登录：' + me.data.username };
+      return { ok: false, error: '后端可达，但登录态无效：' + me.msg };
     },
 
     // ---------- 用户系统 ----------
-    getUsers, saveUsers, register, login, getUserProfile, updateRecord, changePassword, deleteUser, getAllUsers,
+    getUsers, saveUsers, register, login, getUserProfile, updateRecord, updateUser,
+    changePassword, deleteUser, getAllUsers,
 
     // ---------- 地图系统 ----------
     getMaps, saveMaps, createMap, updateMap, deleteMap,
@@ -363,5 +247,5 @@
     importShipsFromJs, importUsersJson, importMapsJson
   };
 
-  console.log('✅ GitHub 数据库模块（纯前端直连版 · Token 加密存储）已加载');
+  console.log('✅ GitHub 数据库模块（后端代理版 · JWT 会话）已加载，后端地址: ' + API);
 })();

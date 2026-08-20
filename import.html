@@ -7,13 +7,13 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #0a0c0f; color: #e0e8f0;
+      background: transparent; color: #e0e8f0;
       font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
       padding: 30px;
     }
     .card {
       max-width: 720px; margin: 0 auto;
-      background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
+      background: rgba(19,23,28,0.66); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       border: 1px solid #2a3340; padding: 30px; position: relative;
     }
     h2 { color: #ff6a00; letter-spacing: 2px; margin-bottom: 8px; }
@@ -31,17 +31,19 @@
     .status { margin-top: 16px; padding: 10px; border: 1px solid #1f2a33; background: rgba(0,200,255,0.04); color: #ffaa44; white-space: pre-wrap; }
     .link-back { display: inline-block; margin-top: 16px; color: #00c8ff; text-decoration: none; border: 1px solid #00c8ff; padding: 6px 14px; font-size: 0.85rem; }
   </style>
+<script src="public/dyson-bg.js"></script>
 </head>
 <body>
   <div class="card">
     <h2>📥 数据导入工具</h2>
-    <div class="sub">将备份数据通过 GitHub API 直连写入私有仓库 ueg-data（纯前端方案）</div>
+    <div class="sub">将备份数据通过 Python 后端（管理员）写入私有仓库 ueg-data —— GitHub Token 由后端保管，前端无需也不可持有</div>
 
     <div class="lock-box">
       <span class="state" id="lockState">检测中...</span>
-      <input type="password" id="pwInput" placeholder="主密码解锁 Token">
-      <button class="btn" onclick="doUnlock()">解锁</button>
-      <button class="btn ghost" onclick="doLock()">锁定</button>
+      <input type="text" id="userInput" placeholder="管理员用户名" style="width:140px">
+      <input type="password" id="pwInput" placeholder="密码">
+      <button class="btn" onclick="doLogin()">登录</button>
+      <button class="btn ghost" onclick="doLogout()">退出</button>
     </div>
 
     <h3>📄 ships_data.js（舰船数据）</h3>
@@ -64,24 +66,38 @@
   <script src="github-db.js"></script>
   <script>
     function setStatus(msg) { document.getElementById('status').textContent = msg; }
+    function getCurrentUser() {
+      const cu = localStorage.getItem('ueg_current_user');
+      return cu ? JSON.parse(cu) : null;
+    }
+    function setCurrentUser(user) {
+      if (user) localStorage.setItem('ueg_current_user', JSON.stringify(user));
+      else localStorage.removeItem('ueg_current_user');
+    }
     function refreshState() {
       const el = document.getElementById('lockState');
-      if (!DB.hasToken()) el.textContent = '⚠️ 未设置 Token（请先到 token.html 设置）';
-      else if (DB.getSession().has) el.textContent = '✅ Token 已解锁';
-      else el.textContent = '🔒 Token 已保存但未解锁';
+      const u = getCurrentUser();
+      if (u) el.textContent = '✅ 已登录：' + u.username + (u.is_admin ? '（管理员）' : '（⚠️ 导入需要管理员）');
+      else el.textContent = '🔒 未登录（导入需管理员账号）';
     }
-    async function doUnlock() {
+    async function doLogin() {
+      const username = document.getElementById('userInput').value.trim();
       const pw = document.getElementById('pwInput').value;
-      if (!pw) { setStatus('❌ 请输入主密码'); return; }
-      try {
-        await DB.unlockToken(pw, true);
-        setStatus('✅ 解锁成功，可以导入');
+      if (!username || !pw) { setStatus('❌ 请输入用户名和密码'); return; }
+      setStatus('⏳ 登录中...');
+      const r = await DB.login(username, pw);
+      if (r.code === 200) {
+        setCurrentUser(r.data);
+        setStatus('✅ 登录成功' + (r.data.is_admin ? '（管理员）' : '，但导入需要管理员权限'));
         refreshState();
-      } catch (e) { setStatus('❌ ' + e.message); }
+      } else {
+        setStatus('❌ ' + r.msg);
+      }
     }
-    function doLock() {
-      DB.lockToken();
-      setStatus('🔒 已锁定');
+    function doLogout() {
+      DB.logout();
+      setCurrentUser(null);
+      setStatus('🔒 已退出');
       refreshState();
     }
     async function importShips() {

@@ -7,7 +7,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #0a0c0f;
+      background: transparent;
       color: #e0e8f0;
       font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
       min-height: 100vh;
@@ -20,7 +20,7 @@
     .guild-container {
       width: 100%;
       max-width: 1100px;
-      background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
+      background: rgba(19,23,28,0.66); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       border: 1px solid #2a3340;
       box-shadow: 0 0 30px rgba(0,160,255,0.1);
       position: relative;
@@ -63,7 +63,7 @@
       gap: 15px;
     }
     .feature-card {
-      background: rgba(20,26,33,0.9);
+      background: rgba(20,26,33,0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
       border: 1px solid #2e3b47;
       padding: 20px;
       cursor: pointer;
@@ -214,6 +214,7 @@
       }
     }
   </style>
+<script src="dyson-bg.js"></script>
 </head>
 <body>
   <div class="guild-container">

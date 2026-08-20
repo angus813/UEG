@@ -7,14 +7,14 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #0a0c0f; color: #e0e8f0;
+      background: transparent; color: #e0e8f0;
       font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
       min-height: 100vh; display: flex; justify-content: center; align-items: center;
       margin: 0; padding: 10px;
     }
     .container {
       width: 100%; max-width: 1100px;
-      background: linear-gradient(135deg, #13171c 0%, #0d1014 100%);
+      background: rgba(19,23,28,0.66); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
       border: 1px solid #2a3340;
       box-shadow: 0 0 30px rgba(0,160,255,0.1);
       position: relative; overflow: hidden; min-height: 600px; margin: 0 auto;
@@ -114,7 +114,7 @@
     .contract-card {
       width: 120px; height: 120px; padding: 8px;
       display: flex; flex-direction: row; align-items: center;
-      background: rgba(20,26,33,0.9); border: 1px solid #2e3b47;
+      background: rgba(20,26,33,0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid #2e3b47;
       cursor: pointer; transition: all 0.2s; position: relative;
     }
     .contract-card::before {
@@ -240,6 +240,7 @@
       .contract-desc { font-size: 0.6rem; }
     }
   </style>
+<script src="dyson-bg.js"></script>
 </head>
 <body>
   <div class="container">

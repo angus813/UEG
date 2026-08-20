@@ -1,15 +1,16 @@
 // ============================================================
-//  supabase-client.js —— 旧 Supabase 方案兼容层（已废弃）
-//  项目已迁移至「GitHub 私有仓库 + Serverless 代理」架构，
+//  supabase-client.js —— 旧 Supabase 方案兼容层（已废弃，仅保留调用兼容）
+//  项目已迁移至「纯前端 + 自建 Python 后端（读写私有 GitHub 仓库）」架构，
 //  本文件把页面遗留的 supabase.from(...) 链式调用
-//  透明映射到 github-db.js（DB 读写 GitHub 私有仓库）。
+//  透明映射到 github-db.js（DB → Python 后端 → GitHub 私有仓库）。
 //  自动加载站点根目录下的 config.js 与 github-db.js。
 //  支持接口：
 //    from('users'|'guild_maps').select(cols).eq(k,v).order(k,{ascending}).limit(n).maybeSingle()/single()
+//    from('users').update(patch).eq('username', x)          → DB.updateUser / DB.updateMap
 //    from('users').delete().eq('username', x)
 //    from('guild_maps').delete().eq('id', x)
 //    from('guild_maps').insert([row]).select(cols)
-//  写操作需要登录（会话令牌），管理员操作需管理员账号。
+//  所有数据操作需登录（Bearer JWT），管理员操作由后端校验。
 // ============================================================
 (function () {
   'use strict';
@@ -96,6 +97,7 @@
     this._single = false;
     this._action = 'select';
     this._insertRows = null;
+    this._patch = null;
   }
   SbQuery.prototype.select = function (cols) { this._cols = cols || '*'; return this; };
   SbQuery.prototype.eq = function (k, v) { this._eq.push([k, v]); return this; };
@@ -104,6 +106,7 @@
   SbQuery.prototype.maybeSingle = function () { this._single = true; return this; };
   SbQuery.prototype.single = function () { this._single = true; return this; };
   SbQuery.prototype.insert = function (rows) { this._action = 'insert'; this._insertRows = rows; return this; };
+  SbQuery.prototype.update = function (patch) { this._action = 'update'; this._patch = patch || {}; return this; };
   SbQuery.prototype.delete = function () { this._action = 'delete'; return this; };
   SbQuery.prototype.then = function (resolve, reject) { return this._exec().then(resolve, reject); };
 
@@ -119,6 +122,25 @@
           if (r.code === 200) return { data: [r.data], error: null };
           return { data: null, error: { message: r.msg || '创建失败' } };
         });
+      }
+
+      // ===== 写入：更新 =====
+      if (self._action === 'update') {
+        var eqObj = {};
+        self._eq.forEach(function (e) { eqObj[e[0]] = e[1]; });
+        if (self.table === 'users' && eqObj.username) {
+          return DB.updateUser(eqObj.username, self._patch).then(function (r) {
+            if (r.code === 200) return { data: [r.data], error: null };
+            return { data: null, error: { message: r.msg || '更新失败' } };
+          });
+        }
+        if (self.table === 'guild_maps' && eqObj.id) {
+          return DB.updateMap(eqObj.id, self._patch, currentUsername()).then(function (r) {
+            if (r.code === 200) return { data: [r.data], error: null };
+            return { data: null, error: { message: r.msg || '更新失败（模板地图需管理员）' } };
+          });
+        }
+        return { data: null, error: { message: '不支持的更新表: ' + self.table } };
       }
 
       // ===== 写入：删除 =====

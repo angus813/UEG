@@ -7,7 +7,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #0a0c0f; color: #e0e8f0;
+      background: transparent; color: #e0e8f0;
       font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
       min-height: 100vh; padding: 12px;
     }
@@ -52,7 +52,7 @@
     .ship-list {
       flex: 0 0 300px; border-right: 1px solid #1f2833;
       max-height: calc(100vh - 90px); overflow-y: auto;
-      background: rgba(10,14,18,0.6);
+      background: rgba(19,23,28,0.66); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px)
     }
     .type-group { border-bottom: 1px solid #16202a; }
     .type-header {
@@ -244,6 +244,7 @@
       .type-ico { margin-right: 6px; }
       .big-ico img { width: 48px; height: 48px; object-fit: contain; vertical-align: middle; }
   </style>
+<script src="../dyson-bg.js"></script>
 </head>
 <body>
   <div class="app">
