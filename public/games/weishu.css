@@ -2061,3 +2061,267 @@ body {
   .prep-fleet .fleet-card { flex: 1 1 100%; min-width: 0; }
 }
 
+/* ============================================================
+   v4.1 舰队编组战斗界面（还原舰队编组：前中后三排 + 立绘卡片 + 伤害弹出）
+   ============================================================ */
+
+/* 我方/敌方标签 */
+.ft-tag {
+  display: inline-block;
+  width: 18px; height: 18px;
+  line-height: 18px;
+  text-align: center;
+  border-radius: 3px;
+  font-size: 0.62rem;
+  margin-right: 5px;
+  vertical-align: 1px;
+}
+.ft-tag.my { background: #1d5a75; color: #9fe8ff; }
+.ft-tag.en { background: #5a2a2a; color: #ff9a8a; }
+
+/* 三排编组布局 */
+.fleet-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 2px;
+}
+.fleet-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  background: rgba(8, 14, 24, 0.35);
+  border: 1px solid rgba(80, 120, 160, 0.14);
+  border-radius: 6px;
+  padding: 4px 6px;
+  min-height: 62px;
+}
+.row-label {
+  flex: none;
+  writing-mode: vertical-lr;
+  font-size: 0.6rem;
+  color: #5a7d99;
+  letter-spacing: 2px;
+  text-align: center;
+  padding: 2px 1px;
+  border-right: 1px dashed rgba(90, 125, 153, 0.3);
+}
+.row-cards {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-content: flex-start;
+}
+.row-empty {
+  color: #3d5266;
+  font-size: 0.68rem;
+  padding: 8px 4px;
+}
+
+/* 舰船卡片（立绘徽章 + 双色血条） */
+.fleet-card {
+  position: relative;
+  flex: 1 1 150px;
+  max-width: 220px;
+  min-width: 140px;
+  background: rgba(12, 20, 34, 0.85);
+  border: 1px solid #2a3d55;
+  border-radius: 7px;
+  padding: 6px 8px 5px;
+  overflow: hidden;
+}
+.fc-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+.fc-icon {
+  flex: none;
+  width: 30px; height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border: 1px solid;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5) inset;
+}
+.fc-id { flex: 1; min-width: 0; }
+.fc-name {
+  font-size: 0.72rem;
+  color: #dce8f5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fc-cls {
+  font-size: 0.62rem;
+  opacity: 0.9;
+  margin-top: 1px;
+}
+.fc-bar { display: flex; flex-direction: column; gap: 2px; }
+.fc-hp {
+  height: 7px;
+  background: #232b38;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.fc-hp .fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff5c5c, #ff9a4d);
+  transition: width 0.15s linear;
+}
+.fc-shield {
+  height: 4px;
+  background: #1b2638;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.fc-shield .fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3fa9ff, #7fd4ff);
+  transition: width 0.15s linear;
+}
+.fc-hpnum {
+  font-size: 0.6rem;
+  color: #8ba3bf;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.fc-mini {
+  font-size: 0.58rem;
+  color: #5f7a96;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fleet-card.enemy { background: rgba(30, 14, 14, 0.85); border-color: #4a2a2a; }
+.fleet-card.enemy .fc-hp .fill { background: linear-gradient(90deg, #ff3b3b, #ff6a5c); }
+.fleet-card.elite {
+  border-color: #ffd166;
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.35);
+}
+.fleet-card.elite::before {
+  content: '精';
+  position: absolute;
+  top: 0; right: 0;
+  font-size: 0.55rem;
+  color: #3d3000;
+  background: #ffd166;
+  padding: 1px 5px;
+  border-radius: 0 6px 0 6px;
+}
+.fleet-card.dead { opacity: 0.32; filter: grayscale(1); }
+.fleet-card.dead::after {
+  content: '已击毁';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: #ff5c5c;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 7px;
+}
+
+/* 伤害数字弹出 */
+.dmg-pop-wrap {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.dmg-pop {
+  position: absolute;
+  left: 50%;
+  top: 26px;
+  transform: translateX(-50%);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #ffd166;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  animation: dmgPopUp 0.9s ease-out forwards;
+  white-space: nowrap;
+}
+.dmg-pop.crit { color: #ff8c2e; font-size: 0.95rem; }
+.dmg-pop.from-enemy { color: #ff6a5c; }
+@keyframes dmgPopUp {
+  0% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-34px) scale(1.15); }
+}
+
+/* 攻击事件日志 */
+.bc-log .bc-line { font-size: 0.64rem; margin: 1px 0; }
+.bc-log .bc-line.atk-my { color: #7fd4ff; }
+.bc-log .bc-line.atk-en { color: #ff8a7a; }
+.bc-log .bc-line .atk-arrow { color: #4a5f75; margin: 0 3px; }
+.bc-log .bc-line .atk-dmg { color: #ffd166; font-weight: 700; }
+.bc-log .bc-line .atk-dmg.crit { color: #ff8c2e; }
+
+/* 配队编组预览（前中后三排） */
+.dp-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(8, 14, 24, 0.45);
+  border: 1px solid rgba(80, 120, 160, 0.18);
+  border-radius: 6px;
+  padding: 6px;
+  margin-bottom: 8px;
+}
+.dp-prow { display: flex; align-items: center; gap: 5px; }
+.dp-plabel {
+  flex: none;
+  width: 30px;
+  font-size: 0.6rem;
+  color: #5a7d99;
+  text-align: center;
+}
+.dp-pcells {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 30px;
+}
+.dp-pempty { color: #3d5266; font-size: 0.66rem; padding: 5px 2px; }
+.dp-pcell {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(12, 20, 34, 0.85);
+  border: 1px solid;
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 0.62rem;
+}
+.dp-picon {
+  width: 15px; height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.55rem;
+  font-weight: 700;
+  border-radius: 50%;
+}
+.dp-pname {
+  color: #c8d8e8;
+  max-width: 110px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 窄屏适配 */
+@media (max-width: 1100px) {
+  .fleet-card { flex: 1 1 130px; min-width: 118px; }
+  .fc-icon { width: 24px; height: 24px; font-size: 0.62rem; }
+}
+
+

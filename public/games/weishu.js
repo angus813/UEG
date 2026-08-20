@@ -490,7 +490,8 @@ function showDeployModal() {
   html += '</div>';
 
   html += '<div class="deploy-right">';
-  html += `<div class="dp-right-title">已选舰队（${state.hand.length} 艘）</div>`;
+  html += `<div class="dp-right-title">我方编组（${state.hand.length} 艘）</div>`;
+  html += renderDeployPreview();
   html += '<div class="dp-selected" id="dpSelected">';
   if (!state.hand.length) html += '<div style="color:#5a6b7d;font-size:0.72rem;">尚未选择舰船</div>';
   state.hand.forEach((card, i) => {
@@ -541,6 +542,34 @@ function showDeployModal() {
     state.hand = [];
     showDeployModal();
   });
+}
+
+function renderDeployPreview() {
+  const rows = [[], [], []];
+  state.hand.forEach(card => {
+    rows[rowOf(card.ship.cls)].push(card);
+  });
+  const labels = ['前排', '中排', '后排'];
+  let html = '<div class="dp-preview">';
+  rows.forEach((arr, i) => {
+    html += '<div class="dp-prow">';
+    html += '<div class="dp-plabel">' + labels[i] + '</div>';
+    html += '<div class="dp-pcells">';
+    if (!arr.length) {
+      html += '<div class="dp-pempty">—</div>';
+    } else {
+      arr.forEach(card => {
+        const color = CLS_COLOR[card.ship.cls] || '#8fa3c8';
+        html += `<div class="dp-pcell" style="border-color:${color};" title="${card.ship.name}">`;
+        html += `<span class="dp-picon" style="background:${color}26;color:${color};">${CLS_ICON[card.ship.cls] || '◇'}</span>`;
+        html += `<span class="dp-pname">${card.ship.shortName}</span>`;
+        html += '</div>';
+      });
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
 }
 
 // ============================================================
@@ -1036,7 +1065,9 @@ function spawnEnemyWave() {
   state.enemies = config.map((e, i) => ({
     id: 'en_' + i,
     name: e.zh,
+    shortName: e.zh,
     cls: e.cls,
+    zone: e.cls === 'cruiser' ? 'mid' : (e.cls === 'destroyer' || e.cls === 'frigate' || e.cls === 'corvette') ? 'front' : 'back',
     count: e.count,
     maxHp: e.totalHp,
     hp: e.totalHp,
@@ -1141,8 +1172,12 @@ function myAttack(now) {
     if (u.weapon === 'projectile') dmg *= state.bonuses.projMul;
     if (u.weapon === 'air') dmg *= state.bonuses.airMul;
     if (state.swift && u.dmg === getMaxMyDmg()) dmg *= 1.7;
-    if (Math.random() < state.bonuses.critChance + u.critBonus) dmg *= 1.5;
-    target.hp -= calcDamage(dmg, u.dmgType, target);
+    const isCrit = Math.random() < state.bonuses.critChance + u.critBonus;
+    if (isCrit) dmg *= 1.5;
+    const dealt = calcDamage(dmg, u.dmgType, target);
+    target.hp -= dealt;
+    (state.attackEvents || (state.attackEvents = [])).push({ from: u.shortName, to: target.shortName, dmg: dealt, isCrit: isCrit, isEnemy: false });
+    if (state.attackEvents.length > 40) state.attackEvents.shift();
   });
 }
 
@@ -1159,9 +1194,13 @@ function enemyAttack(now) {
     const hitRate = 0.75;
     if (Math.random() > hitRate) return;
     let dmg = e.dmg * state.enemyDmgMul;
-    if (Math.random() < 0.05) dmg *= 1.5;
-    target.hp -= calcDamage(dmg, e.dmgType, target);
+    const isCrit = Math.random() < 0.05;
+    if (isCrit) dmg *= 1.5;
+    const dealt = calcDamage(dmg, e.dmgType, target);
+    target.hp -= dealt;
     if (target.hp <= 0) target.hp = 0;
+    (state.attackEvents || (state.attackEvents = [])).push({ from: e.shortName, to: target.shortName, dmg: dealt, isCrit: isCrit, isEnemy: true });
+    if (state.attackEvents.length > 40) state.attackEvents.shift();
   });
 }
 
@@ -1574,49 +1613,105 @@ function renderBattle() {
   html += renderNewsTicker();
   html += `<div class="battle-clock" id="battleClock">${Math.ceil(clockLeft)}</div>`;
   html += '<div class="battle-view">';
-  // 左：我方舰队
+  // 左：我方舰队（前中后三排编组）
   html += '<div class="fleet-panel left">';
-  html += '<div class="fleet-title">我方舰队 <span class="fp-cnt">' + state.units.filter(u => u.alive).length + '/' + state.units.length + '</span></div>';
-  html += '<div class="fleet-list">';
-  state.units.forEach(u => {
-    html += renderFleetCard(u, 'my');
-  });
-  html += '</div></div>';
+  html += '<div class="fleet-title"><span class="ft-tag my">我</span>我方舰队 <span class="fp-cnt">' + state.units.filter(u => u.alive).length + '/' + state.units.length + '</span></div>';
+  html += renderRows(state.units, 'my');
+  html += '</div>';
   // 中：状态/日志
   html += '<div class="battle-center">';
-  html += '<div class="bc-info">城防等级 ' + cityLevelOf(state.wave) + '</div>';
-  html += '<div class="bc-log" id="bcLog">' + newsList.slice(-6).map(n => `<div class="bc-line ${n.cls || ''}">${n.msg}</div>`).join('') + '</div>';
+  html += '<div class="bc-info">城防等级 <b>' + cityLevelOf(state.wave) + '</b></div>';
+  html += '<div class="bc-log" id="bcLog"></div>';
   html += '<div class="bc-hint">自动作战中 · 剩余时间 <span id="clockNum">' + Math.ceil(clockLeft) + '</span>s</div>';
   html += '</div>';
-  // 右：敌方舰队
+  // 右：敌方舰队（前中后三排编组）
   html += '<div class="fleet-panel right">';
-  html += '<div class="fleet-title">敌方舰队 <span class="fp-cnt">' + state.enemies.filter(e => e.alive).length + '/' + state.enemies.length + '</span></div>';
-  html += '<div class="fleet-list">';
-  state.enemies.forEach(e => {
-    html += renderFleetCard(e, 'en');
-  });
-  html += '</div></div>';
+  html += '<div class="fleet-title"><span class="ft-tag en">敌</span>敌方舰队 <span class="fp-cnt">' + state.enemies.filter(e => e.alive).length + '/' + state.enemies.length + '</span></div>';
+  html += renderRows(state.enemies, 'en');
+  html += '</div>';
   html += '</div>';
   html += renderActionBar('battle');
   html += '</div>';
   panel.innerHTML = html;
 }
 
+function rowOf(cls) {
+  if (cls === 'frigate' || cls === 'corvette' || cls === 'fighter') return 0; // 前排
+  if (cls === 'destroyer' || cls === 'cruiser') return 1; // 中排
+  return 2; // 后排
+}
+
+function renderRows(list, side) {
+  const rows = [[], [], []];
+  list.forEach(u => {
+    let r;
+    if (u.zone === 'front') r = 0;
+    else if (u.zone === 'mid') r = 1;
+    else if (u.zone === 'back') r = 2;
+    else r = rowOf(u.cls);
+    rows[r].push(u);
+  });
+  const labels = ['前排', '中排', '后排'];
+  let html = '<div class="fleet-rows">';
+  rows.forEach((arr, i) => {
+    html += '<div class="fleet-row">';
+    html += '<div class="row-label">' + labels[i] + '</div>';
+    html += '<div class="row-cards">';
+    if (!arr.length) {
+      html += '<div class="row-empty">—</div>';
+    } else {
+      arr.forEach(u => { html += renderFleetCard(u, side); });
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+const CLS_ICON = { frigate: '护', destroyer: '驱', cruiser: '巡', battlecruiser: '战', battleship: '列', carrier: '航', fighter: '机', corvette: '艇', support: '援' };
+const CLS_COLOR = { frigate: '#7fd4ff', destroyer: '#9be89b', cruiser: '#ffd27f', battlecruiser: '#ff9a8a', battleship: '#ff7fa8', carrier: '#c9a5ff', fighter: '#8affd9', corvette: '#ffe27f', support: '#a5c9ff' };
+
 function renderFleetCard(u, side) {
   const pct = Math.max(0, u.hp / u.maxHp * 100);
   const shieldPct = u.shield > 0 ? Math.min(100, u.shield / Math.max(1, u.maxHp * 0.15) * 100) : 0;
   const dead = !u.alive;
-  return `<div class="fleet-card ${dead ? 'dead' : ''} ${u.elite ? 'elite' : ''} ${side === 'en' ? 'enemy' : ''}" id="${u.id}">
+  const icon = CLS_ICON[u.cls] || '◇';
+  const color = CLS_COLOR[u.cls] || '#8fa3c8';
+  const countTxt = (side === 'en' && u.count && u.count > 1) ? ' ×' + u.count : '';
+  return `<div class="fleet-card ${dead ? 'dead' : ''} ${u.elite ? 'elite' : ''} ${side === 'en' ? 'enemy' : ''}" id="${u.id}" data-hp="${Math.round(u.hp)}">
     <div class="fc-head">
-      <span class="fc-name">${u.shortName}</span>
-      <span class="fc-cls">${CLS_ZH[u.cls] || ''}</span>
-      ${side === 'en' && u.count ? `<span class="fc-count">x${u.count}</span>` : ''}
+      <span class="fc-icon" style="background:${color}26;border-color:${color};">${icon}</span>
+      <div class="fc-id">
+        <div class="fc-name">${u.shortName}</div>
+        <div class="fc-cls" style="color:${color};">${CLS_ZH[u.cls] || ''}${countTxt}</div>
+      </div>
     </div>
-    <div class="fc-hp"><div class="fill" style="width:${pct}%"></div></div>
+    <div class="fc-bar">
+      <div class="fc-hp"><div class="fill" style="width:${pct}%"></div></div>
+      ${u.shield > 0 ? `<div class="fc-shield"><div class="fill" style="width:${shieldPct}%"></div></div>` : ''}
+    </div>
     <div class="fc-hpnum">${Math.max(0, Math.round(u.hp))}/${u.maxHp}</div>
-    ${u.shield > 0 ? `<div class="fc-shield"><div class="fill" style="width:${shieldPct}%"></div></div>` : ''}
     <div class="fc-mini">攻 ${u.dmg} 甲 ${u.armor} ${WEAPON_LABEL[u.weapon]}·${DMGTYPE_LABEL[u.dmgType]}</div>
+    <div class="dmg-pop-wrap"></div>
   </div>`;
+}
+
+function spawnDamagePop(el, amount, isCrit, isEnemy) {
+  const wrap = el.querySelector('.dmg-pop-wrap');
+  if (!wrap) return;
+  const div = document.createElement('div');
+  div.className = 'dmg-pop' + (isCrit ? ' crit' : '') + (isEnemy ? ' from-enemy' : '');
+  div.textContent = '-' + Math.max(1, Math.round(amount));
+  wrap.appendChild(div);
+  setTimeout(() => { if (div.parentNode) div.parentNode.removeChild(div); }, 950);
+}
+
+function renderAtkLog() {
+  const evs = (state.attackEvents || []).slice(-6);
+  return evs.map(ev => {
+    const cls = ev.isEnemy ? 'atk-en' : 'atk-my';
+    return `<div class="bc-line ${cls}">${ev.from} <span class="atk-arrow">→</span> ${ev.to} <span class="atk-dmg${ev.isCrit ? ' crit' : ''}">-${Math.max(1, Math.round(ev.dmg))}</span></div>`;
+  }).join('');
 }
 
 function updateBattleUI() {
@@ -1634,6 +1729,9 @@ function updateBattleUI() {
   state.units.forEach(u => {
     const el = document.getElementById(u.id);
     if (el) {
+      const prev = parseInt(el.dataset.hp || '0', 10);
+      if (u.alive && u.hp < prev && prev - u.hp > 0.4) spawnDamagePop(el, prev - u.hp, false, true);
+      el.dataset.hp = Math.round(u.hp);
       el.querySelector('.fc-hp .fill').style.width = Math.max(0, u.hp / u.maxHp * 100) + '%';
       el.querySelector('.fc-hpnum').textContent = Math.max(0, Math.round(u.hp)) + '/' + u.maxHp;
       if (!u.alive) el.classList.add('dead');
@@ -1645,14 +1743,19 @@ function updateBattleUI() {
   state.enemies.forEach(e => {
     const el = document.getElementById(e.id);
     if (el) {
+      const prev = parseInt(el.dataset.hp || '0', 10);
+      if (e.alive && e.hp < prev && prev - e.hp > 0.4) spawnDamagePop(el, prev - e.hp, false, false);
+      el.dataset.hp = Math.round(e.hp);
       el.querySelector('.fc-hp .fill').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
       el.querySelector('.fc-hpnum').textContent = Math.max(0, Math.round(e.hp)) + '/' + e.maxHp;
       if (!e.alive) el.classList.add('dead');
+      const sh = el.querySelector('.fc-shield .fill');
+      if (sh) sh.style.width = Math.min(100, e.shield / Math.max(1, e.maxHp * 0.15) * 100) + '%';
     }
   });
-  // 日志
+  // 攻击事件日志
   const log = document.getElementById('bcLog');
-  if (log) log.innerHTML = newsList.slice(-6).map(n => `<div class="bc-line ${n.cls || ''}">${n.msg}</div>`).join('');
+  if (log) log.innerHTML = renderAtkLog();
   // 顶部状态
   const statusEl = panel.querySelector('.top-status');
   if (statusEl) statusEl.outerHTML = renderTopStatus();
