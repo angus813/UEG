@@ -103,6 +103,7 @@
   SbQuery.prototype.eq = function (k, v) { this._eq.push([k, v]); return this; };
   SbQuery.prototype.order = function (k, o) { this._order = k; this._asc = !(o && o.ascending === false); return this; };
   SbQuery.prototype.limit = function (n) { this._limit = n; return this; };
+  SbQuery.prototype.range = function (from, to) { this._range = [from, to]; return this; };
   SbQuery.prototype.maybeSingle = function () { this._single = true; return this; };
   SbQuery.prototype.single = function () { this._single = true; return this; };
   SbQuery.prototype.insert = function (rows) { this._action = 'insert'; this._insertRows = rows; return this; };
@@ -185,6 +186,8 @@
         }
         // limit
         if (self._limit) list = list.slice(0, self._limit);
+        // range 分页（与 limit 二选一）
+        if (self._range) list = list.slice(self._range[0], self._range[1] + 1);
         // 列过滤 + 脱敏
         list = list.map(function (r) { return pickCols(r, self._cols, self.table); });
         // single
