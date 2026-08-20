@@ -329,7 +329,7 @@
     async lockToken() { setToken(null); return { ok: true }; },
     async logout() { setToken(null); return { ok: true }; },
     async testConnection() {
-      const r = await this.rest('/rest/v1/');
+      const r = await this.rest('/auth/v1/settings'); // 公开端点探测，根路径需 secret key
       if (r.code !== 200) return { ok: false, error: r.msg };
       const t = getToken();
       if (!t) return { ok: true, note: 'Supabase 连接正常（未登录）' };
