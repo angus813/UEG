@@ -724,6 +724,1340 @@ body {
 .ws-zone.ally { color:#58b9ff; border-color:#58b9ff55; }
 .ws-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
 
-.ws-tower-img { width: 90%; height: 90%; object-fit: contain; display:block; }
-.ws-dock-img { width: 22px; height: 22px; object-fit: contain; }
-.ws-enemy-img { width: 80%; height: 80%; object-fit: contain; }
+/* ============================================================
+ *  卫戍协议 v2.0 新增样式
+ * ============================================================ */
+
+/* 游戏头部 */
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 10px;
+  background: rgba(11, 15, 22, 0.8);
+  border: 1px solid #263140;
+  border-radius: 6px;
+}
+
+.mini-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mini-stats .stat {
+  background: #0b0f16;
+  border: 1px solid #263140;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  color: #c8d2e0;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mini-stats .stat-icon {
+  font-size: 1rem;
+}
+
+/* 补给池区域 */
+.pool-section {
+  margin: 12px 0;
+  padding: 10px;
+  background: rgba(11, 15, 22, 0.6);
+  border: 1px solid #263140;
+  border-radius: 6px;
+}
+
+.pool-title {
+  font-size: 0.8rem;
+  color: #88ccff;
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+}
+
+.pool-grid {
+  display: flex;
+  gap: 10px;
+}
+
+.pool-card {
+  flex: 1;
+  background: linear-gradient(160deg, #171f2d, #10151d);
+  border: 1px solid #2a3546;
+  border-radius: 8px;
+  padding: 12px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.pool-card:hover {
+  border-color: #ff8c2e88;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 140, 46, 0.2);
+}
+
+.pool-card.selected {
+  border-color: #ff8c2e;
+  background: rgba(255, 140, 46, 0.1);
+  box-shadow: 0 0 14px rgba(255, 140, 46, 0.4);
+}
+
+.pool-icon {
+  font-size: 1.8rem;
+  margin-bottom: 4px;
+}
+
+.pool-name {
+  font-size: 0.75rem;
+  color: #e8ecf3;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.pool-cost {
+  font-size: 0.85rem;
+  color: #ffd166;
+  font-weight: 700;
+}
+
+.pool-tier {
+  font-size: 0.6rem;
+  color: #ffd166;
+  background: rgba(255, 209, 102, 0.1);
+  border: 1px solid rgba(255, 209, 102, 0.3);
+  border-radius: 10px;
+  padding: 2px 6px;
+  display: inline-block;
+  margin-top: 4px;
+}
+
+.pool-stats {
+  font-size: 0.6rem;
+  color: #8a9bb0;
+  margin-top: 6px;
+}
+
+/* 手牌区 */
+.hand-section {
+  margin: 12px 0;
+  padding: 10px;
+  background: rgba(11, 15, 22, 0.6);
+  border: 1px solid #263140;
+  border-radius: 6px;
+}
+
+.hand-title {
+  font-size: 0.8rem;
+  color: #88ccff;
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+}
+
+.hand-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 50px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.hand-card {
+  width: 44px;
+  height: 56px;
+  background: linear-gradient(160deg, #171f2d, #10151d);
+  border: 1px solid #2a3546;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hand-card:hover {
+  border-color: #ff8c2e;
+  transform: translateY(-4px);
+}
+
+/* 操作栏 */
+.action-bar {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.btn-action {
+  flex: 1;
+  min-width: 100px;
+  background: linear-gradient(180deg, #ffd166, #ff8c2e);
+  border: none;
+  color: #0b0f16;
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(255, 140, 46, 0.3);
+}
+
+.btn-action:hover:not(:disabled) {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 18px rgba(255, 140, 46, 0.5);
+  transform: translateY(-2px);
+}
+
+.btn-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 战斗显示区 */
+.battle-display {
+  position: relative;
+  margin: 10px 0;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #263140;
+  border-radius: 6px;
+  min-height: 60px;
+}
+
+.enemy-display {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.enemy-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.enemy-icon {
+  font-size: 1.2rem;
+}
+
+.enemy-hp {
+  width: 40px;
+  height: 4px;
+  background: #1a222b;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.enemy-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff5c5c, #ff8c2e);
+  transition: width 0.2s;
+}
+
+/* 舰船信息卡片 */
+.ship-info-card {
+  background: rgba(11, 15, 22, 0.8);
+  border: 1px solid #263140;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid #1f2939;
+  font-size: 0.8rem;
+}
+
+.info-row:last-child {
+  border-bottom: none;
+}
+
+.info-row .label {
+  color: #5a6b7d;
+}
+
+.info-row .value {
+  color: #e8ecf3;
+  font-weight: 600;
+}
+
+.info-desc {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #263140;
+  color: #8a9bb0;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.info-wiki {
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(0, 200, 255, 0.05);
+  border: 1px dashed #2a4a5a;
+  border-radius: 4px;
+  color: #5a6b7d;
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+/* 战斗结果 */
+.result-stats {
+  background: rgba(11, 15, 22, 0.8);
+  border: 1px solid #263140;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #1f2939;
+  font-size: 0.85rem;
+}
+
+.stat-row:last-child {
+  border-bottom: none;
+}
+
+.stat-row span:first-child {
+  color: #5a6b7d;
+}
+
+.stat-row span:last-child {
+  color: #ffd166;
+  font-weight: 700;
+}
+
+.result-reward {
+  background: rgba(255, 209, 102, 0.1);
+  border: 1px solid rgba(255, 209, 102, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.reward-title {
+  color: #ffd166;
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.reward-items {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.reward-item {
+  background: rgba(255, 209, 102, 0.15);
+  border: 1px solid rgba(255, 209, 102, 0.3);
+  border-radius: 12px;
+  padding: 4px 12px;
+  color: #ffd166;
+  font-size: 0.75rem;
+}
+
+.result-retry {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(255, 92, 92, 0.1);
+  border: 1px solid rgba(255, 92, 92, 0.3);
+  border-radius: 8px;
+  color: #ffb4b4;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+/* 物资调配 */
+.supply-panel {
+  padding: 10px;
+}
+
+.supply-panel p {
+  color: #8a9bb0;
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+}
+
+.supply-panel ul {
+  color: #c8d2e0;
+  font-size: 0.8rem;
+  padding-left: 20px;
+  margin-bottom: 10px;
+}
+
+.supply-panel li {
+  margin: 6px 0;
+}
+
+/* 蓝图数据库 */
+.bp-panel {
+  padding: 10px;
+}
+
+.bp-tab-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.bp-tab-btn {
+  background: transparent;
+  border: 1px solid #2a3546;
+  color: #5a6b7d;
+  padding: 6px 14px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.bp-tab-btn:hover {
+  color: #c8d2e0;
+  border-color: #ff8c2e;
+}
+
+.bp-tab-btn.active {
+  color: #ffd166;
+  border-color: #ffd166;
+  background: rgba(255, 209, 102, 0.1);
+}
+
+.bp-tab-content {
+  display: none;
+}
+
+.bp-tab-content.active {
+  display: block;
+}
+
+.bp-ship-list {
+  max-height: 300px;
+  overflow-y: auto;
+  background: rgba(11, 15, 22, 0.6);
+  border: 1px solid #263140;
+  border-radius: 6px;
+}
+
+.bp-ship-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  color: #c8d2e0;
+  border-bottom: 1px solid #1f2939;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.bp-ship-item:hover {
+  background: rgba(0, 200, 255, 0.05);
+}
+
+.bp-ship-item.active {
+  background: rgba(0, 200, 255, 0.1);
+  border-left: 3px solid #00c8ff;
+  color: #fff;
+}
+
+.level-badge {
+  font-size: 0.6rem;
+  color: #5a6b7d;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+.bp-enemy-list {
+  background: rgba(11, 15, 22, 0.6);
+  border: 1px solid #263140;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.enemy-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  border-bottom: 1px solid #1f2939;
+  font-size: 0.75rem;
+}
+
+.enemy-item:last-child {
+  border-bottom: none;
+}
+
+.enemy-desc {
+  color: #5a6b7d;
+  font-size: 0.65rem;
+}
+
+/* 闪屏提示 */
+.flash-tip {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 200, 255, 0.9);
+  color: #0b0f16;
+  font-weight: 700;
+  padding: 10px 24px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  z-index: 9999;
+  opacity: 0;
+  animation: flashIn 0.3s forwards, flashOut 0.3s 1.7s forwards;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes flashIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@keyframes flashOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* 响应式 */
+@media (max-width: 600px) {
+  .pool-grid {
+    flex-direction: column;
+  }
+  
+  .action-bar {
+    flex-direction: column;
+  }
+  
+  .btn-action {
+    width: 100%;
+  }
+  
+  .mini-stats {
+    gap: 6px;
+  }
+  
+  .mini-stats .stat {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+}
+
+/* ============================================================
+ *  v3.0 追加样式 —— 明日方舟卫戍协议 × 拉格朗日舰队编组
+ * ============================================================ */
+
+/* ---------- 顶部状态栏：势力血条 / 护盾 / 生命 ---------- */
+.top-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(10, 14, 20, 0.7);
+  border: 1px solid #22303c;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+.faction-bar {
+  flex: 1 1 180px;
+  min-width: 160px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid #263443;
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+.faction-bar .fb-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
+  color: #9db4c4;
+  margin-bottom: 4px;
+}
+.faction-bar .fb-hp-wrap {
+  height: 10px;
+  background: #10161e;
+  border-radius: 5px;
+  overflow: hidden;
+  position: relative;
+}
+.faction-bar .fb-hp {
+  height: 100%;
+  background: linear-gradient(90deg, #ff5c5c, #ff8c2e);
+  transition: width 0.5s ease;
+}
+.faction-bar.dead .fb-hp { background: #3a4a55; }
+.faction-bar.dead .fb-head { color: #5a6b7d; }
+.my-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 150px;
+  background: rgba(0, 40, 60, 0.25);
+  border: 1px solid #1d5a75;
+  border-radius: 4px;
+  padding: 6px 10px;
+}
+.my-bar .mb-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+}
+.my-bar .mb-label { color: #7fa8b8; width: 34px; }
+.my-bar .mb-val { color: #eaf6ff; font-weight: 700; min-width: 30px; }
+.shield-bar { height: 8px; background: #10161e; border-radius: 4px; overflow: hidden; flex: 1; }
+.shield-bar .fill { height: 100%; background: linear-gradient(90deg, #00c8ff, #7ae0ff); transition: width 0.4s; }
+.life-bar { height: 8px; background: #10161e; border-radius: 4px; overflow: hidden; flex: 1; }
+.life-bar .fill { height: 100%; background: linear-gradient(90deg, #44cc88, #9dffd0); transition: width 0.4s; }
+
+/* ---------- 战况播报条 ---------- */
+.news-ticker {
+  height: 26px;
+  overflow: hidden;
+  background: rgba(8, 12, 18, 0.8);
+  border: 1px solid #1e2c38;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  padding: 0 10px;
+  line-height: 24px;
+  font-size: 0.72rem;
+  color: #88ccff;
+  white-space: nowrap;
+  position: relative;
+}
+.news-ticker .tick-item {
+  display: inline-block;
+  padding-right: 40px;
+}
+.news-ticker .tick-item.warn { color: #ff8c2e; }
+.news-ticker .tick-item.bad { color: #ff5c5c; }
+.news-ticker .tick-item.good { color: #44cc88; }
+
+/* ---------- 驳船操作员 / 补给等级面板 ---------- */
+.barge-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(12, 18, 26, 0.6);
+  border: 1px solid #243240;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  font-size: 0.75rem;
+}
+.barge-panel .bp-label { color: #7fa8b8; }
+.barge-panel .bp-val { color: #ffd166; font-weight: 700; }
+.barge-panel .barge-upgrade {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid #ff8c2e;
+  color: #ff8c2e;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  transition: 0.2s;
+}
+.barge-panel .barge-upgrade:hover { background: rgba(255, 140, 46, 0.12); }
+.barge-panel .barge-upgrade:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---------- 补给池 ---------- */
+.pool-section { margin-bottom: 12px; }
+.pool-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  color: #88ccff;
+  margin-bottom: 6px;
+  letter-spacing: 2px;
+}
+.pool-actions { display: flex; gap: 6px; }
+.pool-actions button {
+  background: transparent;
+  border: 1px solid #2e3b47;
+  color: #9db4c4;
+  font-size: 0.68rem;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.pool-actions button:hover { border-color: #00c8ff; color: #fff; }
+.pool-grid { display: flex; gap: 8px; flex-wrap: wrap; }
+.pool-card {
+  flex: 1 1 130px;
+  max-width: 150px;
+  background: rgba(16, 22, 30, 0.8);
+  border: 1px solid #263443;
+  border-radius: 6px;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.pool-card:hover { border-color: #3a5a6a; transform: translateY(-2px); }
+.pool-card.selected { border-color: #00c8ff; box-shadow: 0 0 12px rgba(0, 200, 255, 0.3); }
+.pool-card.frozen { border-style: dashed; border-color: #5a6b7d; opacity: 0.8; }
+.pool-card.frozen::after {
+  content: '已冻结';
+  position: absolute; top: 4px; right: 4px;
+  font-size: 0.55rem; color: #9db4c4;
+  background: rgba(0, 0, 0, 0.5); padding: 1px 5px; border-radius: 8px;
+}
+.pool-card.equip { border-color: #2a5a3a; }
+.pool-card.spell { border-color: #5a3a7a; }
+.pool-card .pool-icon { font-size: 1.6rem; text-align: center; }
+.pool-card .pool-name { font-size: 0.78rem; color: #eaf6ff; text-align: center; margin-top: 4px; font-weight: 600; }
+.pool-card .pool-sub { font-size: 0.6rem; color: #7fa8b8; text-align: center; }
+.pool-card .pool-cost { font-size: 0.72rem; color: #ffd166; text-align: center; margin-top: 3px; }
+.pool-card .pool-stats { font-size: 0.6rem; color: #9db4c4; text-align: center; margin-top: 3px; }
+.pool-card .pool-tier {
+  position: absolute; top: 4px; left: 4px;
+  font-size: 0.55rem; color: #0b0f16;
+  background: #8a97a5; padding: 1px 6px; border-radius: 8px;
+}
+.pool-card .pool-tier.t1 { background: #8a97a5; }
+.pool-card .pool-tier.t2 { background: #44cc88; }
+.pool-card .pool-tier.t3 { background: #4aa3ff; }
+.pool-card .pool-tier.t4 { background: #b98cff; }
+.pool-card .pool-tier.t5 { background: #ffd166; }
+.pool-card .pool-tier.t6 { background: #ff5c5c; }
+
+/* ---------- 手牌区 ---------- */
+.hand-section { margin-bottom: 12px; }
+.hand-title {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: #88ccff;
+  margin-bottom: 6px;
+  letter-spacing: 2px;
+}
+.hand-grid { display: flex; gap: 6px; flex-wrap: wrap; min-height: 56px; }
+.hand-card {
+  width: 74px;
+  background: rgba(16, 22, 30, 0.85);
+  border: 1px solid #263443;
+  border-radius: 6px;
+  padding: 5px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  text-align: center;
+}
+.hand-card:hover { border-color: #00c8ff; transform: translateY(-3px); }
+.hand-card.selected { border-color: #00c8ff; box-shadow: 0 0 10px rgba(0, 200, 255, 0.4); }
+.hand-card .hc-icon { font-size: 1.3rem; }
+.hand-card .hc-name {
+  font-size: 0.58rem; color: #cfe4f0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hand-card .hc-tag {
+  position: absolute; top: 2px; left: 2px;
+  font-size: 0.5rem; color: #0b0f16; background: #8a97a5;
+  padding: 0 4px; border-radius: 6px;
+}
+.hand-card .hc-sell {
+  position: absolute; bottom: 2px; right: 2px;
+  font-size: 0.55rem; color: #ff8c2e; background: rgba(0,0,0,0.6);
+  padding: 1px 5px; border-radius: 8px; cursor: pointer;
+}
+.hand-card .hc-sell:hover { background: rgba(255, 140, 46, 0.3); }
+.hand-card .hc-equip { position: absolute; bottom: 2px; left: 2px; font-size: 0.55rem; color: #7ae0ff; }
+.hand-card.elite {
+  border-color: #ffd166;
+  box-shadow: 0 0 10px rgba(255, 209, 102, 0.45);
+  background: linear-gradient(160deg, rgba(60, 45, 10, 0.55), rgba(20, 26, 16, 0.85));
+}
+.hand-card.elite::after {
+  content: '★精锐';
+  position: absolute; top: 2px; right: 2px;
+  font-size: 0.5rem; color: #ffd166;
+  text-shadow: 0 0 4px rgba(255, 209, 102, 0.8);
+}
+
+/* ---------- 网格 ---------- */
+.grid-wrap { margin-bottom: 12px; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  background: rgba(6, 10, 16, 0.6);
+  border: 1px solid #1a2530;
+  border-radius: 6px;
+  padding: 6px;
+}
+.grid-zone-tag {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.6rem;
+  color: #4a6a7a;
+  padding: 0 4px 4px;
+  letter-spacing: 2px;
+}
+.cell {
+  aspect-ratio: 1.15;
+  background: rgba(20, 28, 38, 0.55);
+  border: 1px solid #1e2c38;
+  border-radius: 4px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 54px;
+}
+.cell:hover { border-color: #3a5a6a; background: rgba(28, 40, 52, 0.7); }
+.cell.zone-front { background: rgba(30, 20, 20, 0.35); }
+.cell.zone-mid { background: rgba(18, 26, 34, 0.4); }
+.cell.zone-back { background: rgba(10, 24, 30, 0.35); }
+.cell.targetable { border-color: #00c8ff; box-shadow: inset 0 0 10px rgba(0, 200, 255, 0.25); }
+.cell.occupied { cursor: pointer; }
+.tower {
+  position: absolute; inset: 3px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(12, 20, 30, 0.9);
+  border: 1px solid #2a3a4a;
+  border-radius: 4px;
+  font-size: 1.3rem;
+  user-select: none;
+}
+.tower.elite {
+  border-color: #ffd166;
+  box-shadow: 0 0 8px rgba(255, 209, 102, 0.5);
+  background: linear-gradient(160deg, rgba(60, 45, 10, 0.6), rgba(16, 22, 16, 0.9));
+  animation: elitePulse 2s infinite;
+}
+@keyframes elitePulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(255, 209, 102, 0.4); }
+  50% { box-shadow: 0 0 14px rgba(255, 209, 102, 0.8); }
+}
+.tower .tw-level {
+  position: absolute; top: 0; left: 2px;
+  font-size: 0.5rem; color: #ffd166;
+}
+.tower .tw-equips {
+  position: absolute; bottom: 0; left: 2px; right: 2px;
+  display: flex; justify-content: center; gap: 2px;
+  font-size: 0.55rem; color: #7ae0ff;
+}
+.tower .tw-name {
+  font-size: 0.5rem; color: #9db4c4;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 95%;
+}
+.tower .hp-bar {
+  position: absolute; bottom: 12px; left: 4px; right: 4px;
+  height: 4px; background: #10161e; border-radius: 2px; overflow: hidden;
+}
+.tower .hp-fill { height: 100%; background: #44cc88; transition: width 0.3s; }
+.tower .tw-shield {
+  position: absolute; bottom: 8px; left: 4px; right: 4px;
+  height: 3px; background: #10161e; border-radius: 2px; overflow: hidden;
+}
+.tower .tw-shield .fill { height: 100%; background: #00c8ff; }
+
+/* ---------- 敌人 ---------- */
+.enemy-display {
+  position: relative;
+  height: 120px;
+  margin-bottom: 4px;
+  border: 1px dashed #1e2c38;
+  border-radius: 6px;
+  background: rgba(20, 8, 8, 0.25);
+  overflow: hidden;
+}
+.enemy-display::before {
+  content: '敌方入侵方向';
+  position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+  font-size: 0.58rem; color: #7a4a4a; letter-spacing: 3px;
+}
+.enemy-unit {
+  position: absolute;
+  width: 34px; height: 34px;
+  display: flex; flex-direction: column; align-items: center;
+  font-size: 1.1rem;
+  transition: left 0.2s linear, top 0.2s linear;
+  z-index: 2;
+}
+.enemy-unit .enemy-hp {
+  width: 28px; height: 3px; background: #10161e; border-radius: 2px; overflow: hidden; margin-top: 1px;
+}
+.enemy-unit .enemy-hp .enemy-hp-fill { height: 100%; background: #ff5c5c; }
+.enemy-unit .enemy-cls {
+  font-size: 0.45rem; color: #b08a8a;
+  white-space: nowrap;
+}
+.enemy-unit.boss { font-size: 1.5rem; width: 44px; height: 44px; }
+.enemy-unit.boss .enemy-cls { color: #ffd166; }
+.enemy-unit.frozen { filter: hue-rotate(180deg) brightness(1.3); }
+.enemy-unit.emp { filter: brightness(0.5); }
+
+/* ---------- 毒雾 ---------- */
+.toxic-fog {
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse at center, rgba(80, 180, 60, 0.06), rgba(80, 200, 60, 0.22));
+  pointer-events: none;
+  z-index: 90;
+  animation: fogPulse 1.2s infinite;
+}
+@keyframes fogPulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+/* ---------- 战斗倒计时 ---------- */
+.battle-clock {
+  position: absolute;
+  top: 12px; right: 14px;
+  font-size: 1.4rem; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+  text-shadow: 0 0 12px rgba(0, 200, 255, 0.8);
+  z-index: 10;
+}
+.battle-clock.warn {
+  color: #ff5c5c;
+  text-shadow: 0 0 14px rgba(255, 92, 92, 0.9);
+  animation: clockBlink 0.6s infinite;
+}
+@keyframes clockBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ---------- 作战中遮罩 ---------- */
+.battle-overlay {
+  position: absolute; inset: 0;
+  background: rgba(4, 8, 14, 0.55);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 40;
+  gap: 12px;
+}
+.battle-overlay .bo-title { font-size: 1.6rem; color: #fff; letter-spacing: 6px; text-shadow: 0 0 18px #00a3ff; }
+.battle-overlay .bo-sub { color: #7fa8b8; font-size: 0.8rem; letter-spacing: 2px; }
+.battle-overlay .bo-progress { color: #ffd166; font-size: 0.85rem; }
+
+/* ---------- 操作栏 ---------- */
+.action-bar {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  padding-top: 4px;
+}
+.btn-action {
+  background: transparent;
+  border: 1px solid #2e3b47;
+  color: #b0c7d6;
+  padding: 8px 16px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 4px;
+}
+.btn-action:hover { border-color: #00c8ff; color: #fff; }
+.btn-action.primary-btn { border-color: #ff6a00; color: #ff6a00; font-weight: 700; }
+.btn-action.primary-btn:hover { background: rgba(255, 106, 0, 0.12); box-shadow: 0 0 12px rgba(255, 106, 0, 0.3); }
+.btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-action.danger { border-color: #ff5c5c; color: #ff5c5c; }
+.btn-action.small { padding: 4px 10px; font-size: 0.68rem; }
+
+/* ---------- 模式选择 ---------- */
+.mode-card {
+  border: 1px solid #2e3b47;
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(14, 20, 28, 0.7);
+}
+.mode-card:hover { border-color: #00c8ff; transform: translateX(4px); }
+.mode-card.locked { opacity: 0.45; cursor: not-allowed; }
+.mode-card.locked:hover { border-color: #2e3b47; transform: none; }
+.mode-card .mc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.mode-card .mc-name { font-size: 0.95rem; color: #fff; font-weight: 700; letter-spacing: 2px; }
+.mode-card .mc-status { font-size: 0.6rem; color: #44cc88; border: 1px solid #2a5a3a; padding: 1px 8px; border-radius: 10px; }
+.mode-card.locked .mc-status { color: #ff5c5c; border-color: #5a2a2a; }
+.mode-card .mc-desc { font-size: 0.72rem; color: #7fa8b8; line-height: 1.6; }
+.mode-card .mc-rules { font-size: 0.66rem; color: #5a7a8a; margin-top: 4px; }
+
+/* ---------- 策略卡片 ---------- */
+.strat-card {
+  border: 1px solid #2e3b47;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(14, 20, 28, 0.7);
+}
+.strat-card:hover { border-color: #ff8c2e; transform: translateX(4px); }
+.strat-card.locked { opacity: 0.45; cursor: not-allowed; }
+.strat-card .strat-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.strat-card .strat-icon { font-size: 1.2rem; }
+.strat-card .strat-name { font-size: 0.9rem; color: #fff; font-weight: 700; }
+.strat-card .strat-hero { font-size: 0.6rem; color: #ffd166; margin-left: auto; }
+.strat-card .strat-desc { font-size: 0.7rem; color: #8fa8b8; line-height: 1.6; }
+
+/* ---------- 强化选项 ---------- */
+.upgrade-option {
+  border: 1px solid #2e3b47;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: rgba(14, 20, 28, 0.7);
+}
+.upgrade-option:hover { border-color: #ffd166; transform: translateX(4px); }
+.upgrade-option .upgrade-name { font-size: 0.85rem; color: #ffd166; font-weight: 700; }
+.upgrade-option .upgrade-desc { font-size: 0.68rem; color: #8fa8b8; margin-top: 4px; }
+
+/* ---------- 模态框通用 ---------- */
+.modal-tip { font-size: 0.7rem; color: #ff8c2e; margin-bottom: 10px; letter-spacing: 1px; }
+.confirm-actions { display: flex; gap: 10px; margin-top: 14px; justify-content: flex-end; }
+
+/* ---------- 物资调配 ---------- */
+.supply-panel { font-size: 0.78rem; line-height: 1.9; color: #b0c7d6; }
+.supply-panel .sp-sec { margin-bottom: 10px; }
+.supply-panel .sp-sec-title { color: #88ccff; font-size: 0.8rem; margin-bottom: 4px; letter-spacing: 1px; }
+.supply-panel .sp-row { display: flex; justify-content: space-between; border-bottom: 1px dashed #1f2939; padding: 3px 0; }
+.supply-panel .sp-row .v { color: #ffd166; font-weight: 600; }
+.supply-panel .sp-row .v.good { color: #44cc88; }
+
+/* ---------- 舰船信息卡（含装备槽） ---------- */
+.ship-info-card { font-size: 0.75rem; }
+.ship-info-card .info-row {
+  display: flex; justify-content: space-between;
+  border-bottom: 1px dashed #1f2939; padding: 5px 0;
+}
+.ship-info-card .info-row .label { color: #7fa8b8; }
+.ship-info-card .info-row .value { color: #eaf6ff; }
+.ship-info-card .info-desc { margin-top: 10px; color: #8fa8b8; font-size: 0.7rem; line-height: 1.7; }
+.ship-info-card .info-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.equip-slots {
+  display: flex; gap: 6px; margin-top: 8px;
+}
+.equip-slot {
+  flex: 1; min-height: 44px;
+  border: 1px dashed #2a5a3a;
+  border-radius: 4px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-size: 0.62rem; color: #5a8a6a;
+  cursor: pointer;
+  transition: 0.2s;
+  background: rgba(10, 20, 14, 0.4);
+  position: relative;
+}
+.equip-slot.has { border-style: solid; border-color: #44cc88; color: #b8ffd8; }
+.equip-slot.has .es-name { font-size: 0.6rem; color: #eaf6ff; }
+.equip-slot.has .es-lv { font-size: 0.5rem; color: #ffd166; }
+.equip-slot:hover { border-color: #00c8ff; }
+
+/* ---------- 结算 ---------- */
+.result-stats { font-size: 0.78rem; margin-bottom: 12px; }
+.result-stats .stat-row {
+  display: flex; justify-content: space-between;
+  border-bottom: 1px dashed #1f2939; padding: 6px 0;
+}
+.result-stats .stat-row .v { color: #ffd166; font-weight: 700; }
+.result-reward { background: rgba(255, 209, 102, 0.06); border: 1px dashed #5a4a2a; border-radius: 6px; padding: 10px; }
+.reward-title { color: #ffd166; font-size: 0.8rem; margin-bottom: 6px; }
+.reward-items { display: flex; gap: 10px; flex-wrap: wrap; }
+.reward-item {
+  font-size: 0.72rem; color: #ffd166;
+  border: 1px solid #5a4a2a; padding: 3px 10px; border-radius: 12px;
+}
+.result-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+
+/* ---------- 蓝图数据库 ---------- */
+.bp-panel { font-size: 0.75rem; }
+.bp-ship-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 4px; border-bottom: 1px solid #1f2939; cursor: pointer;
+}
+.bp-ship-item:hover { color: #00c8ff; }
+
+/* ---------- 手牌超限提示 ---------- */
+.hand-overflow { color: #ff5c5c; font-size: 0.65rem; margin-top: 4px; }
+
+/* ---------- 移动模式提示 ---------- */
+.move-hint {
+  position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+  background: rgba(0, 200, 255, 0.9); color: #0b0f16;
+  font-weight: 700; padding: 8px 18px; border-radius: 4px; font-size: 0.78rem;
+  z-index: 9998;
+}
+
+/* ---------- 响应式补充 ---------- */
+@media (max-width: 600px) {
+  .top-status { flex-direction: column; align-items: stretch; }
+  .faction-bar { min-width: 0; }
+  .pool-card { flex: 1 1 45%; max-width: none; }
+  .hand-card { width: 60px; }
+  .cell { min-height: 44px; }
+}
+
+/* ---------- 浮动伤害提示 ---------- */
+.side-panel { position: relative; }
+.float-tip {
+  position: absolute;
+  transform: translateX(-50%);
+  color: #ffd166;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(255, 140, 46, 0.9);
+  pointer-events: none;
+  z-index: 50;
+  animation: floatUp 0.8s forwards;
+}
+@keyframes floatUp {
+  from { opacity: 1; transform: translateX(-50%) translateY(0); }
+  to { opacity: 0; transform: translateX(-50%) translateY(-26px); }
+}
+
+/* ============================================================
+ *  v4.0 追加样式 —— 舰队编组左右对轰战斗界面 / 配队 / 本局蓝图
+ * ============================================================ */
+
+/* ---------- 战斗布局：左玩家 / 右敌方 ---------- */
+.battle-layout { position: relative; }
+.battle-view {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  min-height: 420px;
+}
+.fleet-panel {
+  flex: 1 1 40%;
+  background: rgba(10, 16, 24, 0.55);
+  border: 1px solid #22303c;
+  border-radius: 6px;
+  padding: 8px;
+  max-height: 560px;
+  overflow-y: auto;
+}
+.fleet-panel.left { border-color: #1d5a75; }
+.fleet-panel.right { border-color: #5a3a3a; }
+.fleet-title {
+  font-size: 0.78rem;
+  color: #88ccff;
+  letter-spacing: 2px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #1f2a33;
+  margin-bottom: 6px;
+}
+.fleet-panel.right .fleet-title { color: #ff8c7a; }
+.fp-cnt { color: #5a7a8a; font-size: 0.65rem; }
+.fleet-list { display: flex; flex-direction: column; gap: 6px; }
+
+.fleet-card {
+  background: rgba(16, 24, 34, 0.85);
+  border: 1px solid #263443;
+  border-radius: 5px;
+  padding: 6px 8px;
+  position: relative;
+  transition: all 0.2s;
+}
+.fleet-card.enemy { background: rgba(34, 16, 16, 0.6); border-color: #4a2a2a; }
+.fleet-card.elite { border-color: #ffd166; box-shadow: 0 0 8px rgba(255, 209, 102, 0.4); }
+.fleet-card.dead { opacity: 0.35; filter: grayscale(1); }
+.fc-head { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.fc-name { font-size: 0.72rem; color: #eaf6ff; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fc-cls { font-size: 0.55rem; color: #7fa8b8; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 8px; }
+.fc-count { font-size: 0.6rem; color: #ff8c7a; margin-left: auto; }
+.fc-hp {
+  height: 7px; background: #10161e; border-radius: 4px; overflow: hidden; margin-bottom: 2px;
+}
+.fc-hp .fill { height: 100%; background: linear-gradient(90deg, #44cc88, #9dffd0); transition: width 0.25s; }
+.fleet-card.enemy .fc-hp .fill { background: linear-gradient(90deg, #ff5c5c, #ff9a8a); }
+.fc-hpnum { font-size: 0.55rem; color: #7a8b9a; }
+.fc-shield { height: 3px; background: #10161e; border-radius: 2px; overflow: hidden; margin-bottom: 2px; }
+.fc-shield .fill { height: 100%; background: #00c8ff; transition: width 0.25s; }
+.fc-mini { font-size: 0.55rem; color: #5a7a8a; margin-top: 2px; }
+
+/* ---------- 战斗中央区 ---------- */
+.battle-center {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bc-info {
+  font-size: 0.78rem;
+  color: #ffd166;
+  text-align: center;
+  letter-spacing: 2px;
+  border: 1px dashed #5a4a2a;
+  border-radius: 4px;
+  padding: 8px;
+  background: rgba(30, 24, 10, 0.3);
+}
+.bc-log {
+  flex: 1;
+  background: rgba(8, 12, 18, 0.8);
+  border: 1px solid #1e2c38;
+  border-radius: 4px;
+  padding: 8px;
+  overflow-y: auto;
+  max-height: 320px;
+  font-size: 0.62rem;
+  line-height: 1.8;
+  color: #9db4c4;
+}
+.bc-log .bc-line.warn { color: #ff8c2e; }
+.bc-log .bc-line.bad { color: #ff5c5c; }
+.bc-log .bc-line.good { color: #44cc88; }
+.bc-hint {
+  font-size: 0.62rem;
+  color: #5a7a8a;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+/* ---------- 休整期舰队面板 ---------- */
+.prep-fleet {
+  background: rgba(10, 16, 24, 0.5);
+  border: 1px solid #1d5a75;
+  border-radius: 6px;
+  padding: 8px;
+  margin-bottom: 10px;
+}
+.prep-fleet .fleet-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.prep-fleet .fleet-card { flex: 1 1 30%; min-width: 200px; }
+.fc-elite { font-size: 0.5rem; color: #ffd166; border: 1px solid #5a4a2a; padding: 0 5px; border-radius: 8px; margin-left: auto; }
+.fc-tags { font-size: 0.55rem; color: #5a7a8a; margin: 2px 0; }
+.fc-actions { display: flex; gap: 6px; margin-top: 4px; }
+.fleet-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* ---------- 配队界面 ---------- */
+.modal-wide { max-width: 900px; }
+.deploy-layout { display: flex; gap: 12px; }
+.deploy-left {
+  flex: 1;
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid #1f2a33;
+  border-radius: 6px;
+  padding: 8px;
+  background: rgba(10, 14, 20, 0.4);
+}
+.deploy-right {
+  flex: 0 0 260px;
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid #1d5a75;
+  border-radius: 6px;
+  padding: 8px;
+  background: rgba(8, 20, 28, 0.5);
+}
+.dp-group { margin-bottom: 10px; }
+.dp-group-title { font-size: 0.75rem; color: #88ccff; letter-spacing: 1px; margin-bottom: 4px; }
+.dp-limit { color: #5a7a8a; font-size: 0.65rem; }
+.dp-ships { display: flex; flex-wrap: wrap; gap: 5px; }
+.dp-ship {
+  flex: 1 1 42%;
+  min-width: 180px;
+  border: 1px solid #263443;
+  border-radius: 4px;
+  padding: 5px 8px;
+  cursor: pointer;
+  background: rgba(16, 22, 30, 0.6);
+  transition: all 0.15s;
+}
+.dp-ship:hover { border-color: #3a5a6a; }
+.dp-ship.on { border-color: #00c8ff; background: rgba(0, 200, 255, 0.1); box-shadow: 0 0 8px rgba(0, 200, 255, 0.25); }
+.dp-ship.off { opacity: 0.4; cursor: not-allowed; }
+.dp-name { font-size: 0.7rem; color: #eaf6ff; }
+.dp-stats { font-size: 0.55rem; color: #5a7a8a; margin-top: 2px; }
+.dp-right-title { font-size: 0.75rem; color: #ffd166; margin-bottom: 6px; letter-spacing: 1px; }
+.dp-selected { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.dp-sel-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.65rem;
+  color: #cfe4f0;
+  border-bottom: 1px dashed #1f2939;
+  padding: 3px 0;
+}
+.dp-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+/* ---------- 本局蓝图数据库 ---------- */
+.blue-list { display: flex; flex-direction: column; gap: 8px; max-height: 60vh; overflow-y: auto; }
+.blue-ship {
+  border: 1px solid #263443;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: rgba(14, 20, 28, 0.6);
+}
+.blue-ship.elite { border-color: #ffd166; }
+.bs-head { display: flex; gap: 8px; align-items: center; margin-bottom: 3px; }
+.bs-name { font-size: 0.78rem; color: #fff; font-weight: 600; }
+.bs-cls { font-size: 0.58rem; color: #7fa8b8; }
+.bs-stats { font-size: 0.6rem; color: #5a7a8a; margin-bottom: 6px; }
+.bs-upgrades { display: flex; flex-wrap: wrap; gap: 6px; }
+.bs-up {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #1f2a33;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.62rem;
+}
+.bs-up-label { color: #b0c7d6; }
+.bs-up-lv { color: #ffd166; }
+.btn-action.off { opacity: 0.4; cursor: not-allowed; }
+.tp-num { color: #ffd166; font-weight: 700; }
+
+/* ---------- 蓝图数据库 ---------- */
+.bp-type-title {
+  font-size: 0.72rem;
+  color: #88ccff;
+  padding: 6px 0 3px;
+  border-bottom: 1px dashed #1f2939;
+  margin-top: 6px;
+}
+.bp-tab-content { max-height: 55vh; overflow-y: auto; }
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 760px) {
+  .battle-view { flex-direction: column; }
+  .battle-center { flex: none; order: -1; max-height: 180px; }
+  .deploy-layout { flex-direction: column; }
+  .deploy-right { flex: none; }
+  .prep-fleet .fleet-card { flex: 1 1 100%; min-width: 0; }
+}
+
