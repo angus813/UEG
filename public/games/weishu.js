@@ -1,471 +1,292 @@
-// ============================================================
-//  卫戍协议 v4.0 · 星河防线
-//  核心机制：
-//  ① 战前配队：物资调配处从全舰船池选择本局舰队（航母≤2含搭载、
-//     战巡≤2、其余舰种各≤5），选中舰船进入手牌区
-//  ② 城防舰队：敌方按回合使用 2/3/5/7/9 级城防配置
-//     （来源：Lagrange's encyclopedia.xlsx City defense 表）
-//  ③ 舰队编组战斗：左方玩家舰队 vs 右方敌方舰队，实弹/能量、
-//     装甲/护盾、直射/投射/防空锁定、编队自动对轰
-//  ④ 强化点：每回合结束奖励 + 击杀敌方舰船获得，
-//     在本局蓝图数据库（手牌区舰船）中强化
-//  ⑤ 卫戍协议框架：三种模式、势力生命结算、驳船补给等级、
-//     同名合成、装备、战术支援、回合强化
-//  ⑥ 舰队强化系统联动：读取 enhance.js 的 localStorage 强化状态
-// ============================================================
+const CLS_ZH = {frigate:'护卫舰', destroyer:'驱逐舰', cruiser:'巡洋舰', battlecruiser:'战列巡洋舰', battleship:'战列舰', carrier:'航空母舰', fighter:'战机', corvette:'护航艇', support:'支援舰'};
+const CLS_ICON = {frigate:'护', destroyer:'驱', cruiser:'巡', battlecruiser:'战', battleship:'列', carrier:'航', fighter:'机', corvette:'艇', support:'援'};
+const CLS_COLOR = {frigate:'#7fd4ff', destroyer:'#9be89b', cruiser:'#ffd27f', battlecruiser:'#ff9a8a', battleship:'#ff7fa8', carrier:'#c9a5ff', fighter:'#8affd9', corvette:'#ffe27f', support:'#a5c9ff'};
+const WEAPON_LABEL = {direct:'直射', projectile:'投射', air:'防空'};
+const DMGTYPE_LABEL = {physical:'实弹', energy:'能量'};
+const LOCK_SEQUENCE = [{cls:'carrier'}, {cls:'battlecruiser'}, {cls:'cruiser'}, {cls:'destroyer'}, {cls:'frigate'}, {cls:'support'}, {cls:'fighter'}, {cls:'corvette'}];
 
-// ============================================================
-//  0. 全局配置
-// ============================================================
 const CONFIG = {
-  TIER_NAMES: ['I', 'II', 'III', 'IV', 'V', 'VI'],
-  MODES: {
-    beginner:  { name: '入门协议', life: 20, funds: [5, 13, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10], tech: [2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 6, 6, 6, 7, 7] },
-    prototype: { name: '原型协议', life: 45, funds: [5, 6, 7, 8, 9, 10, 11, 12, 12, 12, 12, 12, 12, 12, 12], tech: [3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10] },
-    core:      { name: '核心协议', life: 45, funds: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 12, 12, 12, 12, 12], tech: [4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11] }
-  },
-  // 驳船补给等级：舰船卡位/装备卡位/战术卡位/护盾值/初始升级价
-  BARGE: [
-    { ships: 1, equips: 0, spells: 0, shield: 1, cost: 2 },
-    { ships: 2, equips: 1, spells: 0, shield: 1, cost: 4 },
-    { ships: 4, equips: 1, spells: 0, shield: 2, cost: 6 },
-    { ships: 5, equips: 2, spells: 0, shield: 2, cost: 9 },
-    { ships: 5, equips: 2, spells: 1, shield: 3, cost: 12 },
-    { ships: 5, equips: 2, spells: 1, shield: 3, cost: 0 }
-  ],
-  REFRESH_COST: 2,
-  FREEZE_COST: 2,
-  SELL_PRICE: 1,
+  TOTAL_ROUNDS: 15,
   ROUND_CLOCK: 60,
   BREACH_CAP: 20,
+  HAND_LIMIT: 24,
   ASSAULT_FACTOR: 0.025,
-  MERGE_COUNT: 3,
-  UPGRADE_ROUNDS: [3, 6, 10, 12, 14],
-  HAND_LIMIT: 40,
-  // 城防等级按回合划分（用户指定）
-  CITY_LEVEL_BY_ROUND: [
-    null, 2, 2, 2, 3, 3, 3, 5, 5, 7, 7, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9
+  DEPLOY_LIMIT: {carrier: 2, battlecruiser: 2, battleship: 2, cruiser: 5, destroyer: 5, frigate: 5, fighter: 5, corvette: 5, support: 5},
+  MODES: {
+    beginner: {name: '入门协议', life: 20, funds: [5, 13, 10], reward: 1},
+    prototype: {name: '原型协议', life: 45, funds: [5, 1, 12], reward: 1.5},
+    core: {name: '核心协议', life: 45, funds: [3, 1, 12], reward: 2}
+  },
+  BARGE: [
+    {slots: 1, equipSlots: 0, shield: 1, cost: 2},
+    {slots: 2, equipSlots: 1, shield: 1, cost: 4},
+    {slots: 4, equipSlots: 1, shield: 2, cost: 6},
+    {slots: 5, equipSlots: 2, shield: 2, cost: 9},
+    {slots: 5, equipSlots: 2, shield: 3, cost: 12},
+    {slots: 5, equipSlots: 2, shield: 3, cost: 99}
   ],
-  // 配队限制：航母≤2（含搭载战机/护航艇）、战巡≤2、其余各≤5
-  DEPLOY_LIMIT: {
-    carrier: 2, battlecruiser: 2, battleship: 2,
-    frigate: 5, destroyer: 5, cruiser: 5, fighter: 5, corvette: 5, support: 5
-  }
+  UPGRADE_ROUNDS: [3, 6, 10, 12, 14]
 };
 
-// 舰种中文映射
-const CLS_ZH = {
-  frigate: '护卫舰', destroyer: '驱逐舰', cruiser: '巡洋舰',
-  battlecruiser: '战列巡洋舰', battleship: '战列舰', carrier: '航空母舰',
-  fighter: '战机', corvette: '护航艇', support: '支援舰'
-};
-const WEAPON_LABEL = { direct: '直射', projectile: '投射', air: '防空' };
-const DMGTYPE_LABEL = { physical: '实弹', energy: '能量' };
-
-// 锁定序列（投射武器：航母→战巡→巡洋→驱逐→护卫）
-const LOCK_SEQUENCE = [
-  { cls: 'carrier', label: '航空母舰' },
-  { cls: 'battlecruiser', label: '战列巡洋舰' },
-  { cls: 'battleship', label: '战列舰' },
-  { cls: 'cruiser', label: '巡洋舰' },
-  { cls: 'destroyer', label: '驱逐舰' },
-  { cls: 'frigate', label: '护卫舰' },
-  { cls: 'corvette', label: '护航艇' }
-];
-
-// ============================================================
-//  1. 我方舰船池（从 SHIP_STATS 提取全部舰船 + 战斗属性）
-// ============================================================
-const CLS_TYPE_MAP = {
-  '护卫舰': 'frigate', '驱逐舰': 'destroyer', '巡洋舰': 'cruiser',
-  '战列巡洋舰': 'battlecruiser', '战列舰': 'battleship',
-  'aircraftcarrier': 'carrier', '航空母舰': 'carrier',
-  'support': 'support', '支援舰': 'support',
-  '战机': 'fighter', '护航艇': 'corvette'
-};
-
-function clampNum(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-function hashStr(s) { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 9973; return h; }
-
-function weaponProfile(cls, name) {
-  const p = { rate: 1, range: 3, weapon: 'direct', dmgType: 'physical', shield: 0 };
-  const n = name || '';
-  if (/离子|脉冲|能量|轨道|激光/.test(n)) p.dmgType = 'energy';
-  if (/鱼雷|导弹/.test(n)) p.weapon = 'projectile';
-  if (/防空/.test(n)) p.weapon = 'air';
-  switch (cls) {
-    case 'frigate': p.rate = 1.2; p.range = 2.4; break;
-    case 'destroyer': p.rate = 0.9; p.range = 2.8; if (!/鱼雷|导弹/.test(n)) p.weapon = 'projectile'; break;
-    case 'cruiser': p.rate = 0.75; p.range = 3.4; if (!/防空/.test(n)) p.weapon = 'projectile'; break;
-    case 'battlecruiser': p.rate = 0.6; p.range = 4.2; p.dmgType = 'energy'; break;
-    case 'battleship': p.rate = 0.5; p.range = 4.6; p.weapon = 'direct'; p.dmgType = 'energy'; break;
-    case 'carrier': p.rate = 1.1; p.range = 3.2; p.weapon = 'air'; break;
-    case 'fighter': p.rate = 1.8; p.range = 3.0; p.weapon = 'air'; break;
-    case 'corvette': p.rate = 1.4; p.range = 2.5; p.weapon = 'projectile'; break;
-    case 'support': p.rate = 0.8; p.range = 3.4; p.weapon = 'direct'; break;
-  }
-  return p;
-}
-
-let SHIP_POOL_CACHE = null;
-function buildShipPool() {
-  if (SHIP_POOL_CACHE) return SHIP_POOL_CACHE;
-  const stats = window.SHIP_STATS || {};
-  const pool = [];
-  for (const key in stats) {
-    const list = stats[key];
-    if (!list || !list.length) continue;
-    const s0 = list[0];
-    const cls = CLS_TYPE_MAP[s0.type] || 'frigate';
-    const name = s0.name || key;
-    const wp = weaponProfile(cls, name);
-    const hp = clampNum(Math.round((s0.hp || 0) / 100), 20, 3000);
-    const dpm = (s0.firepower && s0.firepower.antiShip) || 0;
-    const dmg = clampNum(Math.round(dpm / 200), 8, 600);
-    pool.push({
-      id: key,
-      name: name,
-      shortName: name.split('-')[0],
-      cls: cls,
-      type: s0.type || cls,
-      hp: hp,
-      dmg: dmg,
-      armor: clampNum(Math.round((s0.physicalArmor || 0) / 12), 0, 30),
-      rate: wp.rate,
-      range: wp.range,
-      weapon: wp.weapon,
-      dmgType: wp.dmgType,
-      shield: wp.dmgType === 'energy' ? Math.round(hp * 0.15) : 0,
-      maxShip: s0.maxShip || 5,
-      desc: s0.desc || ''
-    });
-  }
-  // 排序：按舰种顺序
-  const order = ['carrier', 'battlecruiser', 'battleship', 'cruiser', 'destroyer', 'frigate', 'fighter', 'corvette', 'support'];
-  pool.sort((a, b) => order.indexOf(a.cls) - order.indexOf(b.cls) || b.hp - a.hp);
-  SHIP_POOL_CACHE = pool;
-  return pool;
-}
-
-// ============================================================
-//  2. 装备 / 战术支援 蓝图
-// ============================================================
 const EQUIP_BLUEPRINTS = [
-  { id: 'dmg',    name: '火力增幅器', cost: 3, desc: '攻击力 +25%', apply: t => { t.dmgMul *= 1.25; } },
-  { id: 'armor',  name: '装甲镀层',   cost: 3, desc: '装甲 +3',      apply: t => { t.armorBonus += 3; } },
-  { id: 'hp',     name: '结构加固',   cost: 3, desc: '生命上限 +30%', apply: t => { t.hpMul *= 1.3; } },
-  { id: 'rate',   name: '急速火控',   cost: 2, desc: '攻击速度 +25%', apply: t => { t.rateMul *= 1.25; } },
-  { id: 'range',  name: '长程制导',   cost: 2, desc: '射程 +1',      apply: t => { t.rangeBonus += 1; } },
-  { id: 'shield', name: '能量护盾',   cost: 4, desc: '护盾 +40',     apply: t => { t.shieldBonus += 40; } },
-  { id: 'energy', name: '能量核心',   cost: 4, desc: '能量伤害 +40%', apply: t => { t.energyMul *= 1.4; } },
-  { id: 'crit',   name: '火控核心',   cost: 4, desc: '暴击率 +15%',  apply: t => { t.critBonus += 0.15; } }
+  {id: 'dmg', name: '火力增幅器', cost: 3, desc: '攻击力+25%'},
+  {id: 'armor', name: '装甲镀层', cost: 3, desc: '装甲+3'},
+  {id: 'hp', name: '结构加固', cost: 3, desc: '生命上限+30%'},
+  {id: 'rate', name: '急速火控', cost: 2, desc: '攻击速度+25%'},
+  {id: 'range', name: '长程制导', cost: 2, desc: '射程+1'},
+  {id: 'shield', name: '能量护盾', cost: 4, desc: '护盾+40'},
+  {id: 'energy', name: '能量核心', cost: 4, desc: '能量伤害+40%'},
+  {id: 'crit', name: '火控核心', cost: 4, desc: '暴击率+15%'}
 ];
-const EQUIP_MAX_LV = 3;
 
 const SPELL_BLUEPRINTS = [
-  { id: 'bomb',      name: '轨道轰炸',   cost: 5, desc: '对全部敌人造成我方总攻击力 300% 的伤害' },
-  { id: 'emp',       name: '全域EMP',    cost: 4, desc: '敌方全体停火 3 秒' },
-  { id: 'repair',    name: '紧急修复',   cost: 4, desc: '我方全体舰船恢复 40% 生命' },
-  { id: 'reinforce', name: '舰载机增援', cost: 5, desc: '立即获得 1 艘随机战机/护航艇加入战场' },
-  { id: 'freeze',    name: '时间冻结',   cost: 4, desc: '敌方停止移动 3 秒' },
-  { id: 'shield',    name: '质子护盾',   cost: 3, desc: '本回合我方护盾 +5' },
-  { id: 'corrode',   name: '纳米腐蚀',   cost: 5, desc: '敌方每秒损失 3% 生命，持续 5 秒' },
-  { id: 'focus',     name: '集火指令',   cost: 3, desc: '本回合我方全体攻击力 +30%' }
+  {id: 'bomb', name: '轨道打击', cost: 5, desc: '对全部敌方编队造成我方总攻击力300%的伤害'},
+  {id: 'emp', name: '全域干扰', cost: 4, desc: '敌方全体停火3秒'},
+  {id: 'repair', name: '紧急修复', cost: 4, desc: '我方全体舰船恢复40%生命'},
+  {id: 'reinforce', name: '增援编队', cost: 5, desc: '立即获得1艘随机舰船加入编组'},
+  {id: 'freeze', name: '时间冻结', cost: 4, desc: '敌方停止移动3秒'},
+  {id: 'shield', name: '护盾发生器', cost: 3, desc: '本回合我方防御护盾+5'},
+  {id: 'corrode', name: '纳米侵蚀', cost: 5, desc: '敌方每秒损失3%生命，持续5秒'},
+  {id: 'focus', name: '集火指令', cost: 3, desc: '本回合我方全体攻击力+30%'}
 ];
 
-// ============================================================
-//  3. 防守策略（无明日方舟角色名）
-// ============================================================
 const DEFENSE_STRATEGIES = [
-  {
-    id: 'aegis', name: '全域防御协议', icon: '◆', life: 24, org: '联合防御舰队',
-    unlock: 'initial',
-    desc: '我方生命 24。所有舰船攻击力、装甲 +15%，敌方攻击力 -20%。',
-    effect: () => { state.bonuses.dmgMul *= 1.15; state.bonuses.armorMul = 1.15; state.enemyDmgMul = 0.8; }
-  },
-  {
-    id: 'swift', name: '快刀乱麻', icon: '✦', life: 14, org: '雷火科技突击舰队',
-    unlock: 'prototype',
-    desc: '我方生命 14。攻击力最高的舰船攻击力 +70%，攻速 +30%。',
-    effect: () => { state.swift = true; }
-  },
-  {
-    id: 'recycle', name: '回收利用', icon: '◈', life: 18, org: '诺玛运输护航编队',
-    unlock: 'prototype',
-    desc: '我方生命 18。每击倒 12 名敌人，战斗结束时奖励 3 资金。',
-    effect: () => { state.recycle = true; }
-  },
-  {
-    id: 'gamer', name: '游戏高手', icon: '◈', life: 16, org: '比邻星同盟贸易舰队',
-    unlock: 'prototype',
-    desc: '我方生命 16。每消耗 20 资金，获得 1 艘随机不高于当前补给等级的舰船。',
-    effect: () => { state.gacha = true; }
-  },
-  {
-    id: 'intel', name: '内部情报', icon: '◈', life: 30, org: '未央资助计划情报处',
-    unlock: 'core',
-    desc: '我方生命 30。每回合第一次刷新免费，可刷出当前补给等级 +1 的舰船。',
-    effect: () => { state.intel = true; }
-  },
-  {
-    id: 'spell', name: '战术优势', icon: '◈', life: 45, org: '维塔斯A-21实验编队',
-    unlock: 'core',
-    desc: '我方生命 45。补给等级到达 3 级后，每回合开始时随机获得 1 个战术支援。',
-    effect: () => { state.spellStrategy = true; }
-  },
-  {
-    id: 'drill', name: '教官团队', icon: '◈', life: 22, org: '木星工业学院',
-    unlock: 'coreCleared',
-    desc: '我方生命 22。同名舰船仅需 2 艘即可合成精锐，合成时额外奖励 1 资金。',
-    effect: () => { state.mergeCount = 2; state.mergeBonus = 1; }
-  },
-  {
-    id: 'craft', name: '精研技艺', icon: '◈', life: 20, org: '安东尼奥斯研究所',
-    unlock: 'coreCleared',
-    desc: '我方生命 20。购买舰船资金 -1，购买装备和刷新资金 +1。',
-    effect: () => { state.craft = true; }
-  }
+  {id: 'aegis', name: '全域防御', org: '联合防御阵列', life: 70, unlock: 0, desc: '我方生命值提高，所有舰船攻击、装甲、生命+15%；入门协议中敌方攻击与生命-30%', effect: function () { state.life = 70; state.maxLife = 70; state.bonuses.dmgMul *= 1.15; state.bonuses.armorMul *= 1.15; if (state.mode === 'beginner') state.enemyDmgMul *= 0.7; }},
+  {id: 'swift', name: '精准打击', org: '雷火科技突击舰队', life: 55, unlock: 1, desc: '战斗开始后，攻击力最高的舰船获得攻击力+70%加成', effect: function () { state.life = 55; state.maxLife = 55; state.swift = true; }},
+  {id: 'recycle', name: '战利品回收', org: '诺玛运输护航编队', life: 55, unlock: 1, desc: '每击倒30个敌方单位，战斗结束时奖励2-3资金', effect: function () { state.life = 55; state.maxLife = 55; state.recycle = true; }},
+  {id: 'gamer', name: '军火商人', org: '比邻星自由贸易同盟', life: 50, unlock: 1, desc: '每消耗18资金，随机获得1艘不高于当前补给等级的舰船', effect: function () { state.life = 50; state.maxLife = 50; state.gacha = true; }},
+  {id: 'intel', name: '情报网络', org: '未央资助计划', life: 30, unlock: 2, desc: '每回合第一次刷新为特殊刷新，可刷出补给等级+1的舰船（最高6级）', effect: function () { state.life = 30; state.maxLife = 30; state.intel = true; }},
+  {id: 'spell', name: '战术支援', org: '安东尼奥斯联合舰队', life: 45, unlock: 2, desc: '补给等级到达3级后，每回合开始时随机获得1个战术指令', effect: function () { state.life = 45; state.maxLife = 45; state.spellStrategy = true; }},
+  {id: 'drill', name: '军官学院', org: '木星工业学院', life: 60, unlock: 3, desc: '同名舰船仅需2艘即可晋升精锐，晋升时额外奖励1资金', effect: function () { state.life = 60; state.maxLife = 60; state.mergeCount = 2; state.mergeBonus = 1; }},
+  {id: 'craft', name: '精工制造', org: '安东塔斯重工', life: 50, unlock: 3, desc: '购买舰船资金-1，购买装备与刷新资金+1', effect: function () { state.life = 50; state.maxLife = 50; state.craft = true; }}
 ];
 
-// ============================================================
-//  4. 回合强化池
-// ============================================================
 const UPGRADE_POOL = [
-  { name: '资金注入 +12', desc: '立即获得 12 资金', effect: () => { state.funds += 12; } },
-  { name: '全舰攻击 +15%', desc: '所有舰船攻击力 +15%', effect: () => { state.bonuses.dmgMul *= 1.15; } },
-  { name: '全舰攻速 +20%', desc: '所有舰船攻击速度 +20%', effect: () => { state.bonuses.rateMul *= 1.2; } },
-  { name: '全舰装甲 +3', desc: '所有舰船装甲 +3', effect: () => { state.bonuses.armorBonus += 3; } },
-  { name: '生命 +3', desc: '我方生命上限 +3', effect: () => { state.maxLife += 3; state.life = Math.min(state.maxLife, state.life + 3); } },
-  { name: '射程 +0.5', desc: '所有舰船射程 +0.5', effect: () => { state.bonuses.rangeBonus += 0.5; } },
-  { name: '免费舰船', desc: '立即获得 1 艘随机当前等级舰船', effect: () => { grantRandomShip(); } },
-  { name: '直射武器伤害 +25%', desc: '直射武器伤害 +25%', effect: () => { state.bonuses.directMul *= 1.25; } },
-  { name: '投射武器伤害 +25%', desc: '投射武器伤害 +25%', effect: () => { state.bonuses.projMul *= 1.25; } },
-  { name: '防空火力 +40%', desc: '防空武器伤害 +40%', effect: () => { state.bonuses.airMul *= 1.4; } },
-  { name: '护盾值 +2', desc: '每回合护盾值 +2', effect: () => { state.bonuses.shieldBonus += 2; } },
-  { name: '全舰暴击率 +10%', desc: '所有舰船暴击率 +10%', effect: () => { state.bonuses.critChance += 0.1; } },
-  { name: '精锐化协议', desc: '随机 1 艘舰船立即晋升为精锐', effect: () => { eliteRandomShip(); } },
-  { name: '装备补给', desc: '立即获得 2 件随机装备', effect: () => { grantRandomEquips(2); } },
-  { name: '战术补给', desc: '立即获得 1 个随机战术支援', effect: () => { grantRandomSpell(); } }
+  {name: '攻击强化', desc: '所有舰船攻击力+20%', effect: function () { state.bonuses.dmgMul *= 1.2; }},
+  {name: '生命强化', desc: '所有舰船生命上限+20%', effect: function () { state.bonuses.hpMul *= 1.2; }},
+  {name: '攻速强化', desc: '所有舰船攻击速度+20%', effect: function () { state.bonuses.rateMul *= 1.2; }},
+  {name: '装甲强化', desc: '所有舰船装甲+5', effect: function () { state.bonuses.armorBonus += 5; }},
+  {name: '射程强化', desc: '所有舰船射程+1', effect: function () { state.bonuses.rangeBonus += 1; }},
+  {name: '直射火力', desc: '直射武器伤害+40%', effect: function () { state.bonuses.directMul *= 1.4; }},
+  {name: '投射火力', desc: '投射武器伤害+40%', effect: function () { state.bonuses.projMul *= 1.4; }},
+  {name: '防空火力', desc: '防空武器伤害+50%', effect: function () { state.bonuses.airMul *= 1.5; }},
+  {name: '能量过载', desc: '能量伤害+40%', effect: function () { state.bonuses.energyMul *= 1.4; }},
+  {name: '暴击系统', desc: '暴击率+15%', effect: function () { state.bonuses.critChance += 0.15; }},
+  {name: '护盾强化', desc: '防御护盾+3', effect: function () { state.bonuses.shieldBonus += 3; }},
+  {name: '资金注入', desc: '立即获得15资金', effect: function () { state.funds += 15; }},
+  {name: '精锐化协议', desc: '编组中随机1艘舰船晋升为精锐', effect: function () { eliteRandomShip(); }},
+  {name: '装备补给', desc: '随机2件装备加入手牌', effect: function () { grantEquips(); }},
+  {name: '战术补给', desc: '随机1个战术指令加入手牌', effect: function () { grantSpell(); }}
 ];
 
-// ============================================================
-//  5. 状态
-// ============================================================
 let state = null;
+let newsList = [];
 let battleTimer = null;
 let uiTimer = null;
 let clockLeft = 0;
 let overtime = 0;
 let toxicActive = false;
-let newsList = [];
 let selectedHandIdx = null;
-
+let upgradeTriggered = {};
 const PROGRESS_KEY = 'ueg_weishu_progress';
 const STATS_KEY = 'ueg_weishu_stats';
 
 function loadProgress() {
-  try {
-    const p = JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {};
-    return { beginner: true, prototype: !!p.prototype, core: !!p.core, coreCleared: !!p.coreCleared };
-  } catch (e) { return { beginner: true, prototype: false, core: false, coreCleared: false }; }
+  try { const p = JSON.parse(localStorage.getItem(PROGRESS_KEY) || '{}'); return { beginner: true, prototype: !!p.prototype, core: !!p.core, coreCleared: !!p.coreCleared }; } catch (e) { return { beginner: true, prototype: false, core: false, coreCleared: false }; }
 }
-function saveProgress() {
-  try { localStorage.setItem(PROGRESS_KEY, JSON.stringify({ prototype: state.progress.prototype, core: state.progress.core, coreCleared: state.progress.coreCleared })); } catch (e) {}
-}
+function saveProgress() { localStorage.setItem(PROGRESS_KEY, JSON.stringify(state.progress)); }
 function loadStats() {
-  try { return JSON.parse(localStorage.getItem(STATS_KEY)) || { wins: 0, losses: 0, kills: 0, bestWave: 0 }; }
-  catch (e) { return { wins: 0, losses: 0, kills: 0, bestWave: 0 }; }
+  try { return JSON.parse(localStorage.getItem(STATS_KEY) || '{}'); } catch (e) { return {}; }
 }
-function saveStats() {
-  try { localStorage.setItem(STATS_KEY, JSON.stringify(state.stats)); } catch (e) {}
+function saveStats() { localStorage.setItem(STATS_KEY, JSON.stringify(state.stats)); }
+
+function cityLevelOf(wave) {
+  if (wave <= 3) return '2';
+  if (wave <= 6) return '3';
+  if (wave <= 8) return '5';
+  if (wave <= 10) return '7';
+  return '9';
 }
 
-// 舰队强化联动（enhance.js localStorage）
+function showModal(title, body) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = body;
+  document.getElementById('genericModal').classList.add('active');
+}
+function closeModals() {
+  document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+  const fog = document.getElementById('toxicFog');
+  if (fog) fog.remove();
+}
+function showConfirm(title, body, cb) {
+  document.getElementById('confirmTitle').textContent = title;
+  document.getElementById('confirmBody').textContent = body;
+  document.getElementById('confirmModal').classList.add('active');
+  document.getElementById('confirmOk').onclick = function () {
+    document.getElementById('confirmModal').classList.remove('active');
+    if (cb) cb();
+  };
+  document.getElementById('confirmCancel').onclick = function () {
+    document.getElementById('confirmModal').classList.remove('active');
+  };
+}
+function flashTip(msg) {
+  const old = document.getElementById('flashTip');
+  if (old) old.remove();
+  const tip = document.createElement('div');
+  tip.id = 'flashTip';
+  tip.className = 'flash-tip';
+  tip.textContent = msg;
+  document.body.appendChild(tip);
+  setTimeout(function () { tip.remove(); }, 2200);
+}
+function pushNews(msg, cls) {
+  newsList.push({ msg: msg, cls: cls || '' });
+  if (newsList.length > 30) newsList.shift();
+}
+
 function computeEnhanceMul() {
   try {
     const st = JSON.parse(localStorage.getItem('ueg_enhance_state') || '{}');
     let total = 0;
-    for (const k in st) { const s = st[k]; for (const sys in s) { const t = s[sys]; for (const tech in t) { total += Number(t[tech]) || 0; } } }
+    for (const k in st) for (const s in st[k]) for (const t in st[k][s]) total += st[k][s][t] || 0;
     return 1 + Math.min(0.5, total * 0.001);
   } catch (e) { return 1; }
 }
-function shipEnhanceBonus(name) {
+function shipEnhanceBonus(shipName) {
   try {
     const st = JSON.parse(localStorage.getItem('ueg_enhance_state') || '{}');
+    const a = shipName.replace(/[·\- ]/g, '');
     let lv = 0;
     for (const k in st) {
-      if (k.includes(name) || name.includes(k.split('·')[0])) {
-        const s = st[k];
-        for (const sys in s) { const t = s[sys]; for (const tech in t) { lv += Number(t[tech]) || 0; } }
-      }
+      const b = k.replace(/[·\- ]/g, '');
+      if (a.includes(b) || b.includes(a)) for (const s in st[k]) for (const t in st[k][s]) lv += st[k][s][t] || 0;
     }
-    return lv > 0 ? 1 + Math.min(0.4, lv * 0.004) : 1;
+    return 1 + Math.min(0.4, lv * 0.004);
   } catch (e) { return 1; }
 }
-function getEnhanceSummary() {
-  try {
-    const st = JSON.parse(localStorage.getItem('ueg_enhance_state') || '{}');
-    let total = 0, ships = 0;
-    for (const k in st) { ships++; const s = st[k]; for (const sys in s) { const t = s[sys]; for (const tech in t) { total += Number(t[tech]) || 0; } } }
-    return { totalLevels: total, ships: ships, mul: 1 + Math.min(0.5, total * 0.001) };
-  } catch (e) { return { totalLevels: 0, ships: 0, mul: 1 }; }
-}
 
-// ============================================================
-//  6. 初始化
-// ============================================================
 function initGame() {
   state = {
-    phase: 'welcome',
-    mode: 'beginner',
-    strategy: null,
-    progress: loadProgress(),
-    stats: loadStats(),
-    factions: [],
-    factionHp: [],
-    factionMaxHp: [],
-    maxLife: 10,
-    life: 10,
-    shield: 1,
-    wave: 1,
-    funds: 0,
-    techPoints: 0,
-    bargeLevel: 1,
-    upgradeDiscount: 0,
-    pool: [],
-    poolFrozen: false,
-    hand: [],          // 手牌区 = 我方舰队编组
-    enemies: [],       // 敌方舰队
-    units: [],         // 我方战斗单位
-    totalKills: 0,
-    killsThisRound: 0,
-    spentFunds: 0,
-    roundLifeLost: 0,
-    permits: 0,
-    bonuses: {
-      dmgMul: 1, rateMul: 1, armorBonus: 0, armorMul: 1, rangeBonus: 0,
-      directMul: 1, projMul: 1, airMul: 1, shieldBonus: 0, critChance: 0, energyMul: 1
-    },
-    enhanceMul: computeEnhanceMul(),
-    enemyDmgMul: 1,
+    phase: 'welcome', mode: 'beginner', strategy: null,
+    factions: [], factionHp: [], factionMaxHp: [],
+    life: 70, maxLife: 70, funds: 0, techPoints: 0,
+    wave: 1, bargeLevel: 1, upgradeDiscount: 0, shield: 1,
+    pool: [], poolFrozen: false, hand: [], units: [], enemies: [],
+    bonuses: { dmgMul: 1, hpMul: 1, rateMul: 1, armorBonus: 0, armorMul: 1, rangeBonus: 0, directMul: 1, projMul: 1, airMul: 1, shieldBonus: 0, critChance: 0, energyMul: 1 },
+    enhanceMul: 1, enemyDmgMul: 1,
     swift: false, recycle: false, gacha: false, intel: false, spellStrategy: false,
-    mergeCount: CONFIG.MERGE_COUNT, mergeBonus: 0, craft: false,
-    gachaCount: 0,
-    firstRefreshFree: false,
-    battleFocusMul: 1,
-    upgradeTriggered: {},
-    reward: { tech: 0, coin: 0 }
+    mergeCount: 3, mergeBonus: 0, craft: false,
+    totalKills: 0, roundKills: 0, roundLifeLost: 0, spentFunds: 0, permits: 0,
+    attackEvents: [], breakthroughUntil: 0,
+    progress: loadProgress(), stats: loadStats(), blueOpenedIn: null
   };
-  selectedHandIdx = null;
   newsList = [];
-  renderWelcome();
-}
-
-function renderWelcome() {
+  upgradeTriggered = {};
+  closeModals();
   const panel = document.getElementById('leftPanel');
   panel.dataset.mode = 'welcome';
-  const enh = getEnhanceSummary();
-  panel.innerHTML = `
-    <div class="welcome">
-      <span class="big-icon">◆</span>
-      <h2>卫戍协议</h2>
-      <p>星河防线 · 舰队塔防</p>
-      <div class="hint">点击「开始模拟」进入作战</div>
-      <div style="margin-top:16px;font-size:0.75rem;color:#5e7a8c;line-height:1.9;">
-        模式进度：入门 ${state.progress.beginner ? '解锁' : '锁定'} ｜ 原型 ${state.progress.prototype ? '解锁' : '锁定'} ｜ 核心 ${state.progress.core ? '解锁' : '锁定'}
-      </div>
-      <div style="margin-top:8px;font-size:0.72rem;color:#7a5a3a;border:1px dashed #5a4a2a;padding:8px;display:inline-block;">
-        舰队强化联动：${enh.totalLevels} 级技术 · 全属性 +${Math.round((state.enhanceMul - 1) * 100)}%
-      </div>
-    </div>
-  `;
+  panel.innerHTML = '<div class="welcome"><span class="big-icon">卫</span><h2>卫戍协议</h2><p>星河防线 · 舰队编组防御作战</p><div class="hint">点击「开始模拟」进入作战</div></div>';
 }
 
-// ============================================================
-//  7. 模式 / 策略选择
-// ============================================================
 function showModeSelect() {
   const modal = document.getElementById('modeModal');
   const list = document.getElementById('modeList');
-  const p = state.progress;
-  const rules = {
-    beginner: '势力生命 20 · 第1回合5资金，第2回合13资金，之后每回合10资金',
-    prototype: '势力生命 45 · 第1回合5资金，之后每回合+1，上限12 · 通关入门解锁',
-    core: '势力生命 45 · 第1回合3资金，之后每回合+1，上限12 · 通关原型解锁'
-  };
-  list.innerHTML = ['beginner', 'prototype', 'core'].map(m => {
-    const cfg = CONFIG.MODES[m];
-    const locked = (m === 'prototype' && !p.prototype) || (m === 'core' && !p.core);
-    return `
-      <div class="mode-card ${locked ? 'locked' : ''}" data-mode="${m}">
-        <div class="mc-head">
-          <span class="mc-name">${cfg.name}</span>
-          <span class="mc-status">${locked ? '未解锁' : '可选'}</span>
-        </div>
-        <div class="mc-desc">${rules[m]}</div>
-        <div class="mc-rules">${locked ? (m === 'prototype' ? '通关入门协议后解锁' : '通关原型协议后解锁') : ''}</div>
-      </div>`;
-  }).join('');
-  list.querySelectorAll('.mode-card').forEach(card => {
-    card.addEventListener('click', () => {
-      if (card.classList.contains('locked')) { flashTip('该模式尚未解锁'); return; }
-      state.mode = card.dataset.mode;
+  let html = '';
+  const order = ['beginner', 'prototype', 'core'];
+  order.forEach(function (k) {
+    const m = CONFIG.MODES[k];
+    const locked = k === 'prototype' ? !state.progress.prototype : k === 'core' ? !state.progress.core : false;
+    html += '<div class="mode-card' + (locked ? ' locked' : '') + '" data-mode="' + k + '">';
+    html += '<div class="mode-name">' + m.name + '</div>';
+    if (locked) {
+      html += '<div class="mode-lock">未解锁 · ' + (k === 'prototype' ? '通关入门协议' : '通关原型协议') + '</div>';
+    } else {
+      html += '<div class="mode-row"><span>敌方势力生命</span><b>' + m.life + ' 点</b></div>';
+      html += '<div class="mode-row"><span>资金节奏</span><b>' + (k === 'beginner' ? '第1回合5，第2回合13，之后每回合10' : '第1回合' + m.funds[0] + '，之后每回合+1，上限' + m.funds[2]) + '</b></div>';
+      html += '<div class="mode-row"><span>回合数</span><b>固定15回合</b></div>';
+    }
+    html += '</div>';
+  });
+  list.innerHTML = html;
+  modal.classList.add('active');
+  list.querySelectorAll('.mode-card').forEach(function (el) {
+    el.addEventListener('click', function () {
+      if (el.classList.contains('locked')) { flashTip('该模式尚未解锁'); return; }
+      state.mode = el.dataset.mode;
       modal.classList.remove('active');
       showStrategySelect();
     });
   });
-  modal.classList.add('active');
 }
 
 function strategyUnlocked(s) {
-  const p = state.progress;
-  if (s.unlock === 'prototype') return p.prototype;
-  if (s.unlock === 'core') return p.core;
-  if (s.unlock === 'coreCleared') return p.coreCleared;
-  return true;
+  if (s.unlock === 0) return true;
+  if (s.unlock === 1) return state.progress.prototype;
+  if (s.unlock === 2) return state.progress.core;
+  return state.progress.coreCleared;
 }
 function showStrategySelect() {
   const modal = document.getElementById('strategyModal');
   const list = document.getElementById('strategyList');
-  const avail = DEFENSE_STRATEGIES.filter(s => strategyUnlocked(s));
-  const shuffled = [...avail].sort(() => Math.random() - 0.5);
-  const choices = shuffled.slice(0, 3);
-  list.innerHTML = choices.map(s => `
-    <div class="strat-card" data-id="${s.id}">
-      <div class="strat-header">
-        <span class="strat-icon">${s.icon}</span>
-        <span class="strat-name">${s.name}</span>
-        <span class="strat-hero">${s.org}</span>
-      </div>
-      <div class="strat-desc">${s.desc}</div>
-    </div>
-  `).join('');
-  list.querySelectorAll('.strat-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const id = card.dataset.id;
-      state.strategy = DEFENSE_STRATEGIES.find(s => s.id === id);
+  const pool = DEFENSE_STRATEGIES.filter(strategyUnlocked);
+  const picks = [];
+  while (picks.length < 3 && pool.length) {
+    const i = Math.floor(Math.random() * pool.length);
+    picks.push(pool.splice(i, 1)[0]);
+  }
+  let html = '';
+  picks.forEach(function (s) {
+    html += '<div class="strategy-card" data-id="' + s.id + '">';
+    html += '<div class="sc-head"><span class="sc-name">' + s.name + '</span><span class="sc-org">' + s.org + '</span></div>';
+    html += '<div class="sc-life">我方生命 ' + s.life + '</div>';
+    html += '<div class="sc-desc">' + s.desc + '</div>';
+    html += '</div>';
+  });
+  list.innerHTML = html;
+  modal.classList.add('active');
+  list.querySelectorAll('.strategy-card').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const s = DEFENSE_STRATEGIES.find(function (x) { return x.id === el.dataset.id; });
+      if (!s) return;
+      state.strategy = s;
       modal.classList.remove('active');
-      flashTip('已选择策略：' + state.strategy.name);
-      // 选择策略后进入配队
       showDeployModal();
     });
   });
-  modal.classList.add('active');
 }
 
-// ============================================================
-//  8. 配队（战前舰船选择，选中进手牌区）
-// ============================================================
+function buildShipPool() {
+  return window.PLAYER_SHIPS || [];
+}
+function selectedShipCount(cls) {
+  return state.hand.filter(function (c) { return c.ship && c.ship.cls === cls; }).length;
+}
+function hasCarrier() {
+  return state.hand.some(function (c) { return c.ship && c.ship.cls === 'carrier'; });
+}
+function carrierTotal() {
+  return state.hand.reduce(function (a, c) {
+    if (c.ship && c.ship.cls === 'carrier' && c.ship.carry) { a.f += c.ship.carry.fighter; a.c += c.ship.carry.corvette; }
+    return a;
+  }, { f: 0, c: 0 });
+}
+function selectedAirCount() {
+  return state.hand.reduce(function (a, c) {
+    if (c.ship && (c.ship.cls === 'fighter' || c.ship.cls === 'corvette')) a++;
+    return a;
+  }, 0);
+}
+
 function showDeployModal() {
   const modal = document.getElementById('deployModal');
   const body = document.getElementById('deployBody');
   const pool = buildShipPool();
-  const selected = new Set(state.hand.map(c => c.ship.id));
-
-  // 按舰种分组
   const groups = {};
   for (const s of pool) (groups[s.cls] = groups[s.cls] || []).push(s);
-
+  const total = carrierTotal();
+  const airSel = selectedAirCount();
+  const airLimit = total.f + total.c;
   let html = '<div class="deploy-layout">';
   html += '<div class="deploy-left">';
   const clsOrder = ['carrier', 'battlecruiser', 'battleship', 'cruiser', 'destroyer', 'frigate', 'fighter', 'corvette', 'support'];
@@ -473,96 +294,160 @@ function showDeployModal() {
     const list = groups[cls] || [];
     if (!list.length) continue;
     const limit = CONFIG.DEPLOY_LIMIT[cls];
-    const cnt = state.hand.filter(c => c.ship.cls === cls).length;
-    html += `<div class="dp-group">
-      <div class="dp-group-title">${CLS_ZH[cls]} <span class="dp-limit">${cnt}/${limit}</span></div>
-      <div class="dp-ships">`;
-    list.forEach(s => {
-      const on = selected.has(s.id);
-      const disabled = !on && cnt >= limit;
-      html += `<div class="dp-ship ${on ? 'on' : ''} ${disabled ? 'off' : ''}" data-id="${s.id}">
-        <div class="dp-name">${s.name}</div>
-        <div class="dp-stats">HP ${s.hp} · 攻 ${s.dmg} · 甲 ${s.armor} · ${WEAPON_LABEL[s.weapon]}${DMGTYPE_LABEL[s.dmgType]}</div>
-      </div>`;
+    const cnt = selectedShipCount(cls);
+    let locked = false;
+    if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || airSel >= airLimit;
+    html += '<div class="dp-group' + (locked ? ' locked' : '') + '" data-cls="' + cls + '">';
+    html += '<div class="dp-group-title">' + CLS_ZH[cls] + ' <span class="dp-limit">' + cnt + '/' + limit + '</span>';
+    if (cls === 'fighter' || cls === 'corvette') {
+      html += ' <span class="dp-aircap">搭载 ' + airSel + '/' + airLimit + '</span>';
+    }
+    html += '</div>';
+    if (locked && (cls === 'fighter' || cls === 'corvette')) {
+      html += '<div class="dp-lock-tip">需先选择航空母舰并配置搭载</div>';
+    }
+    html += '<div class="dp-ships">';
+    list.forEach(function (s) {
+      const on = state.hand.some(function (c) { return c.ship.id === s.id; });
+      const disabled = !on && (cnt >= limit || locked);
+      html += '<div class="dp-ship' + (on ? ' on' : '') + (disabled ? ' off' : '') + '" data-id="' + s.id + '">';
+      html += '<div class="dp-name">' + s.name + '</div>';
+      html += '<div class="dp-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' 甲 ' + s.armor + ' ' + WEAPON_LABEL[s.weapon] + DMGTYPE_LABEL[s.dmgType] + '</div>';
+      if (s.carry) html += '<div class="dp-carry">搭载 战机' + s.carry.fighter + ' 护航艇' + s.carry.corvette + '</div>';
+      html += '</div>';
     });
     html += '</div></div>';
   }
   html += '</div>';
-
   html += '<div class="deploy-right">';
-  html += `<div class="dp-right-title">我方编组（${state.hand.length} 艘）</div>`;
+  html += '<div class="dp-right-title">我方编组（' + state.hand.length + ' 艘）</div>';
   html += renderDeployPreview();
   html += '<div class="dp-selected" id="dpSelected">';
-  if (!state.hand.length) html += '<div style="color:#5a6b7d;font-size:0.72rem;">尚未选择舰船</div>';
-  state.hand.forEach((card, i) => {
-    html += `<div class="dp-sel-item"><span>${card.ship.name}</span><button class="btn-action small danger" data-remove="${i}">移除</button></div>`;
+  if (!state.hand.length) html += '<div class="dp-empty-tip">尚未选择舰船</div>';
+  state.hand.forEach(function (card, i) {
+    html += '<div class="dp-sel-item"><span>' + card.ship.name + '</span><button class="btn-action small danger" data-remove="' + i + '">移除</button></div>';
   });
   html += '</div>';
-  html += `<div class="dp-actions">
-    <button class="btn-action primary-btn" id="deployConfirm">确认配队，开始模拟</button>
-    <button class="btn-action" id="deployClear">清空</button>
-  </div>`;
-  html += '</div></div>';
+  html += '<div class="dp-actions">';
+  html += '<button class="btn-action primary-btn" id="deployConfirm">确认配队，开始模拟</button>';
+  html += '<button class="btn-action" id="deployClear">清空</button>';
+  html += '</div></div></div>';
   body.innerHTML = html;
   modal.classList.add('active');
-
-  // 舰船点击
-  body.querySelectorAll('.dp-ship').forEach(el => {
-    el.addEventListener('click', () => {
+  body.querySelectorAll('.dp-ship').forEach(function (el) {
+    el.addEventListener('click', function () {
       const id = el.dataset.id;
-      const s = pool.find(x => x.id === id);
-      const idx = state.hand.findIndex(c => c.ship.id === id);
+      const s = pool.find(function (x) { return x.id === id; });
+      if (!s) return;
+      const idx = state.hand.findIndex(function (c) { return c.ship.id === id; });
       if (idx > -1) {
         state.hand.splice(idx, 1);
         flashTip('已移除：' + s.name);
-      } else {
-        const cnt = state.hand.filter(c => c.ship.cls === s.cls).length;
-        if (cnt >= CONFIG.DEPLOY_LIMIT[s.cls]) { flashTip('该舰种已达配队上限'); return; }
-        state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
-        flashTip('已加入手牌区：' + s.name);
+        updateDeployRight();
+        return;
       }
-      showDeployModal();
+      const cnt = selectedShipCount(s.cls);
+      if (cnt >= CONFIG.DEPLOY_LIMIT[s.cls]) { flashTip('该舰种已达配队上限'); return; }
+      if ((s.cls === 'fighter' || s.cls === 'corvette') && !hasCarrier()) { flashTip('需先选择航空母舰'); return; }
+      if ((s.cls === 'fighter' || s.cls === 'corvette') && selectedAirCount() >= carrierTotal().f + carrierTotal().c) { flashTip('航母搭载已满'); return; }
+      state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
+      flashTip('已加入编组：' + s.name);
+      updateDeployRight();
     });
   });
-  // 移除
-  body.querySelectorAll('[data-remove]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = parseInt(btn.dataset.remove);
+  body.querySelectorAll('[data-remove]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const i = parseInt(btn.dataset.remove, 10);
       state.hand.splice(i, 1);
-      showDeployModal();
+      updateDeployRight();
     });
   });
-  // 确认
-  document.getElementById('deployConfirm').addEventListener('click', () => {
+  document.getElementById('deployConfirm').addEventListener('click', function () {
     if (!state.hand.length) { flashTip('请至少选择 1 艘舰船'); return; }
     modal.classList.remove('active');
     startSimulation();
   });
-  document.getElementById('deployClear').addEventListener('click', () => {
+  document.getElementById('deployClear').addEventListener('click', function () {
     state.hand = [];
-    showDeployModal();
+    updateDeployRight();
+  });
+}
+
+function updateDeployRight() {
+  const body = document.getElementById('deployBody');
+  if (!body) return;
+  const right = body.querySelector('.deploy-right');
+  const pool = buildShipPool();
+  const total = carrierTotal();
+  const airSel = selectedAirCount();
+  const airLimit = total.f + total.c;
+  let html = '<div class="dp-right-title">我方编组（' + state.hand.length + ' 艘）</div>';
+  html += renderDeployPreview();
+  html += '<div class="dp-selected">';
+  if (!state.hand.length) html += '<div class="dp-empty-tip">尚未选择舰船</div>';
+  state.hand.forEach(function (card, i) {
+    html += '<div class="dp-sel-item"><span>' + card.ship.name + '</span><button class="btn-action small danger" data-remove="' + i + '">移除</button></div>';
+  });
+  html += '</div>';
+  html += '<div class="dp-actions">';
+  html += '<button class="btn-action primary-btn" id="deployConfirm">确认配队，开始模拟</button>';
+  html += '<button class="btn-action" id="deployClear">清空</button>';
+  html += '</div>';
+  right.innerHTML = html;
+  right.querySelectorAll('[data-remove]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const i = parseInt(btn.dataset.remove, 10);
+      state.hand.splice(i, 1);
+      updateDeployRight();
+    });
+  });
+  document.getElementById('deployConfirm').addEventListener('click', function () {
+    if (!state.hand.length) { flashTip('请至少选择 1 艘舰船'); return; }
+    document.getElementById('deployModal').classList.remove('active');
+    startSimulation();
+  });
+  document.getElementById('deployClear').addEventListener('click', function () {
+    state.hand = [];
+    updateDeployRight();
+  });
+  body.querySelectorAll('.dp-group').forEach(function (g) {
+    const cls = g.dataset.cls;
+    if (!cls) return;
+    const limit = CONFIG.DEPLOY_LIMIT[cls];
+    const cnt = selectedShipCount(cls);
+    const cap = g.querySelector('.dp-limit');
+    if (cap) cap.textContent = cnt + '/' + limit;
+    let locked = false;
+    if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || airSel >= airLimit;
+    g.classList.toggle('locked', locked);
+    g.querySelectorAll('.dp-ship').forEach(function (el) {
+      const id = el.dataset.id;
+      const on = state.hand.some(function (c) { return c.ship.id === id; });
+      el.classList.toggle('on', on);
+      el.classList.toggle('off', !on && (cnt >= limit || locked));
+    });
   });
 }
 
 function renderDeployPreview() {
   const rows = [[], [], []];
-  state.hand.forEach(card => {
-    rows[rowOf(card.ship.cls)].push(card);
+  state.hand.forEach(function (card) {
+    rows[card.ship.row].push(card);
   });
   const labels = ['前排', '中排', '后排'];
   let html = '<div class="dp-preview">';
-  rows.forEach((arr, i) => {
+  rows.forEach(function (arr, i) {
     html += '<div class="dp-prow">';
     html += '<div class="dp-plabel">' + labels[i] + '</div>';
     html += '<div class="dp-pcells">';
     if (!arr.length) {
       html += '<div class="dp-pempty">—</div>';
     } else {
-      arr.forEach(card => {
+      arr.forEach(function (card) {
         const color = CLS_COLOR[card.ship.cls] || '#8fa3c8';
-        html += `<div class="dp-pcell" style="border-color:${color};" title="${card.ship.name}">`;
-        html += `<span class="dp-picon" style="background:${color}26;color:${color};">${CLS_ICON[card.ship.cls] || '◇'}</span>`;
-        html += `<span class="dp-pname">${card.ship.shortName}</span>`;
+        html += '<div class="dp-pcell" style="border-color:' + color + ';" title="' + card.ship.name + '">';
+        html += '<span class="dp-picon" style="background:' + color + '26;color:' + color + ';">' + (CLS_ICON[card.ship.cls] || '◇') + '</span>';
+        html += '<span class="dp-pname">' + card.ship.shortName + '</span>';
         html += '</div>';
       });
     }
@@ -572,531 +457,638 @@ function renderDeployPreview() {
   return html;
 }
 
-// ============================================================
-//  9. 开始模拟
-// ============================================================
 function startSimulation() {
-  const f1 = ENEMY_FACTIONS[Math.floor(Math.random() * ENEMY_FACTIONS.length)];
-  let f2 = ENEMY_FACTIONS[Math.floor(Math.random() * ENEMY_FACTIONS.length)];
-  while (f2 === f1) f2 = ENEMY_FACTIONS[Math.floor(Math.random() * ENEMY_FACTIONS.length)];
+  const f1 = Math.floor(Math.random() * 6);
+  let f2 = Math.floor(Math.random() * 6);
+  while (f2 === f1) f2 = Math.floor(Math.random() * 6);
   state.factions = [f1, f2];
   const life = CONFIG.MODES[state.mode].life;
   state.factionMaxHp = [life, life];
   state.factionHp = [life, life];
-  state.maxLife = state.strategy.life;
-  state.life = state.strategy.life;
   state.funds = 0;
   state.techPoints = 0;
   state.wave = 1;
   state.upgradeDiscount = 0;
   state.totalKills = 0;
+  state.roundKills = 0;
   state.spentFunds = 0;
   state.permits = 0;
   state.bargeLevel = 1;
   state.pool = [];
   state.enemies = [];
   state.units = [];
-  state.bonuses = {
-    dmgMul: 1, rateMul: 1, armorBonus: 0, armorMul: 1, rangeBonus: 0,
-    directMul: 1, projMul: 1, airMul: 1, shieldBonus: 0, critChance: 0, energyMul: 1
-  };
+  state.bonuses = { dmgMul: 1, hpMul: 1, rateMul: 1, armorBonus: 0, armorMul: 1, rangeBonus: 0, directMul: 1, projMul: 1, airMul: 1, shieldBonus: 0, critChance: 0, energyMul: 1 };
   state.enhanceMul = computeEnhanceMul();
   state.enemyDmgMul = 1;
   state.swift = false; state.recycle = false; state.gacha = false; state.intel = false; state.spellStrategy = false;
-  state.mergeCount = CONFIG.MERGE_COUNT; state.mergeBonus = 0; state.craft = false;
-  state.gachaCount = 0;
-  state.upgradeTriggered = {};
-  // 手牌区舰船初始化战斗状态
-  state.hand.forEach(c => {
-    c.elite = false;
-    c.equips = [];
-    c.lv = {};
-    c.kills = 0;
-    c.lastFireTime = 0;
-  });
-  state.strategy.effect();
-  state.reward = { tech: 0, coin: 0 };
-  pushNews('协议开始：' + state.factions[0].name + ' 与 ' + state.factions[1].name + ' 正在逼近', 'warn');
-  pushNews('防守策略：' + state.strategy.name + ' 已生效');
-  pushNews('舰队配队完成：' + state.hand.length + ' 艘舰船进入手牌区');
+  state.mergeCount = 3; state.mergeBonus = 0; state.craft = false;
+  upgradeTriggered = {};
+  if (state.strategy && state.strategy.effect) state.strategy.effect();
+  state.life = state.strategy ? state.strategy.life : 70;
+  state.maxLife = state.life;
+  state.shield = CONFIG.BARGE[0].shield;
+  state.phase = 'prep';
   startPrepRound();
 }
 
-// ============================================================
-//  10. 休整期
-// ============================================================
-function cityLevelOf(wave) {
-  return CONFIG.CITY_LEVEL_BY_ROUND[Math.min(wave, CONFIG.CITY_LEVEL_BY_ROUND.length - 1)] || 2;
+function fundsOfRound(wave) {
+  const m = CONFIG.MODES[state.mode].funds;
+  if (state.mode === 'beginner') {
+    if (wave === 1) return m[0];
+    if (wave === 2) return m[1];
+    return m[2];
+  }
+  return Math.min(m[2], m[0] + (wave - 1));
+}
+function bargeShield() {
+  return CONFIG.BARGE[state.bargeLevel - 1].shield + state.bonuses.shieldBonus;
+}
+function bargeUpgradeCost() {
+  const base = CONFIG.BARGE[state.bargeLevel - 1].cost;
+  return Math.max(0, base - state.upgradeDiscount);
 }
 
 function startPrepRound() {
-  stopBattleLoop();
   state.phase = 'prep';
-  state.killsThisRound = 0;
-  state.roundLifeLost = 0;
-  state.battleFocusMul = 1;
-  toxicActive = false;
-  overtime = 0;
-  selectedHandIdx = null;
-  // 舰队修复：手牌区舰船恢复满血（本局蓝图数据库强化后同步）
-  rebuildUnits();
-
-  const fundsArr = CONFIG.MODES[state.mode].funds;
-  const f = fundsArr[Math.min(state.wave - 1, fundsArr.length - 1)];
-  state.funds += f;
-  // 回合结束强化点奖励
-  const techArr = CONFIG.MODES[state.mode].tech;
-  const t = techArr[Math.min(state.wave - 1, techArr.length - 1)];
-  state.techPoints += t;
-  flashTip('第 ' + state.wave + ' 回合资金 +' + f + '，强化点 +' + t);
-
-  state.upgradeDiscount = Math.max(0, state.upgradeDiscount - 1);
+  stopBattleLoop();
+  const fog = document.getElementById('toxicFog');
+  if (fog) fog.remove();
+  const reward = 2 + state.wave + Math.floor(state.techPoints * 0) ;
+  const tpGain = Math.round((2 + state.wave) * CONFIG.MODES[state.mode].reward);
+  state.techPoints += tpGain;
+  state.funds += fundsOfRound(state.wave);
+  state.upgradeDiscount++;
   state.shield = bargeShield();
-
-  if (!state.poolFrozen) state.pool = generatePool();
-  else { state.poolFrozen = false; state.pool.forEach(p => { p.frozen = false; }); }
-  state.firstRefreshFree = true;
-
-  if (state.spellStrategy && state.bargeLevel >= 3) grantRandomSpell();
-
-  if (CONFIG.UPGRADE_ROUNDS.includes(state.wave) && !state.upgradeTriggered[state.wave]) {
-    state.upgradeTriggered[state.wave] = true;
+  state.roundKills = 0;
+  state.roundLifeLost = 0;
+  state.attackEvents = [];
+  if (state.spellStrategy && state.bargeLevel >= 3) {
+    const sp = SPELL_BLUEPRINTS[Math.floor(Math.random() * SPELL_BLUEPRINTS.length)];
+    state.hand.push({ type: 'spell', sp: sp });
+    pushNews('战术支援：获得战术指令 ' + sp.name, 'good');
+  }
+  if (!state.poolFrozen) state.pool = [];
+  else { state.poolFrozen = false; state.pool.forEach(function (p) { p.frozen = false; }); }
+  generatePool();
+  rebuildUnits();
+  if (CONFIG.UPGRADE_ROUNDS.indexOf(state.wave) > -1 && !upgradeTriggered[state.wave]) {
     showUpgradeOptions();
+    return;
+  }
+  if (state.wave > CONFIG.TOTAL_ROUNDS) {
+    endGame(false);
     return;
   }
   renderPrep();
 }
 
-function bargeShield() {
-  const b = CONFIG.BARGE[state.bargeLevel - 1];
-  return (b ? b.shield : 1) + state.bonuses.shieldBonus;
+function randomShipByLevel(plus) {
+  const pool = buildShipPool().filter(function (s) {
+    const order = { frigate: 1, destroyer: 2, corvette: 2, fighter: 2, cruiser: 3, support: 3, battlecruiser: 4, battleship: 5, carrier: 6 };
+    return (order[s.cls] || 3) <= state.bargeLevel + (plus || 0);
+  });
+  if (!pool.length) return buildShipPool()[Math.floor(Math.random() * buildShipPool().length)];
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
-// ============================================================
-//  11. 战斗单位构建（手牌区 → 我方舰队）
-// ============================================================
+function generatePool() {
+  const b = CONFIG.BARGE[state.bargeLevel - 1];
+  const pool = [];
+  for (let i = 0; i < b.slots; i++) {
+    const s = randomShipByLevel(0);
+    pool.push({ type: 'ship', ship: s, price: Math.max(2, Math.round(s.hp / 120)) });
+  }
+  for (let i = 0; i < b.equipSlots; i++) {
+    const eq = EQUIP_BLUEPRINTS[Math.floor(Math.random() * EQUIP_BLUEPRINTS.length)];
+    pool.push({ type: 'equip', eq: eq, price: eq.cost });
+  }
+  if (state.bargeLevel >= 3 && Math.random() < 0.5) {
+    const sp = SPELL_BLUEPRINTS[Math.floor(Math.random() * SPELL_BLUEPRINTS.length)];
+    pool.push({ type: 'spell', sp: sp, price: sp.cost });
+  }
+  state.pool = pool;
+}
+
+function renderTopStatus() {
+  const m = CONFIG.MODES[state.mode];
+  let html = '<div class="top-status">';
+  for (let i = 0; i < 2; i++) {
+    const pct = state.factionMaxHp[i] ? Math.max(0, state.factionHp[i] / state.factionMaxHp[i] * 100) : 0;
+    html += '<div class="faction-bar"><div class="fb-name">敌方势力 ' + (i + 1) + '</div><div class="fb-track"><div class="fb-fill" style="width:' + pct + '%"></div></div><div class="fb-num">' + Math.max(0, state.factionHp[i]) + '</div></div>';
+  }
+  html += '<div class="my-bar">';
+  html += '<div class="mb-row"><span class="mb-label">护盾</span><div class="shield-bar"><div class="fill" style="width:' + Math.min(100, state.shield / Math.max(1, bargeShield() + 5) * 100) + '%"></div></div><span class="mb-val">' + Math.round(state.shield) + '</span></div>';
+  html += '<div class="mb-row"><span class="mb-label">生命</span><div class="life-bar"><div class="fill" style="width:' + Math.max(0, state.life / state.maxLife * 100) + '%"></div></div><span class="mb-val">' + Math.max(0, state.life) + '/' + state.maxLife + '</span></div>';
+  html += '<div class="mb-row"><span class="mb-label">资金</span><span class="mb-val">' + state.funds + '</span></div>';
+  html += '<div class="mb-row"><span class="mb-label">强化点</span><span class="mb-val">' + state.techPoints + '</span></div>';
+  html += '<div class="mb-row"><span class="mb-label">回合</span><span class="mb-val">' + state.wave + '/' + CONFIG.TOTAL_ROUNDS + '</span></div>';
+  html += '</div></div>';
+  return html;
+}
+
+function renderNewsTicker() {
+  let items = newsList.slice(-3).map(function (n) { return '<span class="nt-item ' + n.cls + '">' + n.msg + '</span>'; }).join('');
+  return '<div class="news-ticker" id="newsTicker">' + items + '</div>';
+}
+
+function renderPrep() {
+  const panel = document.getElementById('leftPanel');
+  panel.dataset.mode = 'prep';
+  let html = '<div class="game-header">';
+  html += renderTopStatus();
+  html += renderNewsTicker();
+  html += renderBarge();
+  html += '<div class="prep-fleet">';
+  html += '<div class="pf-title">我方编组（手牌区）</div>';
+  html += renderFleetRows();
+  html += '</div>';
+  html += renderPoolSection();
+  html += renderHandSection();
+  html += renderActionBar('prep');
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+function renderBarge() {
+  const b = CONFIG.BARGE[state.bargeLevel - 1];
+  const next = state.bargeLevel < 6 ? CONFIG.BARGE[state.bargeLevel] : null;
+  let html = '<div class="barge-panel">';
+  html += '<div class="bp-title">补给驳船 Lv.' + state.bargeLevel + '</div>';
+  html += '<div class="bp-stats">';
+  html += '<span>护盾 ' + b.shield + '</span>';
+  html += '<span>舰船栏 ' + b.slots + '</span>';
+  html += '<span>装备栏 ' + b.equipSlots + '</span>';
+  html += '<span>升级价 ' + (next ? bargeUpgradeCost() : 'MAX') + '</span>';
+  html += '</div>';
+  if (next) {
+    html += '<button class="btn-action small" id="bargeUpgradeBtn">升级驳船（' + bargeUpgradeCost() + '资金）</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function upgradeBarge() {
+  if (state.bargeLevel >= 6) { flashTip('补给等级已满'); return; }
+  const cost = bargeUpgradeCost();
+  if (state.funds < cost) { flashTip('资金不足'); return; }
+  state.funds -= cost;
+  state.bargeLevel++;
+  state.upgradeDiscount = 0;
+  pushNews('补给驳船升级至 Lv.' + state.bargeLevel, 'good');
+  if (state.gacha) {
+    const s = randomShipByLevel(0);
+    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
+    pushNews('军火商人：获得舰船 ' + s.name, 'good');
+  }
+  renderPrep();
+}
+
+function refreshCost() {
+  return 2 + (state.craft ? 1 : 0);
+}
+function refreshPool() {
+  const cost = refreshCost();
+  let free = false;
+  if (state.intel) {
+    if (!state.poolRefreshed) { free = true; state.poolRefreshed = true; }
+  }
+  if (!free && state.funds < cost) { flashTip('资金不足'); return; }
+  if (!free) state.funds -= cost;
+  generatePool();
+  pushNews('补给已重新调配', '');
+  renderPrep();
+}
+function freezePool() {
+  if (state.funds < 2) { flashTip('资金不足'); return; }
+  state.funds -= 2;
+  state.poolFrozen = true;
+  pushNews('补给栏位已冻结至下一回合', 'good');
+  renderPrep();
+}
+function buyPoolItem(idx) {
+  const item = state.pool[idx];
+  if (!item) return;
+  let price = item.price;
+  if (item.type === 'ship') price = Math.max(1, price - (state.craft ? 1 : 0));
+  else if (state.craft) price += 1;
+  if (state.funds < price) { flashTip('资金不足'); return; }
+  if (state.hand.length >= CONFIG.HAND_LIMIT) { flashTip('手牌区已满'); return; }
+  state.funds -= price;
+  state.spentFunds += price;
+  if (item.type === 'ship') {
+    state.hand.push({ ship: item.ship, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
+    pushNews('购入舰船：' + item.ship.name, 'good');
+    tryMergeShips();
+  } else if (item.type === 'equip') {
+    state.hand.push({ type: 'equip', eq: item.eq, lv: 1 });
+    pushNews('购入装备：' + item.eq.name, 'good');
+    tryMergeEquips();
+  } else {
+    state.hand.push({ type: 'spell', sp: item.sp });
+    pushNews('获得战术指令：' + item.sp.name, 'good');
+  }
+  if (state.gacha) checkGacha();
+  renderPrep();
+}
+
+function checkGacha() {
+  if (state.spentFunds >= 18) {
+    const s = randomShipByLevel(0);
+    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
+    state.spentFunds -= 18;
+    pushNews('军火商人：获得舰船 ' + s.name, 'good');
+  }
+}
+
+function renderPoolSection() {
+  let html = '<div class="pool-section">';
+  html += '<div class="pool-head"><span>补给池（驳船补给）</span><span class="pool-actions"><button class="btn-action tiny" id="refreshPoolBtn">刷新 ' + refreshCost() + '资金</button><button class="btn-action tiny" id="freezePoolBtn">冻结 2资金</button></span></div>';
+  html += '<div class="pool-list">';
+  if (!state.pool.length) html += '<div class="pool-empty">补给已售罄，请刷新</div>';
+  state.pool.forEach(function (item, i) {
+    let price = item.price;
+    if (item.type === 'ship') price = Math.max(1, price - (state.craft ? 1 : 0));
+    else if (state.craft) price += 1;
+    let inner = '';
+    if (item.type === 'ship') {
+      const s = item.ship;
+      inner = '<div class="pc-name">' + s.name + '</div><div class="pc-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' ' + CLS_ZH[s.cls] + '</div>';
+    } else if (item.type === 'equip') {
+      inner = '<div class="pc-name">' + item.eq.name + '</div><div class="pc-stats">' + item.eq.desc + '</div>';
+    } else {
+      inner = '<div class="pc-name">' + item.sp.name + '</div><div class="pc-stats">' + item.sp.desc + '</div>';
+    }
+    html += '<div class="pool-card" data-idx="' + i + '">' + inner + '<div class="pc-price">' + price + ' 资金</div></div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function renderHandSection() {
+  let html = '<div class="hand-section">';
+  html += '<div class="hand-head"><span>手牌区（' + state.hand.length + '/' + CONFIG.HAND_LIMIT + '）</span><button class="btn-action tiny" id="blueOpenBtn">本局蓝图数据库</button></div>';
+  html += '<div class="hand-list">';
+  if (!state.hand.length) html += '<div class="pool-empty">手牌区为空</div>';
+  state.hand.forEach(function (card, i) {
+    if (card.ship) {
+      const s = card.ship;
+      html += '<div class="hand-card' + (card.elite ? ' elite' : '') + '" data-idx="' + i + '">';
+      html += '<div class="hc-name">' + s.shortName + '</div>';
+      html += '<div class="hc-cls">' + CLS_ZH[s.cls] + '</div>';
+      if (card.elite) html += '<div class="hc-tag">精锐</div>';
+      if (card.lv && Object.keys(card.lv).length) html += '<div class="hc-lv">强化' + Object.keys(card.lv).length + '</div>';
+      html += '<button class="btn-action tiny danger" data-sell="' + i + '">出售 1</button>';
+      html += '</div>';
+    } else if (card.type === 'equip') {
+      html += '<div class="hand-card equip" data-idx="' + i + '">';
+      html += '<div class="hc-name">' + card.eq.name + ' Lv.' + card.lv + '</div>';
+      html += '<div class="hc-cls">装备</div>';
+      html += '<button class="btn-action tiny danger" data-sell="' + i + '">销毁</button>';
+      html += '</div>';
+    } else {
+      html += '<div class="hand-card spell" data-idx="' + i + '">';
+      html += '<div class="hc-name">' + card.sp.name + '</div>';
+      html += '<div class="hc-cls">战术指令</div>';
+      html += '<button class="btn-action tiny" data-use="' + i + '">使用</button>';
+      html += '</div>';
+    }
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function renderFleetRows() {
+  const rows = [[], [], []];
+  state.hand.forEach(function (card) {
+    if (!card.ship) return;
+    rows[card.ship.row].push(card);
+  });
+  const labels = ['前排', '中排', '后排'];
+  let html = '<div class="fleet-rows">';
+  rows.forEach(function (arr, i) {
+    html += '<div class="fleet-row">';
+    html += '<div class="row-label">' + labels[i] + '</div>';
+    html += '<div class="row-cards">';
+    if (!arr.length) html += '<div class="row-empty">—</div>';
+    arr.forEach(function (card) {
+      const s = card.ship;
+      const color = CLS_COLOR[s.cls] || '#8fa3c8';
+      html += '<div class="prep-card' + (card.elite ? ' elite' : '') + '">';
+      html += '<span class="fc-icon" style="background:' + color + '26;border-color:' + color + ';color:' + color + ';">' + (CLS_ICON[s.cls] || '◇') + '</span>';
+      html += '<div class="prep-card-info"><div class="pci-name">' + s.shortName + '</div><div class="pci-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' ' + CLS_ZH[s.cls] + '</div></div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderActionBar(phase) {
+  if (phase === 'prep') {
+    return '<div class="action-bar"><button class="btn-action primary-btn" id="startBattleBtn">开始作战</button><button class="btn-action" id="skipRoundBtn">跳过回合</button><button class="btn-action" id="abortBtn">放弃战斗</button></div>';
+  }
+  if (phase === 'battle') {
+    return '<div class="action-bar"><span class="ab-note">自动作战中</span></div>';
+  }
+  return '<div class="action-bar"></div>';
+}
+
+function renderPoolSectionBind() {
+  const r = document.getElementById('refreshPoolBtn');
+  if (r) r.addEventListener('click', refreshPool);
+  const f = document.getElementById('freezePoolBtn');
+  if (f) f.addEventListener('click', freezePool);
+  document.querySelectorAll('.pool-card').forEach(function (el) {
+    el.addEventListener('click', function () { buyPoolItem(parseInt(el.dataset.idx, 10)); });
+  });
+  document.querySelectorAll('.hand-card').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const i = parseInt(el.dataset.idx, 10);
+      const card = state.hand[i];
+      if (card && card.ship) {
+        selectHandCard(i);
+      } else if (card && card.type === 'spell') {
+        useSpellFromHand(i);
+      }
+    });
+  });
+  document.querySelectorAll('[data-sell]').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      const i = parseInt(btn.dataset.sell, 10);
+      const card = state.hand[i];
+      if (card.ship) {
+        state.hand.splice(i, 1);
+        state.funds += 1;
+        pushNews('舰船已出售给驳船，获得 1 资金', '');
+      } else {
+        state.hand.splice(i, 1);
+        pushNews('已销毁', '');
+      }
+      renderPrep();
+    });
+  });
+  document.querySelectorAll('[data-use]').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      useSpellFromHand(parseInt(btn.dataset.use, 10));
+    });
+  });
+  const bb = document.getElementById('blueOpenBtn');
+  if (bb) bb.addEventListener('click', function () { state.blueOpenedIn = 'prep'; showBlueModal(); });
+  const sb = document.getElementById('startBattleBtn');
+  if (sb) sb.addEventListener('click', startBattle);
+  const sk = document.getElementById('skipRoundBtn');
+  if (sk) sk.addEventListener('click', skipRound);
+  const ab = document.getElementById('abortBtn');
+  if (ab) ab.addEventListener('click', abortRun);
+  const bu = document.getElementById('bargeUpgradeBtn');
+  if (bu) bu.addEventListener('click', upgradeBarge);
+}
+
+function selectHandCard(i) {
+  const card = state.hand[i];
+  if (!card || !card.ship) return;
+  const s = card.ship;
+  const lv = card.lv || {};
+  showConfirm('舰船详情：' + s.name, '舰种 ' + CLS_ZH[s.cls] + '\n生命 ' + s.hp + ' 攻击 ' + s.dmg + ' 装甲 ' + s.armor + '\n武器 ' + WEAPON_LABEL[s.weapon] + '·' + DMGTYPE_LABEL[s.dmgType] + '\n强化等级：攻击' + (lv.dmg || 0) + ' 生命' + (lv.hp || 0) + ' 攻速' + (lv.rate || 0) + ' 装甲' + (lv.armor || 0) + ' 射程' + (lv.range || 0) + (card.elite ? '\n状态：精锐' : '') + (card.equips && card.equips.length ? '\n装备：' + card.equips.map(function (e) { return e.name; }).join('、') : ''), null);
+}
+
+function useSpellFromHand(i) {
+  const card = state.hand[i];
+  if (!card || card.type !== 'spell') return;
+  showConfirm('使用战术指令：' + card.sp.name, card.sp.desc + '\n确认使用？', function () {
+    state.hand.splice(i, 1);
+    castSpell(card.sp);
+    renderPrep();
+  });
+}
+
+function castSpell(sp) {
+  const now = Date.now();
+  if (sp.id === 'bomb') {
+    let total = state.units.reduce(function (a, u) { return a + (u.alive ? u.dmg : 0); }, 0);
+    state.enemies.forEach(function (e) { if (e.alive) e.hp -= total * 3; });
+    pushNews('轨道打击：对敌方造成 ' + Math.round(total * 3) + ' 点伤害', 'good');
+  } else if (sp.id === 'emp') {
+    state.enemies.forEach(function (e) { e.empUntil = now + 3000; });
+    pushNews('全域干扰：敌方停火3秒', 'good');
+  } else if (sp.id === 'repair') {
+    state.units.forEach(function (u) { if (u.alive) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.4); });
+    pushNews('紧急修复：我方全体恢复40%生命', 'good');
+  } else if (sp.id === 'reinforce') {
+    const s = randomShipByLevel(0);
+    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
+    pushNews('增援编队：获得舰船 ' + s.name, 'good');
+    tryMergeShips();
+  } else if (sp.id === 'freeze') {
+    state.enemies.forEach(function (e) { e.frozenUntil = now + 3000; });
+    pushNews('时间冻结：敌方停止移动3秒', 'good');
+  } else if (sp.id === 'shield') {
+    state.shield += 5;
+    pushNews('护盾发生器：防御护盾+5', 'good');
+  } else if (sp.id === 'corrode') {
+    state.corrodeUntil = now + 5000;
+    pushNews('纳米侵蚀：敌方每秒损失3%生命', 'good');
+  } else if (sp.id === 'focus') {
+    state.battleFocusMul = 1.3;
+    pushNews('集火指令：本回合我方攻击力+30%', 'good');
+  }
+}
+
+function tryMergeShips() {
+  const groups = {};
+  state.hand.forEach(function (card, i) {
+    if (card.ship && !card.elite) {
+      (groups[card.ship.id] = groups[card.ship.id] || []).push({ card: card, idx: i });
+    }
+  });
+  for (const id in groups) {
+    const arr = groups[id];
+    while (arr.length >= state.mergeCount) {
+      const three = arr.splice(0, state.mergeCount);
+      const base = three[0].card;
+      const equips = [];
+      three.forEach(function (x) {
+        if (x.card.equips) equips = equips.concat(x.card.equips);
+        const gi = state.hand.indexOf(x.card);
+        if (gi > -1) state.hand.splice(gi, 1);
+      });
+      const idx = state.hand.indexOf(base);
+      if (idx > -1) state.hand.splice(idx, 1);
+      state.hand.push({ ship: base.ship, elite: true, equips: [], lv: base.lv || {}, kills: 0, lastFireTime: 0 });
+      state.permits++;
+      if (state.mergeBonus) state.funds += state.mergeBonus;
+      equips.forEach(function (eq) { state.hand.push({ type: 'equip', eq: eq, lv: eq.lv || 1 }); });
+      pushNews('同名合成：' + base.ship.name + ' 晋升为精锐舰船', 'good');
+    }
+  }
+}
+
+function tryMergeEquips() {
+  const groups = {};
+  state.hand.forEach(function (card, i) {
+    if (card.type === 'equip') {
+      (groups[card.eq.id + '_' + card.lv] = groups[card.eq.id + '_' + card.lv] || []).push({ card: card, idx: i });
+    }
+  });
+  for (const gid in groups) {
+    const arr = groups[gid];
+    while (arr.length >= 2) {
+      if (state.hand.length >= CONFIG.HAND_LIMIT) break;
+      const two = arr.splice(0, 2);
+      const baseEq = two[0].card.eq;
+      const lv = baseEq.lv || 1;
+      if (lv >= 3) break;
+      two.forEach(function (x) {
+        const gi = state.hand.indexOf(x.card);
+        if (gi > -1) state.hand.splice(gi, 1);
+      });
+      state.hand.push({ type: 'equip', eq: Object.assign({}, baseEq, { lv: lv + 1 }), lv: lv + 1 });
+      pushNews('装备合成：' + baseEq.name + ' 升级至 Lv.' + (lv + 1), 'good');
+    }
+  }
+}
+
+function showBlueModal() {
+  const modal = document.getElementById('blueModal');
+  const body = document.getElementById('blueBody');
+  state.blueOpenedIn = state.phase === 'battle' ? 'settle' : state.phase;
+  let html = '<div class="blue-head">强化点 ' + state.techPoints + ' | 编组 ' + state.hand.filter(function (c) { return c.ship; }).length + ' 艘</div>';
+  html += '<div class="blue-list">';
+  state.hand.forEach(function (card, i) {
+    if (!card.ship) return;
+    const s = card.ship;
+    const lv = card.lv || {};
+    html += '<div class="blue-item" data-i="' + i + '">';
+    html += '<div class="bi-name">' + s.name + (card.elite ? ' [精锐]' : '') + '</div>';
+    html += '<div class="bi-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' 甲 ' + s.armor + '</div>';
+    html += '<div class="bi-lv">攻' + (lv.dmg || 0) + ' 命' + (lv.hp || 0) + ' 速' + (lv.rate || 0) + ' 甲' + (lv.armor || 0) + ' 程' + (lv.range || 0) + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+  body.innerHTML = html;
+  modal.classList.add('active');
+  body.querySelectorAll('.blue-item').forEach(function (el) {
+    el.addEventListener('click', function () {
+      showShipUpgrade(parseInt(el.dataset.i, 10));
+    });
+  });
+}
+
+function showShipUpgrade(handIdx) {
+  const card = state.hand[handIdx];
+  if (!card || !card.ship) return;
+  const s = card.ship;
+  const lv = card.lv || {};
+  const items = [
+    { k: 'dmg', name: '攻击', base: s.dmg, pct: 0.1 },
+    { k: 'hp', name: '生命', base: s.hp, pct: 0.1 },
+    { k: 'rate', name: '攻速', base: s.rate, pct: 0.08 },
+    { k: 'armor', name: '装甲', base: s.armor, pct: 0 },
+    { k: 'range', name: '射程', base: s.range, pct: 0 }
+  ];
+  let html = '<div class="su-head">' + s.name + (card.elite ? ' [精锐]' : '') + '</div>';
+  html += '<div class="su-points">强化点 ' + state.techPoints + '</div>';
+  items.forEach(function (it) {
+    const cur = lv[it.k] || 0;
+    const cost = cur + 1;
+    html += '<div class="su-row">';
+    html += '<div class="su-info"><span class="su-name">' + it.name + '</span><span class="su-lv">Lv.' + cur + '</span><span class="su-val">' + (it.pct ? '+' + Math.round(cur * it.pct * 100) + '%' : '+' + Math.round(cur * 2)) + '</span></div>';
+    html += '<div class="su-track"><div class="su-fill" style="width:' + Math.min(100, cur * 20) + '%"></div></div>';
+    html += '<button class="btn-action tiny" data-up="' + it.k + '">升级 ' + cost + '点</button>';
+    html += '</div>';
+  });
+  html += '<div class="su-back"><button class="btn-action" id="suBackBtn">返回列表</button></div>';
+  const body = document.getElementById('blueBody');
+  body.innerHTML = html;
+  body.querySelectorAll('[data-up]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const k = btn.dataset.up;
+      const cur = lv[k] || 0;
+      const cost = cur + 1;
+      if (state.techPoints < cost) { flashTip('强化点不足'); return; }
+      state.techPoints -= cost;
+      lv[k] = cur + 1;
+      pushNews('强化完成：' + s.shortName + ' ' + k + ' +1', 'good');
+      showShipUpgrade(handIdx);
+    });
+  });
+  document.getElementById('suBackBtn').addEventListener('click', showBlueModal);
+}
+
 function rebuildUnits() {
-  state.units = state.hand.map((card, i) => {
+  state.units = state.hand.map(function (card, i) {
+    if (!card.ship) return null;
     const s = card.ship;
     let dmgMul = 1, hpMul = 1, rateMul = 1, armorBonus = 0, rangeBonus = 0, energyMul = 1, critBonus = 0;
-    // 舰队强化联动
     const enh = shipEnhanceBonus(s.name);
     dmgMul *= enh; hpMul *= enh;
-    // 本局强化（蓝图数据库）
     const lv = card.lv || {};
     dmgMul *= 1 + (lv.dmg || 0) * 0.1;
     hpMul *= 1 + (lv.hp || 0) * 0.1;
     rateMul *= 1 + (lv.rate || 0) * 0.08;
     armorBonus += (lv.armor || 0) * 2;
     rangeBonus += (lv.range || 0) * 0.4;
-    // 精锐
     if (card.elite) { dmgMul *= 1.4; hpMul *= 1.4; rateMul *= 1.2; armorBonus += 3; }
-    // 装备
-    (card.equips || []).forEach(eq => {
-      const base = EQUIP_BLUEPRINTS.find(x => x.id === eq.id);
-      if (base) for (let k = 0; k < eq.lv; k++) {
-        if (base.id === 'dmg') dmgMul *= 1.25;
-        else if (base.id === 'armor') armorBonus += 3;
-        else if (base.id === 'hp') hpMul *= 1.3;
-        else if (base.id === 'rate') rateMul *= 1.25;
-        else if (base.id === 'range') rangeBonus += 1;
-        else if (base.id === 'shield') { }
-        else if (base.id === 'energy') energyMul *= 1.4;
-        else if (base.id === 'crit') critBonus += 0.15;
-      }
+    (card.equips || []).forEach(function (eq) {
+      if (eq.id === 'dmg') dmgMul *= 1.25;
+      else if (eq.id === 'armor') armorBonus += 3;
+      else if (eq.id === 'hp') hpMul *= 1.3;
+      else if (eq.id === 'rate') rateMul *= 1.25;
+      else if (eq.id === 'range') rangeBonus += 1;
+      else if (eq.id === 'energy') energyMul *= 1.4;
+      else if (eq.id === 'crit') critBonus += 0.15;
     });
-    const maxHp = Math.round(s.hp * hpMul);
-    const hasShield = s.dmgType === 'energy' || (card.equips || []).some(e => e.id === 'shield');
+    const maxHp = Math.round(s.hp * hpMul * state.bonuses.hpMul);
+    const hasShield = s.dmgType === 'energy' || (card.equips || []).some(function (e) { return e.id === 'shield'; });
     return {
-      cardIdx: i,
-      id: 'my_' + i,
-      name: s.name,
-      shortName: s.shortName,
-      cls: s.cls,
-      icon: s.shortName.slice(0, 1),
-      maxHp: maxHp,
-      hp: maxHp,
-      shield: hasShield ? Math.round(s.hp * 0.15) + ((card.equips || []).filter(e => e.id === 'shield').length ? 40 : 0) : 0,
-      dmg: Math.round(s.dmg * dmgMul),
-      armor: s.armor + armorBonus,
-      rate: s.rate * rateMul,
-      range: s.range + rangeBonus,
-      weapon: s.weapon,
-      dmgType: s.dmgType,
-      energyMul: energyMul,
-      critBonus: critBonus,
-      elite: card.elite,
-      alive: true,
-      kills: 0
+      cardIdx: i, id: 'my_' + i, name: s.name, shortName: s.shortName, cls: s.cls, row: s.row,
+      maxHp: maxHp, hp: maxHp,
+      shield: hasShield ? Math.round(maxHp * 0.2) + ((card.equips || []).filter(function (e) { return e.id === 'shield'; }).length ? 40 : 0) : 0,
+      dmg: Math.round(s.dmg * dmgMul * state.bonuses.dmgMul),
+      armor: s.armor + armorBonus + state.bonuses.armorBonus,
+      rate: s.rate * rateMul * state.bonuses.rateMul,
+      range: s.range + rangeBonus + state.bonuses.rangeBonus,
+      weapon: s.weapon, dmgType: s.dmgType, energyMul: energyMul, critBonus: critBonus,
+      elite: card.elite, alive: true, kills: 0, lastFireTime: 0
     };
-  });
+  }).filter(function (u) { return u; });
 }
 
-// ============================================================
-//  12. 补给池
-// ============================================================
-function generatePool() {
-  const b = CONFIG.BARGE[state.bargeLevel - 1];
-  const pool = [];
-  const used = new Set();
-  for (let i = 0; i < b.ships; i++) {
-    const poolShips = buildShipPool().filter(x => !used.has(x.id));
-    if (!poolShips.length) break;
-    const s = poolShips[Math.floor(Math.random() * poolShips.length)];
-    used.add(s.id);
-    pool.push({ type: 'ship', ship: s, frozen: false });
-  }
-  for (let i = 0; i < b.equips; i++) {
-    const eq = EQUIP_BLUEPRINTS[Math.floor(Math.random() * EQUIP_BLUEPRINTS.length)];
-    pool.push({ type: 'equip', eq: eq, frozen: false });
-  }
-  for (let i = 0; i < (b.spells || 0); i++) {
-    const sp = SPELL_BLUEPRINTS[Math.floor(Math.random() * SPELL_BLUEPRINTS.length)];
-    pool.push({ type: 'spell', sp: sp, frozen: false });
-  }
-  return pool;
-}
-
-function refreshPool() {
-  if (state.phase !== 'prep') { flashTip('当前无法刷新补给'); return; }
-  let cost = CONFIG.REFRESH_COST + (state.craft ? 1 : 0);
-  let free = false;
-  if (state.intel && state.firstRefreshFree) { cost = 0; free = true; }
-  if (state.funds < cost) { flashTip('资金不足，无法刷新'); return; }
-  state.funds -= cost;
-  state.spentFunds += cost;
-  state.firstRefreshFree = false;
-  state.pool = generatePool();
-  state.poolFrozen = false;
-  if (free) pushNews('内部情报：特殊刷新已免费执行');
-  checkGacha();
-  renderPrep();
-}
-
-function freezePool() {
-  if (state.phase !== 'prep') { flashTip('当前无法冻结补给'); return; }
-  if (state.poolFrozen) { flashTip('补给已处于冻结状态'); return; }
-  if (state.funds < CONFIG.FREEZE_COST) { flashTip('资金不足'); return; }
-  state.funds -= CONFIG.FREEZE_COST;
-  state.spentFunds += CONFIG.FREEZE_COST;
-  state.poolFrozen = true;
-  state.pool.forEach(p => { p.frozen = true; });
-  checkGacha();
-  renderPrep();
-}
-
-function buyPoolItem(idx) {
-  if (state.phase !== 'prep') return;
-  const item = state.pool[idx];
-  if (!item) return;
-  let cost = 0;
-  if (item.type === 'ship') cost = Math.max(2, Math.round(item.ship.hp / 90));
-  else if (item.type === 'equip') cost = item.eq.cost + (state.craft ? 1 : 0);
-  else cost = item.sp.cost + (state.craft ? 1 : 0);
-  if (state.funds < cost) { flashTip('资金不足'); return; }
-  state.funds -= cost;
-  state.spentFunds += cost;
-  if (item.type === 'ship') {
-    if (state.hand.length >= CONFIG.HAND_LIMIT) { state.funds += cost; state.spentFunds -= cost; flashTip('手牌区已满'); return; }
-    state.hand.push({ ship: item.ship, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
-    tryMergeShips();
-    rebuildUnits();
-  } else if (item.type === 'equip') {
-    if (state.hand.length >= CONFIG.HAND_LIMIT) { state.funds += cost; state.spentFunds -= cost; flashTip('手牌区已满'); return; }
-    state.hand.push({ type: 'equip', eq: item.eq, lv: 1 });
-    tryMergeEquips();
-  } else {
-    if (state.hand.length >= CONFIG.HAND_LIMIT) { state.funds += cost; state.spentFunds -= cost; flashTip('手牌区已满'); return; }
-    state.hand.push({ type: 'spell', sp: item.sp });
-  }
-  checkGacha();
-  renderPrep();
-  flashTip('购入：' + (item.type === 'ship' ? item.ship.name : item.type === 'equip' ? item.eq.name : item.sp.name) + '（-' + cost + '资金）');
-}
-
-function checkGacha() {
-  if (!state.gacha) return;
-  const gained = Math.floor(state.spentFunds / 20);
-  while (state.gachaCount < gained) {
-    state.gachaCount++;
-    const poolShips = buildShipPool();
-    const s = poolShips[Math.floor(Math.random() * poolShips.length)];
-    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
-    pushNews('游戏高手：获得 ' + s.name, 'good');
-  }
-}
-
-function randomShipByLevel() {
-  const poolShips = buildShipPool();
-  return poolShips[Math.floor(Math.random() * poolShips.length)];
-}
-
-// ============================================================
-//  13. 同名合成 / 装备 / 战术支援
-// ============================================================
-function tryMergeShips() {
-  const groups = {};
-  state.hand.forEach((card) => {
-    if (card.ship && !card.elite) {
-      const key = card.ship.shortName;
-      (groups[key] = groups[key] || []).push(card);
-    }
-  });
-  let merged = false;
-  for (const key in groups) {
-    const need = state.mergeCount;
-    while (groups[key].length >= need) {
-      const three = groups[key].splice(0, need);
-      const equips = [];
-      three.forEach(c => { if (c.equips) equips.push(...c.equips); });
-      three.forEach(c => {
-        const idx = state.hand.indexOf(c);
-        if (idx > -1) state.hand.splice(idx, 1);
-      });
-      const base = three[0];
-      state.hand.push({ ship: base.ship, elite: true, equips: [], lv: base.lv || {}, kills: 0, lastFireTime: 0 });
-      equips.forEach(eq => { if (state.hand.length < CONFIG.HAND_LIMIT) state.hand.push({ type: 'equip', eq: eq, lv: eq.lv }); });
-      state.permits++;
-      if (state.mergeBonus) state.funds += state.mergeBonus;
-      pushNews('同名舰船已合成精锐：' + base.ship.shortName, 'good');
-      merged = true;
-    }
-  }
-  if (merged) { rebuildUnits(); flashTip('同名舰船已合成精锐'); }
-}
-
-function tryMergeEquips() {
-  const groups = {};
-  state.hand.forEach(card => {
-    if (card.type === 'equip') {
-      const gid = card.eq.id + '_' + card.lv;
-      (groups[gid] = groups[gid] || []).push(card);
-    }
-  });
-  let merged = false;
-  for (const gid in groups) {
-    while (groups[gid].length >= 2) {
-      const two = groups[gid].splice(0, 2);
-      const baseEq = two[0].eq;
-      const lv = baseEq.lv || 1;
-      if (lv >= EQUIP_MAX_LV) break;
-      if (state.hand.length >= CONFIG.HAND_LIMIT) break;
-      two.forEach(c => { const idx = state.hand.indexOf(c); if (idx > -1) state.hand.splice(idx, 1); });
-      state.hand.push({ type: 'equip', eq: { ...baseEq, lv: lv + 1 }, lv: lv + 1 });
-      pushNews('同名装备已合成升级：' + baseEq.name + ' Lv.' + (lv + 1), 'good');
-      merged = true;
-    }
-  }
-  if (merged) flashTip('同名装备已合成');
-}
-
-function installEquip(handIdx, target) {
-  const card = state.hand[handIdx];
-  if (!card || card.type !== 'equip') return;
-  if (target.equips.length >= 2) { flashTip('每艘舰船最多携带 2 件装备'); return; }
-  target.equips.push({ ...card.eq, lv: card.lv });
-  state.hand.splice(handIdx, 1);
-  rebuildUnits();
-  tryMergeEquips();
-  renderPrep();
-  flashTip('装备已安装：' + card.eq.name + ' → ' + target.ship.name);
-}
-
-function castSpell(sp) {
-  switch (sp.id) {
-    case 'bomb': {
-      const totalAtk = state.units.reduce((s, u) => s + (u.alive ? u.dmg : 0), 0);
-      state.enemies.forEach(e => { e.hp -= totalAtk * 3; });
-      pushNews('轨道轰炸：对全部敌人造成 ' + Math.round(totalAtk * 3) + ' 点伤害', 'good');
-      break;
-    }
-    case 'emp': state.enemies.forEach(e => { e.empUntil = Date.now() + 3000; }); pushNews('全域EMP：敌方停火 3 秒', 'good'); break;
-    case 'repair': state.units.forEach(u => { if (u.alive) u.hp = Math.min(u.maxHp, u.hp + u.maxHp * 0.4); }); pushNews('紧急修复：我方全体恢复 40% 生命', 'good'); break;
-    case 'reinforce': {
-      const s = randomShipByLevel();
-      state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
-      rebuildUnits();
-      pushNews('舰载机增援：' + s.name + ' 加入战场', 'good');
-      break;
-    }
-    case 'freeze': state.enemies.forEach(e => { e.frozenUntil = Date.now() + 3000; }); pushNews('时间冻结：敌方停止开火 3 秒', 'good'); break;
-    case 'shield': state.shield += 5; pushNews('质子护盾：我方护盾 +5', 'good'); break;
-    case 'corrode': state.corrodeUntil = Date.now() + 5000; pushNews('纳米腐蚀：敌方每秒损失 3% 生命', 'good'); break;
-    case 'focus': state.battleFocusMul = 1.3; pushNews('集火指令：本回合我方攻击力 +30%', 'good'); break;
-  }
-}
-
-function useSpellFromHand(idx) {
-  const card = state.hand[idx];
-  if (!card || card.type !== 'spell') return;
-  state.hand.splice(idx, 1);
-  castSpell(card.sp);
-  renderPrep();
-}
-
-function grantRandomShip() {
-  const s = randomShipByLevel();
-  if (state.hand.length < CONFIG.HAND_LIMIT) {
-    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
-    rebuildUnits();
-    flashTip('免费舰船：' + s.name + ' 已加入手牌区');
-  }
-}
-function eliteRandomShip() {
-  const ships = state.hand.filter(c => c.ship && !c.elite);
-  if (ships.length) {
-    const c = ships[Math.floor(Math.random() * ships.length)];
-    c.elite = true;
-    rebuildUnits();
-    flashTip(c.ship.name + ' 已晋升为精锐舰船');
-  } else grantRandomShip();
-}
-function grantRandomEquips(n) {
-  for (let i = 0; i < n; i++) {
-    const eq = EQUIP_BLUEPRINTS[Math.floor(Math.random() * EQUIP_BLUEPRINTS.length)];
-    if (state.hand.length < CONFIG.HAND_LIMIT) state.hand.push({ type: 'equip', eq: eq, lv: 1 });
-  }
-  tryMergeEquips();
-}
-function grantRandomSpell() {
-  const sp = SPELL_BLUEPRINTS[Math.floor(Math.random() * SPELL_BLUEPRINTS.length)];
-  if (state.hand.length < CONFIG.HAND_LIMIT) state.hand.push({ type: 'spell', sp: sp });
-}
-
-// ============================================================
-//  14. 本局蓝图数据库（手牌区舰船强化）
-// ============================================================
-function showBlueModal() {
-  const modal = document.getElementById('blueModal');
-  const tip = document.getElementById('blueTip');
-  const body = document.getElementById('blueBody');
-  state.blueOpenedIn = state.phase; // 记录打开时阶段
-  tip.innerHTML = '强化点：<b class="tp-num">' + state.techPoints + '</b> ｜ 强化来源：每回合结束奖励 + 击杀敌方舰船 ｜ 每升 1 级消耗 1+等级 强化点（攻击/生命 +10%/级，攻速 +8%/级）';
-  const ships = state.hand.filter(c => c.ship);
-  let html = '<div class="blue-list">';
-  if (!ships.length) html += '<div style="color:#5a6b7d;">手牌区没有舰船</div>';
-  ships.forEach((card, i) => {
-    const lv = card.lv || {};
-    const cost = (l) => l + 1;
-    html += `<div class="blue-ship ${card.elite ? 'elite' : ''}" data-i="${i}">
-      <div class="bs-head">
-        <span class="bs-name">${card.ship.name}</span>
-        <span class="bs-cls">${CLS_ZH[card.ship.cls]}${card.elite ? ' · 精锐' : ''}</span>
-      </div>
-      <div class="bs-stats">HP ${Math.round(card.ship.hp * (1 + (lv.hp || 0) * 0.1))} · 攻 ${Math.round(card.ship.dmg * (1 + (lv.dmg || 0) * 0.1))} · 甲 ${card.ship.armor + (lv.armor || 0) * 2}</div>
-      <div class="bs-upgrades">
-        ${[['dmg', '攻击', lv.dmg || 0], ['hp', '生命', lv.hp || 0], ['rate', '攻速', lv.rate || 0], ['armor', '装甲', lv.armor || 0], ['range', '射程', lv.range || 0]].map(([k, label, v]) => `
-          <div class="bs-up">
-            <span class="bs-up-label">${label}</span>
-            <span class="bs-up-lv">Lv.${v}</span>
-            <button class="btn-action small ${state.techPoints >= cost(v) ? '' : 'off'}" data-up="${i}" data-key="${k}" data-cost="${cost(v)}">升级(${cost(v)}点)</button>
-          </div>`).join('')}
-      </div>
-    </div>`;
-  });
-  html += '</div>';
-  html += `<div class="dp-actions"><button class="btn-action" id="blueClose">关闭</button></div>`;
-  body.innerHTML = html;
-  modal.classList.add('active');
-
-  body.querySelectorAll('[data-up]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const i = parseInt(btn.dataset.up);
-      const k = btn.dataset.key;
-      const cost = parseInt(btn.dataset.cost);
-      const card = state.hand[i];
-      if (!card || !card.ship) return;
-      if (state.techPoints < cost) { flashTip('强化点不足'); return; }
-      state.techPoints -= cost;
-      card.lv = card.lv || {};
-      card.lv[k] = (card.lv[k] || 0) + 1;
-      rebuildUnits();
-      flashTip('强化成功：' + card.ship.name + ' ' + k + ' Lv.' + card.lv[k]);
-      showBlueModal();
-    });
-  });
-  document.getElementById('blueClose').addEventListener('click', () => {
-    modal.classList.remove('active');
-    afterBlueClose();
-  });
-}
-
-// 蓝图强化界面关闭后：若处于回合结算衔接阶段则进入下一回合
-function afterBlueClose() {
-  if (state.blueOpenedIn === 'settle' && state.phase === 'settle') {
-    startPrepRound();
-  } else if (state.blueOpenedIn === 'prep') {
-    renderPrep();
-  }
-}
-
-// ============================================================
-//  15. 回合强化
-// ============================================================
-function showUpgradeOptions() {
-  const modal = document.getElementById('upgradeModal');
-  const options = document.getElementById('upgradeOptions');
-  const shuffled = [...UPGRADE_POOL].sort(() => Math.random() - 0.5);
-  const choices = shuffled.slice(0, 3);
-  options.innerHTML = choices.map((u, idx) => `
-    <div class="upgrade-option" data-idx="${idx}">
-      <div class="upgrade-name">${u.name}</div>
-      <div class="upgrade-desc">${u.desc}</div>
-    </div>`).join('');
-  options.querySelectorAll('.upgrade-option').forEach(opt => {
-    opt.addEventListener('click', () => {
-      const choice = choices[parseInt(opt.dataset.idx)];
-      choice.effect();
-      modal.classList.remove('active');
-      pushNews('回合强化：' + choice.name, 'good');
-      flashTip('获得强化：' + choice.name);
-      renderPrep();
-    });
-  });
-  modal.classList.add('active');
-}
-
-// ============================================================
-//  16. 作战
-// ============================================================
 function spawnEnemyWave() {
   const lv = cityLevelOf(state.wave);
   const config = (window.CITY_DEFENSE || {})[lv] || [];
-  state.enemies = config.map((e, i) => ({
-    id: 'en_' + i,
-    name: e.zh,
-    shortName: e.zh,
-    cls: e.cls,
-    zone: e.cls === 'cruiser' ? 'mid' : (e.cls === 'destroyer' || e.cls === 'frigate' || e.cls === 'corvette') ? 'front' : 'back',
-    count: e.count,
-    maxHp: e.totalHp,
-    hp: e.totalHp,
-    dmg: e.atk,
-    armor: e.armor,
-    shield: e.shield || 0,
-    dmgType: e.dmgType,
-    weapon: e.weapon,
-    tier: e.tier,
-    alive: true,
-    lastFireTime: 0
-  }));
+  state.enemies = config.map(function (e, i) {
+    return {
+      id: 'en_' + i, name: e.zh, shortName: e.zh, cls: e.cls,
+      zone: e.zone, count: e.count, maxHp: e.hp * e.count, hp: e.hp * e.count,
+      dmg: e.atk * e.count, armor: e.armor, shield: e.shield * e.count,
+      dmgType: e.dmgType, weapon: e.weapon, tier: e.tier, alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
+    };
+  });
   pushNews('敌方舰队抵达：' + lv + ' 级城防（' + state.enemies.length + ' 个编队）', 'warn');
 }
 
 function startBattle() {
   if (state.phase !== 'prep') return;
-  if (!state.units.length || !state.units.some(u => u.alive)) { flashTip('请先部署舰船'); return; }
+  if (!state.hand.some(function (c) { return c.ship; })) { flashTip('编组中没有舰船'); return; }
   state.phase = 'battle';
   if (!state.poolFrozen) state.pool = [];
-  else { state.poolFrozen = false; state.pool.forEach(p => { p.frozen = false; }); }
-  // 使用手牌战术支援
-  const spells = state.hand.filter(c => c.type === 'spell');
-  state.hand = state.hand.filter(c => c.type !== 'spell');
-  spells.forEach(c => castSpell(c.sp));
+  else { state.poolFrozen = false; state.pool.forEach(function (p) { p.frozen = false; }); }
+  const spells = state.hand.filter(function (c) { return c.type === 'spell'; });
+  state.hand = state.hand.filter(function (c) { return c.type !== 'spell'; });
+  spells.forEach(function (c) { castSpell(c.sp); });
+  rebuildUnits();
   spawnEnemyWave();
   clockLeft = CONFIG.ROUND_CLOCK;
   overtime = 0;
   toxicActive = false;
+  state.battleFocusMul = 1;
+  state.attackEvents = [];
+  state.breakthroughUntil = Date.now() + 30000;
+  state.roundLifeLost = 0;
   renderBattle();
   pushNews('作战开始！');
   startBattleLoop();
@@ -1105,13 +1097,13 @@ function startBattle() {
 function startBattleLoop() {
   stopBattleLoop();
   let last = Date.now();
-  battleTimer = setInterval(() => {
+  battleTimer = setInterval(function () {
     const now = Date.now();
     const dt = Math.min(0.25, (now - last) / 1000);
     last = now;
     gameTick(now, dt);
   }, 100);
-  uiTimer = setInterval(() => { updateBattleUI(); }, 150);
+  uiTimer = setInterval(function () { updateBattleUI(); }, 150);
 }
 function stopBattleLoop() {
   if (battleTimer) { clearInterval(battleTimer); battleTimer = null; }
@@ -1121,114 +1113,129 @@ function stopBattleLoop() {
 function gameTick(now, dt) {
   if (state.phase !== 'battle') return;
   clockLeft -= dt;
-  if (clockLeft <= 0 && !toxicActive) { toxicActive = true; pushNews('战场即将恶化！毒雾正在蔓延', 'warn'); }
+  if (clockLeft <= 0 && !toxicActive) { toxicActive = true; pushNews('战场即将恶化：毒雾开始蔓延', 'warn'); }
   if (toxicActive) overtime += dt;
-
   if (toxicActive) {
-    const pct = Math.min(0.08, 0.02 + 0.001 * overtime);
-    state.units.forEach(u => { if (u.alive) u.hp -= u.maxHp * pct * dt; });
-    state.enemies.forEach(e => { if (e.alive) e.hp -= e.maxHp * pct * dt; });
+    const pct = Math.min(0.08, 0.03 + 0.0005 * overtime);
+    state.units.forEach(function (u) { if (u.alive) u.hp -= u.maxHp * pct * dt; });
+    state.enemies.forEach(function (e) { if (e.alive) e.hp -= e.maxHp * pct * dt; });
   }
   if (state.corrodeUntil && now < state.corrodeUntil) {
-    state.enemies.forEach(e => { if (e.alive) e.hp -= e.maxHp * 0.03 * dt; });
+    state.enemies.forEach(function (e) { if (e.alive) e.hp -= e.maxHp * 0.03 * dt; });
   }
-  // 我方攻击
   myAttack(now);
-  // 敌方攻击
   enemyAttack(now);
-  // 清理阵亡
-  state.units.forEach(u => { if (u.alive && u.hp <= 0) { u.alive = false; u.hp = 0; pushNews(u.name + ' 被击毁', 'bad'); } });
-  state.enemies.forEach(e => {
+  if (state.breakthroughUntil && now > state.breakthroughUntil) {
+    state.breakthroughUntil = now + 5000;
+    const dmg = Math.round(state.enemies.reduce(function (s, e) { return s + (e.alive ? e.dmg : 0); }, 0) * 0.2);
+    if (dmg > 0) {
+      const absorbed = Math.min(state.shield, dmg);
+      state.shield -= absorbed;
+      const overflow = dmg - absorbed;
+      if (overflow > 0) {
+        const cap = CONFIG.BREACH_CAP - state.roundLifeLost;
+        const actual = Math.min(overflow, cap);
+        state.roundLifeLost += actual;
+        state.life -= actual;
+        pushNews('防线被突破！护盾耗尽，生命 -' + actual, 'bad');
+      } else {
+        pushNews('防御护盾抵挡敌方突破（剩余护盾 ' + Math.round(state.shield) + '）', '');
+      }
+    }
+  }
+  for (let i = state.units.length - 1; i >= 0; i--) {
+    const u = state.units[i];
+    if (u.alive && u.hp <= 0) { u.alive = false; u.hp = 0; pushNews(u.shortName + ' 被击毁', 'bad'); }
+  }
+  for (let i = state.enemies.length - 1; i >= 0; i--) {
+    const e = state.enemies[i];
     if (e.alive && e.hp <= 0) {
       e.alive = false; e.hp = 0;
       state.totalKills++;
-      state.killsThisRound++;
+      state.roundKills++;
       const tp = Math.max(2, e.tier * 2);
       state.techPoints += tp;
-      pushNews('击毁敌方编队：' + e.name + '（强化点 +' + tp + '）', 'good');
+      pushNews('击毁敌方编队：' + e.shortName + '（强化点 +' + tp + '）', 'good');
     }
-  });
-  // 结束判定
-  const myAlive = state.units.some(u => u.alive);
-  const enAlive = state.enemies.some(e => e.alive);
+  }
+  const myAlive = state.units.some(function (u) { return u.alive; });
+  const enAlive = state.enemies.some(function (e) { return e.alive; });
   if (!enAlive) { settleRound(true); return; }
   if (!myAlive) { settleRound(false); return; }
   if (state.life <= 0) { state.life = 0; endGame(false); }
 }
 
 function myAttack(now) {
-  state.units.forEach(u => {
+  state.units.forEach(function (u) {
     if (!u.alive) return;
-    const interval = 1000 / (u.rate * state.bonuses.rateMul);
+    const interval = 1000 / u.rate;
     if (now - (u.lastFireTime || 0) < interval) return;
     const target = acquireTarget(u, state.enemies);
     if (!target) return;
     u.lastFireTime = now;
-    const hitRate = Math.max(0.1, Math.min(0.95, 0.8 * (1 - 0.05)));
-    if (Math.random() > hitRate) return;
-    let dmg = u.dmg * state.bonuses.dmgMul * state.enhanceMul * state.battleFocusMul;
-    if (u.dmgType === 'energy') dmg *= state.bonuses.energyMul * u.energyMul;
+    if (Math.random() > 0.8) return;
+    let dmg = u.dmg * state.enhanceMul * (state.battleFocusMul || 1);
+    if (u.dmgType === 'energy') dmg *= u.energyMul * state.bonuses.energyMul;
     if (u.weapon === 'direct') dmg *= state.bonuses.directMul;
     if (u.weapon === 'projectile') dmg *= state.bonuses.projMul;
     if (u.weapon === 'air') dmg *= state.bonuses.airMul;
     if (state.swift && u.dmg === getMaxMyDmg()) dmg *= 1.7;
-    const isCrit = Math.random() < state.bonuses.critChance + u.critBonus;
+    const isCrit = Math.random() < (state.bonuses.critChance + u.critBonus);
     if (isCrit) dmg *= 1.5;
-    const dealt = calcDamage(dmg, u.dmgType, target);
+    const dealt = calcDamage(dmg, u.dmgType, target, u.weapon);
     target.hp -= dealt;
-    (state.attackEvents || (state.attackEvents = [])).push({ from: u.shortName, to: target.shortName, dmg: dealt, isCrit: isCrit, isEnemy: false });
+    state.attackEvents.push({ from: u.shortName, to: target.shortName, dmg: dealt, isCrit: isCrit, isEnemy: false });
     if (state.attackEvents.length > 40) state.attackEvents.shift();
   });
 }
 
 function enemyAttack(now) {
-  state.enemies.forEach(e => {
+  state.enemies.forEach(function (e) {
     if (!e.alive) return;
     if (e.empUntil && now < e.empUntil) return;
     if (e.frozenUntil && now < e.frozenUntil) return;
-    const interval = 1000 / 0.8; // 敌方编队攻速固定 0.8/s
+    const interval = 1250;
     if (now - (e.lastFireTime || 0) < interval) return;
-    const target = acquireTarget(e, state.units.filter(u => u.alive));
+    const target = acquireTarget(e, state.units.filter(function (u) { return u.alive; }));
     if (!target) return;
     e.lastFireTime = now;
-    const hitRate = 0.75;
-    if (Math.random() > hitRate) return;
+    if (Math.random() > 0.75) return;
     let dmg = e.dmg * state.enemyDmgMul;
     const isCrit = Math.random() < 0.05;
     if (isCrit) dmg *= 1.5;
-    const dealt = calcDamage(dmg, e.dmgType, target);
+    const dealt = calcDamage(dmg, e.dmgType, target, e.weapon);
     target.hp -= dealt;
     if (target.hp <= 0) target.hp = 0;
-    (state.attackEvents || (state.attackEvents = [])).push({ from: e.shortName, to: target.shortName, dmg: dealt, isCrit: isCrit, isEnemy: true });
+    state.attackEvents.push({ from: e.shortName, to: target.shortName, dmg: dealt, isCrit: isCrit, isEnemy: true });
     if (state.attackEvents.length > 40) state.attackEvents.shift();
   });
 }
 
 function getMaxMyDmg() {
-  return state.units.reduce((m, u) => u.alive ? Math.max(m, u.dmg) : m, 0);
+  return state.units.reduce(function (m, u) { return u.alive ? Math.max(m, u.dmg) : m; }, 0);
 }
 
 function acquireTarget(attacker, candidates) {
-  const list = candidates.filter(c => c.alive);
+  const list = candidates.filter(function (c) { return c.alive; });
   if (!list.length) return null;
-  // 防空：优先战机/护航艇
   if (attacker.weapon === 'air') {
-    const air = list.filter(c => c.cls === 'fighter' || c.cls === 'corvette');
+    const air = list.filter(function (c) { return c.cls === 'fighter' || c.cls === 'corvette'; });
     return (air.length ? air : list)[0];
   }
-  // 投射：锁定序列
   if (attacker.weapon === 'projectile') {
     for (const seq of LOCK_SEQUENCE) {
-      const found = list.filter(c => c.cls === seq.cls);
+      const found = list.filter(function (c) { return c.cls === seq.cls; });
       if (found.length) return found[0];
     }
     return list[0];
   }
-  // 直射：血量最少优先
-  return list.sort((a, b) => a.hp - b.hp)[0];
+  return list.sort(function (a, b) { return a.hp - b.hp; })[0];
 }
 
-function calcDamage(dmg, dmgType, target) {
+function calcDamage(dmg, dmgType, target, weapon) {
+  if (target.cls === 'fighter' || target.cls === 'corvette') {
+    if (weapon !== 'air') return 0;
+  }
   if (dmgType === 'energy') {
     if (target.shield > 0) {
       const absorbed = Math.min(target.shield, dmg);
@@ -1240,393 +1247,120 @@ function calcDamage(dmg, dmgType, target) {
   return Math.max(1, dmg - target.armor);
 }
 
-// ============================================================
-//  17. 结算
-// ============================================================
 function settleRound(win) {
   if (state.phase !== 'battle') return;
   state.phase = 'settle';
   stopBattleLoop();
-  // 回收利用
-  if (state.recycle && state.killsThisRound > 0) {
-    const bonus = Math.floor(state.killsThisRound / 12) * 3;
-    if (bonus > 0) { state.funds += bonus; pushNews('回收利用：奖励 ' + bonus + ' 资金', 'good'); }
+  const fog = document.getElementById('toxicFog');
+  if (fog) fog.remove();
+  if (state.recycle && state.roundKills >= 30) {
+    const bonus = 2 + Math.floor(Math.random() * 2);
+    state.funds += bonus;
+    pushNews('战利品回收：奖励 ' + bonus + ' 资金', 'good');
   }
-  // 势力生命结算
   if (win) {
     const assault = calcAssault();
     const dmg = Math.round(state.shield + assault);
-    state.factionHp = state.factionHp.map(h => Math.max(0, h - dmg));
+    state.factionHp = state.factionHp.map(function (h) { return Math.max(0, h - dmg); });
     pushNews('防线反击：护盾 ' + Math.round(state.shield) + ' + 攻坚 ' + assault + '，对敌方造成 ' + dmg + ' 点伤害', 'good');
   } else {
-    const remaining = state.enemies.reduce((s, e) => s + (e.alive ? e.dmg : 0), 0);
+    const remaining = state.enemies.reduce(function (s, e) { return s + (e.alive ? e.dmg : 0); }, 0);
     const actual = Math.min(CONFIG.BREACH_CAP, Math.round(remaining * 0.3));
     state.life -= actual;
     pushNews('防线被突破！生命 -' + actual, 'bad');
   }
-  renderPrep();
-  if (state.factionHp.every(h => h <= 0)) { endGame(true); return; }
-  if (state.life <= 0) { endGame(false); return; }
+  if (state.factionHp.every(function (h) { return h <= 0; })) { endGame(true); return; }
+  if (state.life <= 0) { state.life = 0; endGame(false); return; }
   state.wave++;
-  // 回合结束 → 弹本局蓝图数据库（关闭后进入下一回合）
+  if (state.wave > CONFIG.TOTAL_ROUNDS) {
+    endGame(false);
+    return;
+  }
+  renderPrep();
   state.blueOpenedIn = 'settle';
-  setTimeout(() => {
-    showBlueModal();
-  }, 600);
+  setTimeout(function () { showBlueModal(); }, 500);
 }
 
 function calcAssault() {
   let total = 0;
-  state.units.forEach(u => {
-    if (u.alive) total += u.dmg * state.bonuses.dmgMul * state.enhanceMul * state.battleFocusMul;
+  state.units.forEach(function (u) {
+    if (!u.alive) return;
+    total += u.dmg;
   });
   return Math.round(total * CONFIG.ASSAULT_FACTOR);
 }
 
-function endGame(victory) {
-  if (state.phase === 'end') return;
-  stopBattleLoop();
-  state.phase = 'end';
-  toxicActive = false;
-  if (victory) {
-    if (state.mode === 'beginner') state.progress.prototype = true;
-    if (state.mode === 'prototype') state.progress.core = true;
-    if (state.mode === 'core') state.progress.coreCleared = true;
-    state.stats.wins++;
-  } else {
-    state.stats.losses++;
+function eliteRandomShip() {
+  const list = state.hand.filter(function (c) { return c.ship && !c.elite; });
+  if (!list.length) return;
+  const card = list[Math.floor(Math.random() * list.length)];
+  card.elite = true;
+  pushNews('精锐化协议：' + card.ship.name + ' 晋升为精锐', 'good');
+}
+function grantEquips() {
+  for (let i = 0; i < 2; i++) {
+    const eq = EQUIP_BLUEPRINTS[Math.floor(Math.random() * EQUIP_BLUEPRINTS.length)];
+    state.hand.push({ type: 'equip', eq: eq, lv: 1 });
   }
-  state.stats.kills += state.totalKills;
-  state.stats.bestWave = Math.max(state.stats.bestWave, state.wave);
-  saveProgress();
-  saveStats();
+  tryMergeEquips();
+  pushNews('装备补给：获得 2 件装备', 'good');
+}
+function grantSpell() {
+  const sp = SPELL_BLUEPRINTS[Math.floor(Math.random() * SPELL_BLUEPRINTS.length)];
+  state.hand.push({ type: 'spell', sp: sp });
+  pushNews('战术补给：获得 ' + sp.name, 'good');
+}
 
-  const modal = document.getElementById('resultModal');
-  const title = document.getElementById('resultTitle');
-  const content = document.getElementById('resultContent');
-  const rewardTech = (state.wave + state.totalKills) * 5;
-  const rewardCoin = state.wave * 40 + state.totalKills * 2;
-  state.reward = { tech: rewardTech, coin: rewardCoin };
-  const modeName = CONFIG.MODES[state.mode].name;
-  const contentHtml = `
-    <div class="result-stats">
-      <div class="stat-row"><span>协议模式</span><span class="v">${modeName}</span></div>
-      <div class="stat-row"><span>通关回合</span><span class="v">第 ${state.wave} 回合</span></div>
-      <div class="stat-row"><span>剩余生命</span><span class="v">${Math.round(state.life)}</span></div>
-      <div class="stat-row"><span>累计击毁</span><span class="v">${state.totalKills} 个编队</span></div>
-      <div class="stat-row"><span>剩余强化点</span><span class="v">${state.techPoints}</span></div>
-      ${state.mode === 'beginner' ? '<div class="stat-row"><span>新解锁</span><span class="v" style="color:#44cc88;">原型协议</span></div>' : ''}
-      ${state.mode === 'prototype' ? '<div class="stat-row"><span>新解锁</span><span class="v" style="color:#44cc88;">核心协议</span></div>' : ''}
-    </div>
-    <div class="result-reward">
-      <div class="reward-title">获得奖励</div>
-      <div class="reward-items">
-        <span class="reward-item">技术点 +${rewardTech}</span>
-        <span class="reward-item">比邻星币 +${rewardCoin}</span>
-      </div>
-    </div>
-    <div class="result-actions">
-      <button class="btn-action primary-btn" id="againBtn">再来一局</button>
-      <button class="btn-action" id="backBtn">返回主页</button>
-    </div>`;
-  if (victory) {
-    title.textContent = '作战胜利';
-    title.style.color = '#44cc88';
-  } else {
-    title.textContent = '作战失败';
-    title.style.color = '#ff6a6a';
+function showUpgradeOptions() {
+  const modal = document.getElementById('upgradeModal');
+  const body = document.getElementById('upgradeOptions');
+  const pool = UPGRADE_POOL.slice();
+  const picks = [];
+  while (picks.length < 3 && pool.length) {
+    const i = Math.floor(Math.random() * pool.length);
+    picks.push(pool.splice(i, 1)[0]);
   }
-  content.innerHTML = contentHtml;
-  modal.classList.add('active');
-  document.getElementById('againBtn').addEventListener('click', () => {
-    modal.classList.remove('active');
-    showModeSelect();
-  });
-  document.getElementById('backBtn').addEventListener('click', () => {
-    modal.classList.remove('active');
-    initGame();
-  });
-}
-
-// ============================================================
-//  18. 渲染 —— 休整期
-// ============================================================
-function renderPrep() {
-  const panel = document.getElementById('leftPanel');
-  panel.dataset.mode = 'prep';
-  let html = '<div class="game-header">';
-  html += renderTopStatus();
-  html += renderNewsTicker();
-  html += renderBarge();
-  html += renderPrepFleet();   // 左：我方舰队（手牌区）
-  html += renderPool();
-  html += renderHandExtras();  // 装备/战术手牌
-  html += renderActionBar('prep');
-  html += '</div>';
-  panel.innerHTML = html;
-  bindPrepEvents();
-}
-
-function renderTopStatus() {
-  let html = '<div class="top-status">';
-  state.factions.forEach((f, i) => {
-    const hp = state.factionHp[i];
-    const maxHp = state.factionMaxHp[i];
-    const pct = Math.max(0, hp / maxHp * 100);
-    html += `<div class="faction-bar ${hp <= 0 ? 'dead' : ''}">
-      <div class="fb-head"><span>${f.name}</span><span>${Math.max(0, Math.round(hp))}/${maxHp}</span></div>
-      <div class="fb-hp-wrap"><div class="fb-hp" style="width:${pct}%"></div></div>
-    </div>`;
-  });
-  const lifePct = Math.max(0, state.life / state.maxLife * 100);
-  html += `<div class="my-bar">
-    <div class="mb-row"><span class="mb-label">护盾</span><div class="shield-bar"><div class="fill" style="width:${Math.min(100, state.shield / Math.max(1, bargeShield() + 5) * 100)}%"></div></div><span class="mb-val">${Math.round(state.shield)}</span></div>
-    <div class="mb-row"><span class="mb-label">生命</span><div class="life-bar"><div class="fill" style="width:${lifePct}%"></div></div><span class="mb-val">${Math.round(state.life)}/${state.maxLife}</span></div>
-    <div class="mb-row"><span class="mb-label">资金</span><span class="mb-val">${state.funds}</span>
-      <span class="mb-label" style="margin-left:8px;">强化点</span><span class="mb-val tp-num">${state.techPoints}</span>
-      <span class="mb-label" style="margin-left:8px;">回合</span><span class="mb-val">第${state.wave}回合</span>
-      <span class="mb-label" style="margin-left:8px;">城防</span><span class="mb-val">${cityLevelOf(state.wave)}级城</span>
-    </div>
-  </div>`;
-  html += '</div>';
-  return html;
-}
-
-function renderNewsTicker() {
-  const items = newsList.slice(-4).map(n => `<span class="tick-item ${n.cls || ''}">${n.msg}</span>`).join('');
-  return `<div class="news-ticker" id="newsTicker">${items}</div>`;
-}
-
-function renderBarge() {
-  const b = CONFIG.BARGE[state.bargeLevel - 1];
-  const cost = bargeUpgradeCost();
-  const maxed = state.bargeLevel >= 6;
-  return `<div class="barge-panel">
-    <span class="bp-label">补给驳船</span><span class="bp-val">Lv.${state.bargeLevel}</span>
-    <span class="bp-label">｜护盾</span><span class="bp-val">${b ? b.shield : 3}+${state.bonuses.shieldBonus}</span>
-    <span class="bp-label">｜卡位</span><span class="bp-val">舰${b ? b.ships : 5}/装${b ? b.equips : 2}/术${b ? b.spells || 0 : 1}</span>
-    <span class="bp-label">｜策略</span><span class="bp-val" style="color:#88ccff;">${state.strategy ? state.strategy.name : '未选择'}</span>
-    <button class="barge-upgrade" id="bargeUpgradeBtn" ${maxed ? 'disabled' : ''}>升级补给等级（${maxed ? '已满级' : cost + '资金' + (state.upgradeDiscount > 0 ? '，已优惠' + state.upgradeDiscount : '')}）</button>
-  </div>`;
-}
-
-function bargeUpgradeCost() {
-  const b = CONFIG.BARGE[state.bargeLevel - 1];
-  if (!b || state.bargeLevel >= 6) return 0;
-  return Math.max(0, b.cost - state.upgradeDiscount);
-}
-function upgradeBarge() {
-  if (state.phase !== 'prep') { flashTip('战斗中无法升级'); return; }
-  if (state.bargeLevel >= 6) { flashTip('补给等级已满级'); return; }
-  const cost = bargeUpgradeCost();
-  if (state.funds < cost) { flashTip('资金不足'); return; }
-  state.funds -= cost;
-  state.spentFunds += cost;
-  state.bargeLevel++;
-  state.upgradeDiscount = 0;
-  flashTip('补给等级提升至 ' + state.bargeLevel);
-  renderPrep();
-}
-
-// 我方舰队（手牌区舰船）
-function renderPrepFleet() {
-  let html = '<div class="prep-fleet"><div class="fleet-title">我方舰队（手牌区 ' + state.hand.filter(c => c.ship).length + ' 艘）</div>';
-  html += '<div class="fleet-list">';
-  const ships = state.hand.filter(c => c.ship);
-  if (!ships.length) html += '<div style="color:#5a6b7d;font-size:0.72rem;padding:8px;">手牌区为空，请先在物资调配处配队</div>';
-  ships.forEach((card, i) => {
-    const s = card.ship;
-    const lv = card.lv || {};
-    html += `<div class="fleet-card ${card.elite ? 'elite' : ''}" data-hi="${i}">
-      <div class="fc-name">${s.shortName}<span class="fc-cls">${CLS_ZH[s.cls]}</span>${card.elite ? '<span class="fc-elite">精锐</span>' : ''}</div>
-      <div class="fc-stats">HP ${Math.round(s.hp * (1 + (lv.hp || 0) * 0.1))} 攻 ${Math.round(s.dmg * (1 + (lv.dmg || 0) * 0.1))} 甲 ${s.armor + (lv.armor || 0) * 2}</div>
-      <div class="fc-tags">${WEAPON_LABEL[s.weapon]}·${DMGTYPE_LABEL[s.dmgType]}${(card.equips || []).length ? ' · ' + card.equips.map(e => e.icon).join('') : ''}</div>
-      <div class="fc-actions">
-        <button class="btn-action small" data-equip="${i}">装装备</button>
-        <button class="btn-action small" data-sell="${i}">出售+1</button>
-      </div>
-    </div>`;
-  });
-  html += '</div>';
-  html += '<div class="fleet-actions">';
-  html += `<button class="btn-action" id="blueBtn">本局蓝图数据库（强化点 ${state.techPoints}）</button>`;
-  html += `<button class="btn-action" id="deployBtn">重新配队</button>`;
-  html += '</div></div>';
-  return html;
-}
-
-// 手牌区装备/战术
-function renderHandExtras() {
-  const extras = state.hand.filter(c => !c.ship);
-  let html = '<div class="hand-section"><div class="hand-title">';
-  html += '<span>手牌区（装备/战术支援 ' + extras.length + '）</span>';
-  html += '</div><div class="hand-grid">';
-  extras.forEach((card, i) => {
-    // 找它在 hand 中的真实索引
-    let realIdx = -1, cnt = 0;
-    for (let k = 0; k < state.hand.length; k++) {
-      if (!state.hand[k].ship) { if (cnt === i) { realIdx = k; break; } cnt++; }
-    }
-    if (card.type === 'equip') {
-      html += `<div class="hand-card" data-idx="${realIdx}" data-kind="equip">
-        <div class="hc-name">${card.eq.name}</div>
-        <div class="hc-name" style="color:#ffd166;">Lv.${card.lv}</div>
-        <span class="hc-sell" data-idx="${realIdx}">销毁</span>
-      </div>`;
-    } else {
-      html += `<div class="hand-card" data-idx="${realIdx}" data-kind="spell">
-        <div class="hc-name">${card.sp.name}</div>
-        <div class="hc-name" style="color:#7ae0ff;">战术支援</div>
-        <span class="hc-sell" data-idx="${realIdx}">销毁</span>
-      </div>`;
-    }
-  });
-  if (!extras.length) html += '<div style="font-size:0.65rem;color:#4a5a6a;padding:8px;">从补给池购买装备或战术支援</div>';
-  html += '</div></div>';
-  return html;
-}
-
-function renderPool() {
-  let html = '<div class="pool-section"><div class="pool-title">';
-  html += `<span>补给池（${state.pool.length} 项${state.poolFrozen ? ' · 已冻结' : ''}）</span>`;
-  const refreshCost = CONFIG.REFRESH_COST + (state.craft ? 1 : 0);
-  const free = state.intel && state.firstRefreshFree;
-  html += `<span class="pool-actions">
-    <button id="refreshBtn">刷新${free ? '（免费）' : '（' + refreshCost + '）'}</button>
-    <button id="freezeBtn">冻结（${CONFIG.FREEZE_COST}）</button>
-  </span></div>`;
-  html += '<div class="pool-grid">';
-  state.pool.forEach((item, idx) => {
-    const cls = item.type === 'equip' ? 'equip' : item.type === 'spell' ? 'spell' : '';
-    const frozen = item.frozen ? 'frozen' : '';
-    html += `<div class="pool-card ${cls} ${frozen}" data-idx="${idx}">`;
-    if (item.type === 'ship') {
-      const cost = Math.max(2, Math.round(item.ship.hp / 90));
-      html += `<div class="pool-name">${item.ship.shortName}</div>`;
-      html += `<div class="pool-sub">${CLS_ZH[item.ship.cls]} · ${WEAPON_LABEL[item.ship.weapon]}${DMGTYPE_LABEL[item.ship.dmgType]}</div>`;
-      html += `<div class="pool-cost">资金 ${cost}</div>`;
-      html += `<div class="pool-stats">HP ${item.ship.hp} 攻 ${item.ship.dmg} 甲 ${item.ship.armor}</div>`;
-    } else if (item.type === 'equip') {
-      html += `<div class="pool-name">${item.eq.name}</div>`;
-      html += `<div class="pool-sub">装备 · ${item.eq.desc}</div>`;
-      html += `<div class="pool-cost">资金 ${item.eq.cost + (state.craft ? 1 : 0)}</div>`;
-    } else {
-      html += `<div class="pool-name">${item.sp.name}</div>`;
-      html += `<div class="pool-sub">战术 · ${item.sp.desc}</div>`;
-      html += `<div class="pool-cost">资金 ${item.sp.cost + (state.craft ? 1 : 0)}</div>`;
-    }
+  let html = '<div class="up-tip">第 ' + state.wave + ' 回合强化（三选一）</div>';
+  picks.forEach(function (p) {
+    html += '<div class="up-card" data-name="' + p.name + '">';
+    html += '<div class="up-name">' + p.name + '</div>';
+    html += '<div class="up-desc">' + p.desc + '</div>';
     html += '</div>';
   });
-  html += '</div></div>';
-  return html;
-}
-
-function renderActionBar(phase) {
-  let html = '<div class="action-bar">';
-  if (phase === 'prep') {
-    const hasShip = state.units.some(u => u.alive);
-    html += `<button class="btn-action primary-btn" id="startBattleBtn" ${hasShip ? '' : 'disabled'}>开始作战</button>`;
-    html += `<button class="btn-action" id="skipBtn">跳过回合</button>`;
-    html += `<button class="btn-action" id="abortBtn">放弃战斗</button>`;
-    if (!hasShip) html += '<span style="font-size:0.62rem;color:#ff5c5c;align-self:center;">手牌区没有可作战的舰船</span>';
-  } else if (phase === 'battle') {
-    html += '<span style="font-size:0.72rem;color:#88ccff;letter-spacing:2px;">战斗进行中 · 自动作战</span>';
-  }
-  html += '</div>';
-  return html;
-}
-
-function bindPrepEvents() {
-  const panel = document.getElementById('leftPanel');
-  // 补给池购买
-  panel.querySelectorAll('.pool-card').forEach(card => {
-    card.addEventListener('click', () => buyPoolItem(parseInt(card.dataset.idx)));
-  });
-  // 手牌区装备/战术：点击装备 → 进入安装模式
-  panel.querySelectorAll('.hand-card[data-kind="equip"]').forEach(card => {
-    card.addEventListener('click', (e) => {
-      if (e.target.classList.contains('hc-sell')) return;
-      selectedHandIdx = parseInt(card.dataset.idx);
-      flashTip('装备已选中，点击左侧舰船卡安装');
-    });
-  });
-  panel.querySelectorAll('.hand-card[data-kind="spell"]').forEach(card => {
-    card.addEventListener('click', (e) => {
-      if (e.target.classList.contains('hc-sell')) return;
-      useSpellFromHand(parseInt(card.dataset.idx));
-    });
-  });
-  panel.querySelectorAll('.hc-sell').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const idx = parseInt(btn.dataset.idx);
-      state.hand.splice(idx, 1);
+  body.innerHTML = html;
+  modal.classList.add('active');
+  body.querySelectorAll('.up-card').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const p = UPGRADE_POOL.find(function (x) { return x.name === el.dataset.name; });
+      if (!p) return;
+      upgradeTriggered[state.wave] = true;
+      p.effect();
+      modal.classList.remove('active');
+      pushNews('回合强化：' + p.name, 'good');
       renderPrep();
     });
   });
-  // 舰船卡：安装装备
-  panel.querySelectorAll('[data-equip]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const hi = parseInt(btn.dataset.equip);
-      const card = state.hand.filter(c => c.ship)[hi];
-      if (!card) return;
-      if (selectedHandIdx === null) { flashTip('请先点击装备卡选择要安装的装备'); return; }
-      const eqCard = state.hand[selectedHandIdx];
-      if (!eqCard || eqCard.type !== 'equip') { flashTip('请选择装备卡'); return; }
-      installEquip(selectedHandIdx, card);
-      selectedHandIdx = null;
-    });
-  });
-  // 出售舰船
-  panel.querySelectorAll('[data-sell]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const hi = parseInt(btn.dataset.sell);
-      const card = state.hand.filter(c => c.ship)[hi];
-      if (!card) return;
-      const idx = state.hand.indexOf(card);
-      state.hand.splice(idx, 1);
-      state.funds += CONFIG.SELL_PRICE;
-      rebuildUnits();
-      renderPrep();
-      flashTip('出售 ' + card.ship.shortName + '，+1 资金');
-    });
-  });
-  // 舰队操作
-  document.getElementById('blueBtn')?.addEventListener('click', () => showBlueModal());
-  document.getElementById('deployBtn')?.addEventListener('click', () => showDeployModal());
-  document.getElementById('bargeUpgradeBtn')?.addEventListener('click', () => upgradeBarge());
-  document.getElementById('refreshBtn')?.addEventListener('click', () => refreshPool());
-  document.getElementById('freezeBtn')?.addEventListener('click', () => freezePool());
-  document.getElementById('startBattleBtn')?.addEventListener('click', () => startBattle());
-  document.getElementById('skipBtn')?.addEventListener('click', () => skipRound());
-  document.getElementById('abortBtn')?.addEventListener('click', () => abortRun());
 }
 
-// ============================================================
-//  19. 渲染 —— 战斗（左方玩家 / 右方敌方）
-// ============================================================
 function renderBattle() {
   const panel = document.getElementById('leftPanel');
   panel.dataset.mode = 'battle';
   let html = '<div class="game-header battle-layout">';
   html += renderTopStatus();
   html += renderNewsTicker();
-  html += `<div class="battle-clock" id="battleClock">${Math.ceil(clockLeft)}</div>`;
+  html += '<div class="battle-clock" id="battleClock">' + Math.ceil(clockLeft) + '</div>';
   html += '<div class="battle-view">';
-  // 左：我方舰队（前中后三排编组）
   html += '<div class="fleet-panel left">';
-  html += '<div class="fleet-title"><span class="ft-tag my">我</span>我方舰队 <span class="fp-cnt">' + state.units.filter(u => u.alive).length + '/' + state.units.length + '</span></div>';
+  html += '<div class="fleet-title"><span class="ft-tag my">我</span>我方舰队 <span class="fp-cnt">' + state.units.filter(function (u) { return u.alive; }).length + '/' + state.units.length + '</span></div>';
   html += renderRows(state.units, 'my');
   html += '</div>';
-  // 中：状态/日志
   html += '<div class="battle-center">';
   html += '<div class="bc-info">城防等级 <b>' + cityLevelOf(state.wave) + '</b></div>';
   html += '<div class="bc-log" id="bcLog"></div>';
   html += '<div class="bc-hint">自动作战中 · 剩余时间 <span id="clockNum">' + Math.ceil(clockLeft) + '</span>s</div>';
   html += '</div>';
-  // 右：敌方舰队（前中后三排编组）
   html += '<div class="fleet-panel right">';
-  html += '<div class="fleet-title"><span class="ft-tag en">敌</span>敌方舰队 <span class="fp-cnt">' + state.enemies.filter(e => e.alive).length + '/' + state.enemies.length + '</span></div>';
+  html += '<div class="fleet-title"><span class="ft-tag en">敌</span>敌方舰队 <span class="fp-cnt">' + state.enemies.filter(function (e) { return e.alive; }).length + '/' + state.enemies.length + '</span></div>';
   html += renderRows(state.enemies, 'en');
   html += '</div>';
   html += '</div>';
@@ -1635,65 +1369,45 @@ function renderBattle() {
   panel.innerHTML = html;
 }
 
-function rowOf(cls) {
-  if (cls === 'frigate' || cls === 'corvette' || cls === 'fighter') return 0; // 前排
-  if (cls === 'destroyer' || cls === 'cruiser') return 1; // 中排
-  return 2; // 后排
-}
-
 function renderRows(list, side) {
   const rows = [[], [], []];
-  list.forEach(u => {
+  list.forEach(function (u) {
     let r;
     if (u.zone === 'front') r = 0;
     else if (u.zone === 'mid') r = 1;
     else if (u.zone === 'back') r = 2;
-    else r = rowOf(u.cls);
+    else r = u.row !== undefined ? u.row : (u.cls === 'frigate' || u.cls === 'corvette' || u.cls === 'fighter' ? 0 : (u.cls === 'destroyer' || u.cls === 'cruiser' ? 1 : 2));
     rows[r].push(u);
   });
   const labels = ['前排', '中排', '后排'];
   let html = '<div class="fleet-rows">';
-  rows.forEach((arr, i) => {
+  rows.forEach(function (arr, i) {
     html += '<div class="fleet-row">';
     html += '<div class="row-label">' + labels[i] + '</div>';
     html += '<div class="row-cards">';
-    if (!arr.length) {
-      html += '<div class="row-empty">—</div>';
-    } else {
-      arr.forEach(u => { html += renderFleetCard(u, side); });
-    }
+    if (!arr.length) html += '<div class="row-empty">—</div>';
+    arr.forEach(function (u) { html += renderFleetCard(u, side); });
     html += '</div></div>';
   });
   html += '</div>';
   return html;
 }
 
-const CLS_ICON = { frigate: '护', destroyer: '驱', cruiser: '巡', battlecruiser: '战', battleship: '列', carrier: '航', fighter: '机', corvette: '艇', support: '援' };
-const CLS_COLOR = { frigate: '#7fd4ff', destroyer: '#9be89b', cruiser: '#ffd27f', battlecruiser: '#ff9a8a', battleship: '#ff7fa8', carrier: '#c9a5ff', fighter: '#8affd9', corvette: '#ffe27f', support: '#a5c9ff' };
-
 function renderFleetCard(u, side) {
   const pct = Math.max(0, u.hp / u.maxHp * 100);
-  const shieldPct = u.shield > 0 ? Math.min(100, u.shield / Math.max(1, u.maxHp * 0.15) * 100) : 0;
+  const shieldPct = u.shield > 0 ? Math.min(100, u.shield / Math.max(1, u.maxHp * 0.2) * 100) : 0;
   const dead = !u.alive;
   const icon = CLS_ICON[u.cls] || '◇';
   const color = CLS_COLOR[u.cls] || '#8fa3c8';
   const countTxt = (side === 'en' && u.count && u.count > 1) ? ' ×' + u.count : '';
-  return `<div class="fleet-card ${dead ? 'dead' : ''} ${u.elite ? 'elite' : ''} ${side === 'en' ? 'enemy' : ''}" id="${u.id}" data-hp="${Math.round(u.hp)}">
-    <div class="fc-head">
-      <span class="fc-icon" style="background:${color}26;border-color:${color};">${icon}</span>
-      <div class="fc-id">
-        <div class="fc-name">${u.shortName}</div>
-        <div class="fc-cls" style="color:${color};">${CLS_ZH[u.cls] || ''}${countTxt}</div>
-      </div>
-    </div>
-    <div class="fc-bar">
-      <div class="fc-hp"><div class="fill" style="width:${pct}%"></div></div>
-      ${u.shield > 0 ? `<div class="fc-shield"><div class="fill" style="width:${shieldPct}%"></div></div>` : ''}
-    </div>
-    <div class="fc-hpnum">${Math.max(0, Math.round(u.hp))}/${u.maxHp}</div>
-    <div class="fc-mini">攻 ${u.dmg} 甲 ${u.armor} ${WEAPON_LABEL[u.weapon]}·${DMGTYPE_LABEL[u.dmgType]}</div>
-    <div class="dmg-pop-wrap"></div>
-  </div>`;
+  return '<div class="fleet-card' + (dead ? ' dead' : '') + (u.elite ? ' elite' : '') + (side === 'en' ? ' enemy' : '') + '" id="' + u.id + '" data-hp="' + Math.round(u.hp) + '">' +
+    '<div class="fc-head"><span class="fc-icon" style="background:' + color + '26;border-color:' + color + ';">' + icon + '</span>' +
+    '<div class="fc-id"><div class="fc-name">' + u.shortName + '</div><div class="fc-cls" style="color:' + color + ';">' + (CLS_ZH[u.cls] || '') + countTxt + '</div></div></div>' +
+    '<div class="fc-bar"><div class="fc-hp"><div class="fill" style="width:' + pct + '%"></div></div>' +
+    (u.shield > 0 ? '<div class="fc-shield"><div class="fill" style="width:' + shieldPct + '%"></div></div>' : '') + '</div>' +
+    '<div class="fc-hpnum">' + Math.max(0, Math.round(u.hp)) + '/' + u.maxHp + '</div>' +
+    '<div class="fc-mini">攻 ' + u.dmg + ' 甲 ' + u.armor + ' ' + WEAPON_LABEL[u.weapon] + '·' + DMGTYPE_LABEL[u.dmgType] + '</div>' +
+    '<div class="dmg-pop-wrap"></div></div>';
 }
 
 function spawnDamagePop(el, amount, isCrit, isEnemy) {
@@ -1703,21 +1417,19 @@ function spawnDamagePop(el, amount, isCrit, isEnemy) {
   div.className = 'dmg-pop' + (isCrit ? ' crit' : '') + (isEnemy ? ' from-enemy' : '');
   div.textContent = '-' + Math.max(1, Math.round(amount));
   wrap.appendChild(div);
-  setTimeout(() => { if (div.parentNode) div.parentNode.removeChild(div); }, 950);
+  setTimeout(function () { if (div.parentNode) div.parentNode.removeChild(div); }, 950);
 }
 
 function renderAtkLog() {
   const evs = (state.attackEvents || []).slice(-6);
-  return evs.map(ev => {
-    const cls = ev.isEnemy ? 'atk-en' : 'atk-my';
-    return `<div class="bc-line ${cls}">${ev.from} <span class="atk-arrow">→</span> ${ev.to} <span class="atk-dmg${ev.isCrit ? ' crit' : ''}">-${Math.max(1, Math.round(ev.dmg))}</span></div>`;
+  return evs.map(function (ev) {
+    return '<div class="bc-line ' + (ev.isEnemy ? 'atk-en' : 'atk-my') + '">' + ev.from + ' <span class="atk-arrow">→</span> ' + ev.to + ' <span class="atk-dmg' + (ev.isCrit ? ' crit' : '') + '">-' + Math.max(1, Math.round(ev.dmg)) + '</span></div>';
   }).join('');
 }
 
 function updateBattleUI() {
   const panel = document.getElementById('leftPanel');
   if (!panel || state.phase !== 'battle') return;
-  // 时钟
   const clockEl = document.getElementById('battleClock');
   if (clockEl) {
     clockEl.textContent = toxicActive ? '+' + Math.floor(overtime) : Math.max(0, Math.ceil(clockLeft));
@@ -1725,41 +1437,38 @@ function updateBattleUI() {
   }
   const clockNum = document.getElementById('clockNum');
   if (clockNum) clockNum.textContent = toxicActive ? '+' + Math.floor(overtime) : Math.max(0, Math.ceil(clockLeft));
-  // 我方卡片
-  state.units.forEach(u => {
+  state.units.forEach(function (u) {
     const el = document.getElementById(u.id);
-    if (el) {
-      const prev = parseInt(el.dataset.hp || '0', 10);
-      if (u.alive && u.hp < prev && prev - u.hp > 0.4) spawnDamagePop(el, prev - u.hp, false, true);
-      el.dataset.hp = Math.round(u.hp);
-      el.querySelector('.fc-hp .fill').style.width = Math.max(0, u.hp / u.maxHp * 100) + '%';
-      el.querySelector('.fc-hpnum').textContent = Math.max(0, Math.round(u.hp)) + '/' + u.maxHp;
-      if (!u.alive) el.classList.add('dead');
-      const sh = el.querySelector('.fc-shield .fill');
-      if (sh) sh.style.width = Math.min(100, u.shield / Math.max(1, u.maxHp * 0.15) * 100) + '%';
-    }
+    if (!el) return;
+    const prev = parseInt(el.dataset.hp || '0', 10);
+    if (u.alive && u.hp < prev && prev - u.hp > 0.4) spawnDamagePop(el, prev - u.hp, false, true);
+    el.dataset.hp = Math.round(u.hp);
+    const f = el.querySelector('.fc-hp .fill');
+    if (f) f.style.width = Math.max(0, u.hp / u.maxHp * 100) + '%';
+    const n = el.querySelector('.fc-hpnum');
+    if (n) n.textContent = Math.max(0, Math.round(u.hp)) + '/' + u.maxHp;
+    if (!u.alive) el.classList.add('dead');
+    const sh = el.querySelector('.fc-shield .fill');
+    if (sh) sh.style.width = Math.min(100, u.shield / Math.max(1, u.maxHp * 0.2) * 100) + '%';
   });
-  // 敌方卡片
-  state.enemies.forEach(e => {
+  state.enemies.forEach(function (e) {
     const el = document.getElementById(e.id);
-    if (el) {
-      const prev = parseInt(el.dataset.hp || '0', 10);
-      if (e.alive && e.hp < prev && prev - e.hp > 0.4) spawnDamagePop(el, prev - e.hp, false, false);
-      el.dataset.hp = Math.round(e.hp);
-      el.querySelector('.fc-hp .fill').style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
-      el.querySelector('.fc-hpnum').textContent = Math.max(0, Math.round(e.hp)) + '/' + e.maxHp;
-      if (!e.alive) el.classList.add('dead');
-      const sh = el.querySelector('.fc-shield .fill');
-      if (sh) sh.style.width = Math.min(100, e.shield / Math.max(1, e.maxHp * 0.15) * 100) + '%';
-    }
+    if (!el) return;
+    const prev = parseInt(el.dataset.hp || '0', 10);
+    if (e.alive && e.hp < prev && prev - e.hp > 0.4) spawnDamagePop(el, prev - e.hp, false, false);
+    el.dataset.hp = Math.round(e.hp);
+    const f = el.querySelector('.fc-hp .fill');
+    if (f) f.style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
+    const n = el.querySelector('.fc-hpnum');
+    if (n) n.textContent = Math.max(0, Math.round(e.hp)) + '/' + e.maxHp;
+    if (!e.alive) el.classList.add('dead');
+    const sh = el.querySelector('.fc-shield .fill');
+    if (sh) sh.style.width = Math.min(100, e.shield / Math.max(1, e.maxHp * 0.2) * 100) + '%';
   });
-  // 攻击事件日志
   const log = document.getElementById('bcLog');
   if (log) log.innerHTML = renderAtkLog();
-  // 顶部状态
   const statusEl = panel.querySelector('.top-status');
   if (statusEl) statusEl.outerHTML = renderTopStatus();
-  // 毒雾
   let fog = document.getElementById('toxicFog');
   if (toxicActive && !fog) {
     fog = document.createElement('div');
@@ -1770,135 +1479,68 @@ function updateBattleUI() {
   if (!toxicActive && fog) fog.remove();
 }
 
-// ============================================================
-//  20. 跳回合 / 放弃 / 工具
-// ============================================================
 function skipRound() {
   if (state.phase !== 'prep') { flashTip('当前无法跳过'); return; }
+  state.phase = 'battle';
   state.shield = 0;
-  settleRound(false);
+  state.enemies.forEach(function (e) { e.alive = false; });
+  state.units.forEach(function (u) { u.alive = false; });
+  settleRound(true);
 }
 function abortRun() {
   if (state.phase !== 'prep') { flashTip('战斗中无法放弃'); return; }
-  showConfirm('放弃战斗', '放弃后本场模拟直接结束，且不进入作战结算。确定放弃？', () => {
+  showConfirm('放弃战斗', '放弃后本场模拟直接结束，不进入作战结算。确定放弃？', function () {
     state.phase = 'end';
     endGame(false);
   });
 }
-function pushNews(msg, cls) {
-  newsList.push({ msg: msg, cls: cls || '' });
-  if (newsList.length > 30) newsList.shift();
-}
-function flashTip(msg) {
-  const old = document.getElementById('flashTip');
-  if (old) old.remove();
-  const tip = document.createElement('div');
-  tip.id = 'flashTip';
-  tip.className = 'flash-tip';
-  tip.textContent = msg;
-  document.body.appendChild(tip);
-  setTimeout(() => tip.remove(), 2200);
-}
-function showConfirm(title, body, cb) {
-  const modal = document.getElementById('confirmModal');
-  document.getElementById('confirmTitle').textContent = title;
-  document.getElementById('confirmBody').innerHTML = body;
-  confirmCallback = cb;
-  modal.classList.add('active');
-}
-let confirmCallback = null;
-function showModal(title, content) {
-  const modal = document.getElementById('genericModal');
-  document.getElementById('modalTitle').textContent = title;
-  document.getElementById('modalBody').innerHTML = content;
-  modal.classList.add('active');
-}
 
-// ============================================================
-//  21. 蓝图数据库 / 物资调配
-// ============================================================
-function renderBlueprintDB() {
-  const pool = buildShipPool();
-  let html = '<div class="bp-panel">';
-  html += '<div class="bp-tab-bar">';
-  html += '<button class="bp-tab-btn active" data-tab="ships">舰船蓝图</button>';
-  html += '<button class="bp-tab-btn" data-tab="equips">装备</button>';
-  html += '<button class="bp-tab-btn" data-tab="spells">战术支援</button>';
-  html += '<button class="bp-tab-btn" data-tab="strategies">防守策略</button>';
-  html += '</div>';
-  html += '<div class="bp-tab-content active" id="tab-ships">';
-  html += '<div class="bp-ship-list">';
-  const groups = {};
-  for (const s of pool) (groups[s.cls] = groups[s.cls] || []).push(s);
-  const clsOrder = ['carrier', 'battlecruiser', 'battleship', 'cruiser', 'destroyer', 'frigate', 'fighter', 'corvette', 'support'];
-  for (const cls of clsOrder) {
-    const list = groups[cls];
-    if (!list || !list.length) continue;
-    html += `<div class="bp-type-title">${CLS_ZH[cls]}（${list.length}）</div>`;
-    list.forEach(s => {
-      html += `<div class="bp-ship-item">
-        <span>${s.name}</span>
-        <span style="color:#5a6b7d;font-size:0.62rem;">HP${s.hp} 攻${s.dmg} 甲${s.armor} ${WEAPON_LABEL[s.weapon]}${DMGTYPE_LABEL[s.dmgType]}</span>
-      </div>`;
-    });
+function endGame(victory) {
+  if (state.phase === 'end') return;
+  state.phase = 'end';
+  stopBattleLoop();
+  const fog = document.getElementById('toxicFog');
+  if (fog) fog.remove();
+  state.stats = state.stats || {};
+  if (victory) {
+    state.stats.wins = (state.stats.wins || 0) + 1;
+    if (state.mode === 'beginner') state.progress.prototype = true;
+    if (state.mode === 'prototype') state.progress.core = true;
+    if (state.mode === 'core') state.progress.coreCleared = true;
+  } else {
+    state.stats.losses = (state.stats.losses || 0) + 1;
   }
-  html += '</div></div>';
-  html += '<div class="bp-tab-content" id="tab-equips">';
-  EQUIP_BLUEPRINTS.forEach(eq => {
-    html += `<div class="bp-ship-item"><span>${eq.name}</span><span style="color:#5a6b7d;font-size:0.62rem;">${eq.desc}（2件同名合成升级）</span></div>`;
+  state.stats.kills = (state.stats.kills || 0) + state.totalKills;
+  state.stats.bestWave = Math.max(state.stats.bestWave || 0, Math.min(state.wave, CONFIG.TOTAL_ROUNDS));
+  saveProgress();
+  saveStats();
+  const modal = document.getElementById('resultModal');
+  document.getElementById('resultTitle').textContent = victory ? '作战胜利' : '作战失败';
+  const tp = Math.round((state.wave + state.totalKills) * 5 * CONFIG.MODES[state.mode].reward);
+  let html = '<div class="rs-line">回合 ' + Math.min(state.wave, CONFIG.TOTAL_ROUNDS) + '/' + CONFIG.TOTAL_ROUNDS + '</div>';
+  html += '<div class="rs-line">模式 ' + CONFIG.MODES[state.mode].name + '</div>';
+  html += '<div class="rs-line">击毁编队 ' + state.totalKills + '</div>';
+  html += '<div class="rs-line">敌方势力生命 ' + state.factionHp.map(function (h) { return Math.max(0, h); }).join(' / ') + '</div>';
+  html += '<div class="rs-line">奖励技术点 ' + tp + ' · 比邻星币 ' + Math.round(tp * 2) + '</div>';
+  html += '<div class="rs-actions"><button class="btn-action primary-btn" id="againBtn">再来一局</button><button class="btn-action" id="backBtn">返回主页</button></div>';
+  document.getElementById('resultContent').innerHTML = html;
+  modal.classList.add('active');
+  document.getElementById('againBtn').addEventListener('click', function () {
+    modal.classList.remove('active');
+    state.hand = [];
+    showModeSelect();
   });
-  html += '</div>';
-  html += '<div class="bp-tab-content" id="tab-spells">';
-  SPELL_BLUEPRINTS.forEach(sp => {
-    html += `<div class="bp-ship-item"><span>${sp.name}</span><span style="color:#5a6b7d;font-size:0.62rem;">${sp.desc}</span></div>`;
+  document.getElementById('backBtn').addEventListener('click', function () {
+    modal.classList.remove('active');
+    initGame();
   });
-  html += '</div>';
-  html += '<div class="bp-tab-content" id="tab-strategies">';
-  DEFENSE_STRATEGIES.forEach(s => {
-    const un = strategyUnlocked(s);
-    html += `<div class="bp-ship-item"><span>${s.name}（${s.org}）</span><span style="color:#5a6b7d;font-size:0.62rem;">${s.desc}</span><span style="${un ? 'color:#44cc88;' : 'color:#ff5c5c;'}">${un ? '已解锁' : '未解锁'}</span></div>`;
-  });
-  html += '</div>';
-  html += '</div>';
-  return html;
 }
 
-function renderSupplyPanel() {
-  const enh = getEnhanceSummary();
-  const b = CONFIG.BARGE[state.bargeLevel - 1];
-  const st = state.stats || { wins: 0, losses: 0, kills: 0, bestWave: 0 };
-  const fleetCount = state.hand.filter(c => c.ship).length;
-  let html = '<div class="supply-panel">';
-  html += '<div class="sp-sec"><div class="sp-sec-title">历史战绩（跨局累计）</div>';
-  html += `<div class="sp-row"><span>胜利 / 失败</span><span class="v good">${st.wins} / ${st.losses}</span></div>`;
-  html += `<div class="sp-row"><span>累计击毁编队</span><span class="v">${st.kills}</span></div>`;
-  html += `<div class="sp-row"><span>最高到达回合</span><span class="v">第 ${st.bestWave} 回合</span></div>`;
-  html += '</div>';
-  html += '<div class="sp-sec"><div class="sp-sec-title">舰队强化联动（保留强化系统）</div>';
-  html += `<div class="sp-row"><span>已投入技术等级</span><span class="v">${enh.totalLevels} 级（${enh.ships} 艘舰船）</span></div>`;
-  html += `<div class="sp-row"><span>卫戍协议全属性加成</span><span class="v good">+${Math.round((enh.mul - 1) * 100)}%</span></div>`;
-  html += `<div class="sp-row"><span>同名舰船额外加成</span><span class="v good">最高 +40%</span></div>`;
-  html += '<div class="sp-row" style="color:#5a7a8a;font-size:0.66rem;">去「舰船强化」页面加点即可生效</div>';
-  html += '</div>';
-  html += '<div class="sp-sec"><div class="sp-sec-title">当前舰队（手牌区）</div>';
-  html += `<div class="sp-row"><span>舰队舰船数</span><span class="v">${fleetCount} 艘</span></div>`;
-  html += `<div class="sp-row"><span>配队限制</span><span class="v">航母≤2 战巡≤2 其余各≤5</span></div>`;
-  html += `<div class="sp-row"><span>补给驳船</span><span class="v">Lv.${state.bargeLevel} · 护盾 ${b.shield}+${state.bonuses.shieldBonus}</span></div>`;
-  html += `<div class="sp-row"><span>城防规划</span><span class="v">1-3回合2级城 · 4-6回合3级城 · 7-8回合5级城 · 9-10回合7级城 · 11+回合9级城</span></div>`;
-  html += '</div>';
-  html += '</div>';
-  return html;
-}
-
-// ============================================================
-//  22. 事件绑定
-// ============================================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function () {
   initGame();
-
-  document.getElementById('btnSolo')?.addEventListener('click', () => {
+  document.getElementById('btnSolo').addEventListener('click', function () {
     if (state.phase === 'prep' || state.phase === 'battle') {
-      showConfirm('开始新模拟', '当前存在进行中的对局，开始新模拟将放弃当前对局。确定继续？', () => {
+      showConfirm('开始新模拟', '当前存在进行中的对局，开始新模拟将放弃当前对局。确定继续？', function () {
         initGame();
         showModeSelect();
       });
@@ -1907,80 +1549,77 @@ document.addEventListener('DOMContentLoaded', () => {
       showModeSelect();
     }
   });
-  document.getElementById('btnMode')?.addEventListener('click', () => {
-    showModal('协议模式', `
-      <div class="supply-panel">
-        <div class="sp-sec"><div class="sp-sec-title">入门协议 [初始解锁]</div>
-        <div class="sp-row"><span>敌方势力生命</span><span class="v">各 20 点</span></div>
-        <div class="sp-row"><span>资金节奏</span><span class="v">第1回合5，第2回合13，之后每回合10</span></div></div>
-        <div class="sp-sec"><div class="sp-sec-title">原型协议 [通关入门解锁]</div>
-        <div class="sp-row"><span>敌方势力生命</span><span class="v">各 45 点</span></div>
-        <div class="sp-row"><span>资金节奏</span><span class="v">第1回合5，之后每回合+1，上限12</span></div></div>
-        <div class="sp-sec"><div class="sp-sec-title">核心协议 [通关原型解锁]</div>
-        <div class="sp-row"><span>敌方势力生命</span><span class="v">各 45 点</span></div>
-        <div class="sp-row"><span>资金节奏</span><span class="v">第1回合3，之后每回合+1，上限12</span></div></div>
-      </div>`);
+  document.getElementById('btnMode').addEventListener('click', function () {
+    showModal('协议模式', '<div class="supply-panel">' + Object.keys(CONFIG.MODES).map(function (k) {
+      const m = CONFIG.MODES[k];
+      return '<div class="sp-sec"><div class="sp-sec-title">' + m.name + '</div>' +
+        '<div class="sp-row"><span>敌方势力生命</span><span class="v">各 ' + m.life + ' 点</span></div>' +
+        '<div class="sp-row"><span>资金节奏</span><span class="v">' + (k === 'beginner' ? '第1回合5，第2回合13，之后每回合10' : '第1回合' + m.funds[0] + '，之后每回合+1，上限' + m.funds[2]) + '</span></div>' +
+        '<div class="sp-row"><span>回合数</span><span class="v">固定15回合</span></div></div>';
+    }).join('') + '</div>');
   });
-  document.getElementById('btnSupply')?.addEventListener('click', () => {
-    showModal('物资调配处', renderSupplyPanel());
+  document.getElementById('btnSupply').addEventListener('click', function () {
+    if (state.phase === 'prep' || state.phase === 'battle') {
+      showModal('物资调配处', '<div class="supply-panel"><div class="sp-row"><span>当前状态</span><span class="v">模拟进行中，物资调配处已关闭</span></div></div>');
+      return;
+    }
+    const st = state.stats || {};
+    showModal('物资调配处', '<div class="supply-panel">' +
+      '<div class="sp-sec"><div class="sp-sec-title">历史战绩（跨局累计）</div>' +
+      '<div class="sp-row"><span>胜利 / 失败</span><span class="v">' + (st.wins || 0) + ' / ' + (st.losses || 0) + '</span></div>' +
+      '<div class="sp-row"><span>累计击毁编队</span><span class="v">' + (st.kills || 0) + '</span></div>' +
+      '<div class="sp-row"><span>最高回合</span><span class="v">' + (st.bestWave || 0) + '</span></div></div>' +
+      '<div class="sp-sec"><div class="sp-sec-title">舰队强化联动</div>' +
+      '<div class="sp-row"><span>全局加成</span><span class="v">+' + Math.round((computeEnhanceMul() - 1) * 100) + '%</span></div></div>' +
+      '<div class="sp-sec"><div class="sp-sec-title">配队规则</div>' +
+      '<div class="sp-row"><span>航空母舰</span><span class="v">最多2艘（可配置舰载机）</span></div>' +
+      '<div class="sp-row"><span>战列巡洋舰</span><span class="v">最多2艘</span></div>' +
+      '<div class="sp-row"><span>其余舰种</span><span class="v">各最多5艘</span></div>' +
+      '<div class="sp-row"><span>战机 / 护航艇</span><span class="v">仅选择航母后可配置</span></div></div>' +
+      '<div class="sp-actions"><button class="btn-action primary-btn" id="spDeployBtn">前往舰队配置</button></div></div>');
+    document.getElementById('spDeployBtn').addEventListener('click', function () {
+      document.getElementById('genericModal').classList.remove('active');
+      showDeployModal();
+    });
   });
-  document.getElementById('btnBlueprint')?.addEventListener('click', () => {
-    showModal('蓝图数据库（全部舰船）', renderBlueprintDB());
+  document.getElementById('btnBlueprint').addEventListener('click', function () {
+    const pool = buildShipPool();
+    const groups = {};
+    for (const s of pool) (groups[s.cls] = groups[s.cls] || []).push(s);
+    let html = '<div class="bp-list">';
+    const order = ['carrier', 'battlecruiser', 'battleship', 'cruiser', 'destroyer', 'frigate', 'fighter', 'corvette', 'support'];
+    order.forEach(function (cls) {
+      const list = groups[cls] || [];
+      if (!list.length) return;
+      html += '<div class="bp-type-title">' + CLS_ZH[cls] + '（' + list.length + '）</div>';
+      list.forEach(function (s) {
+        html += '<div class="bp-item"><span class="bp-name">' + s.name + '</span><span class="bp-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' 甲 ' + s.armor + ' ' + WEAPON_LABEL[s.weapon] + DMGTYPE_LABEL[s.dmgType] + '</span></div>';
+      });
+    });
+    html += '</div>';
+    showModal('蓝图数据库（全部舰船 ' + pool.length + ' 艘）', html);
   });
-  document.getElementById('btnStrategy')?.addEventListener('click', () => {
-    showModal('策略图鉴', `
-      <div class="supply-panel">
-        <div style="font-size:0.7rem;color:#5a7a8a;margin-bottom:8px;">开局随机 3 选 1，选定后不可更改。部分策略需通关对应模式解锁。</div>
-        ${DEFENSE_STRATEGIES.map(s => {
-          const un = strategyUnlocked(s);
-          return `<div class="sp-sec" style="${un ? '' : 'opacity:0.45;'}">
-            <div class="sp-sec-title">${s.name} <span style="color:#ffd166;font-size:0.62rem;">${s.org}</span> ${un ? '' : '锁定'}</div>
-            <div class="sp-row"><span>${s.desc}</span></div>
-          </div>`;
-        }).join('')}
-      </div>`);
+  document.getElementById('btnStrategy').addEventListener('click', function () {
+    showModal('防守策略', '<div class="supply-panel"><div class="sp-tip">开局随机 3 选 1，选定后不可更改</div>' + DEFENSE_STRATEGIES.map(function (s) {
+      return '<div class="sp-sec"><div class="sp-sec-title">' + s.name + '（' + s.org + '）' + (strategyUnlocked(s) ? '' : ' [未解锁]') + '</div>' +
+        '<div class="sp-row"><span>我方生命</span><span class="v">' + s.life + '</span></div>' +
+        '<div class="sp-row"><span>效果</span><span class="v">' + s.desc + '</span></div></div>';
+    }).join('') + '</div>');
   });
-
-  document.getElementById('modalCloseBtn')?.addEventListener('click', () => {
-    document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+  document.getElementById('modalCloseBtn').addEventListener('click', function () {
+    document.querySelectorAll('.modal').forEach(function (m) { m.classList.remove('active'); });
   });
-  document.querySelectorAll('.modal').forEach(m => {
-    m.addEventListener('click', (e) => {
+  document.querySelectorAll('.modal').forEach(function (m) {
+    m.addEventListener('click', function (e) {
       if (e.target === m) {
         m.classList.remove('active');
-        if (m.id === 'blueModal' && state && state.blueOpenedIn) afterBlueClose();
+        if (m.id === 'blueModal' && state && state.blueOpenedIn === 'settle') {
+          state.blueOpenedIn = null;
+          startPrepRound();
+        }
       }
     });
   });
-  document.getElementById('confirmOk')?.addEventListener('click', () => {
-    document.getElementById('confirmModal').classList.remove('active');
-    if (confirmCallback) { const cb = confirmCallback; confirmCallback = null; cb(); }
-  });
-  document.getElementById('confirmCancel')?.addEventListener('click', () => {
-    document.getElementById('confirmModal').classList.remove('active');
-    confirmCallback = null;
-  });
-  // 标签页
-  document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('bp-tab-btn')) {
-      const tab = e.target.dataset.tab;
-      document.querySelectorAll('.bp-tab-btn').forEach(b => b.classList.remove('active'));
-      e.target.classList.add('active');
-      document.querySelectorAll('.bp-tab-content').forEach(c => c.classList.remove('active'));
-      const target = document.getElementById('tab-' + tab);
-      if (target) target.classList.add('active');
-    }
-  });
+  document.getElementById('confirmOk').addEventListener('click', function () {});
+  document.getElementById('confirmCancel').addEventListener('click', function () {});
 });
-
-// 敌方势力（拉格朗日公司名，用于势力生命条显示）
-const ENEMY_FACTIONS = [
-  { name: '木星工业', icon: '木', desc: '重甲直射为主' },
-  { name: '诺玛运输', icon: '诺', desc: '导弹投射为主' },
-  { name: '安东尼奥斯', icon: '安', desc: '能量直射为主' },
-  { name: '神圣群星帝国', icon: '神', desc: '混合编队' },
-  { name: '雷火科技', icon: '雷', desc: '高速战机突袭' },
-  { name: '海雷丁家族', icon: '海', desc: '护航艇蜂群' },
-  { name: '比邻星同盟', icon: '比', desc: '均衡混合编队' },
-  { name: '维塔斯A-21', icon: '维', desc: '无人机蜂群' }
-];

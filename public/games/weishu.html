@@ -1,115 +1,95 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>卫戍协议 - UEG小网站</title>
-  <link rel="stylesheet" href="weishu.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>卫戍协议</title>
+<link rel="stylesheet" href="weishu.css">
 <script src="../dyson-bg.js"></script>
 </head>
 <body>
-  <div class="page">
-    <!-- 左侧主面板 -->
-    <div class="side-panel" id="leftPanel" data-mode="welcome">
-      <div class="welcome" id="welcomeContent">
-        <span class="big-icon">◆</span>
-        <h2>卫戍协议</h2>
-        <p>星河防线 · 舰队塔防</p>
-        <div class="hint">点击「开始模拟」进入作战</div>
-        <div class="hint" style="margin-top:10px;font-size:0.8rem;">拉格朗日舰队编组战斗</div>
-      </div>
-    </div>
-
-    <!-- 右侧按钮区 -->
-    <div class="action-panel">
-      <button class="action-btn primary" id="btnSolo">开始模拟</button>
-      <button class="action-btn" id="btnMode">协议模式</button>
-      <button class="action-btn" id="btnSupply">物资调配</button>
-      <button class="action-btn" id="btnBlueprint">蓝图数据库</button>
-      <button class="action-btn" id="btnStrategy">策略图鉴</button>
-      <a class="back-link" href="games.html">返回小游戏</a>
-    </div>
-  </div>
-
-  <!-- 通用模态框 -->
-  <div class="modal" id="genericModal">
-    <div class="modal-box">
-      <button class="modal-close" id="modalCloseBtn">✕</button>
-      <h3 id="modalTitle">标题</h3>
-      <div id="modalBody"></div>
-    </div>
-  </div>
-
-  <!-- 模式选择 -->
-  <div class="modal" id="modeModal">
-    <div class="modal-box">
-      <h3>选择协议模式</h3>
-      <div id="modeList"></div>
-    </div>
-  </div>
-
-  <!-- 策略选择（开局3选1，不可更改） -->
-  <div class="modal" id="strategyModal">
-    <div class="modal-box">
-      <h3>选择防守策略</h3>
-      <div class="modal-tip">策略选定后无法更改，请谨慎选择</div>
-      <div id="strategyList"></div>
-    </div>
-  </div>
-
-  <!-- 配队（战前舰船选择） -->
-  <div class="modal" id="deployModal">
-    <div class="modal-box modal-wide">
-      <h3>舰队配队 - 选择本局出战舰船</h3>
-      <div class="modal-tip">航母≤2（含搭载战机/护航艇）· 战列巡洋舰≤2 · 其余舰种各≤5 · 选中舰船进入手牌区</div>
-      <div id="deployBody"></div>
-    </div>
-  </div>
-
-  <!-- 回合强化 -->
-  <div class="modal" id="upgradeModal">
-    <div class="modal-box">
-      <h3>回合强化</h3>
-      <div id="upgradeOptions"></div>
-    </div>
-  </div>
-
-  <!-- 战斗结算 -->
-  <div class="modal" id="resultModal">
-    <div class="modal-box">
-      <h3 id="resultTitle">战斗结束</h3>
-      <div id="resultContent"></div>
-    </div>
-  </div>
-
-  <!-- 确认框 -->
-  <div class="modal" id="confirmModal">
-    <div class="modal-box">
-      <h3 id="confirmTitle">确认</h3>
-      <div id="confirmBody"></div>
-      <div class="confirm-actions">
-        <button class="btn-action" id="confirmOk">确认</button>
-        <button class="btn-action" id="confirmCancel">取消</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 本局蓝图数据库（每回合结束强化） -->
-  <div class="modal" id="blueModal">
-    <div class="modal-box modal-wide">
-      <h3>本局蓝图数据库 - 手牌区舰船强化</h3>
-      <div class="modal-tip" id="blueTip"></div>
-      <div id="blueBody"></div>
-    </div>
-  </div>
-
-  <!-- 数据与逻辑 -->
-  <script src="ships_data.js"></script>
-  <script src="ship_stats.js"></script>
-  <script src="system_stats.js"></script>
-  <script src="city_fleets.js"></script>
-  <script src="city_defense.js"></script>
-  <script src="../supabase-client.js"></script>
-  <script src="weishu.js"></script>
+<div class="page">
+<div class="side-panel" id="leftPanel" data-mode="welcome">
+<div class="welcome" id="welcomeContent">
+<span class="big-icon">卫</span>
+<h2>卫戍协议</h2>
+<p>星河防线 · 舰队编组防御作战</p>
+<div class="hint">点击「开始模拟」进入作战</div>
+</div>
+</div>
+<div class="action-panel">
+<button class="action-btn primary" id="btnSolo">开始模拟</button>
+<button class="action-btn" id="btnMode">协议模式</button>
+<button class="action-btn" id="btnSupply">物资调配处</button>
+<button class="action-btn" id="btnBlueprint">蓝图数据库</button>
+<button class="action-btn" id="btnStrategy">防守策略</button>
+<a class="back-link" href="games.html">返回小游戏</a>
+</div>
+</div>
+<div class="modal" id="genericModal">
+<div class="modal-box">
+<button class="modal-close" id="modalCloseBtn">X</button>
+<h3 id="modalTitle">标题</h3>
+<div id="modalBody"></div>
+</div>
+</div>
+<div class="modal" id="modeModal">
+<div class="modal-box">
+<h3>选择协议模式</h3>
+<div id="modeList"></div>
+</div>
+</div>
+<div class="modal" id="strategyModal">
+<div class="modal-box">
+<h3>选择防守策略</h3>
+<div class="modal-tip">策略选择后无法更改</div>
+<div id="strategyList"></div>
+</div>
+</div>
+<div class="modal" id="deployModal">
+<div class="modal-box wide">
+<h3>物资调配处 · 舰队配置</h3>
+<div id="deployBody"></div>
+</div>
+</div>
+<div class="modal" id="carrierModal">
+<div class="modal-box">
+<h3 id="carrierTitle">舰载机配置</h3>
+<div id="carrierBody"></div>
+</div>
+</div>
+<div class="modal" id="upgradeModal">
+<div class="modal-box">
+<h3>回合强化</h3>
+<div id="upgradeOptions"></div>
+</div>
+</div>
+<div class="modal" id="blueModal">
+<div class="modal-box wide">
+<h3>本局蓝图数据库</h3>
+<div id="blueBody"></div>
+</div>
+</div>
+<div class="modal" id="resultModal">
+<div class="modal-box">
+<h3 id="resultTitle">战斗结束</h3>
+<div id="resultContent"></div>
+</div>
+</div>
+<div class="modal" id="confirmModal">
+<div class="modal-box">
+<h3 id="confirmTitle">确认</h3>
+<div id="confirmBody"></div>
+<div class="confirm-actions">
+<button class="btn-action" id="confirmOk">确认</button>
+<button class="btn-action" id="confirmCancel">取消</button>
+</div>
+</div>
+</div>
+<script src="player_ships.js"></script>
+<script src="city_fleets.js"></script>
+<script src="city_defense.js"></script>
+<script src="../supabase-client.js"></script>
+<script src="weishu.js"></script>
 </body>
 </html>
