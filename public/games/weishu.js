@@ -101,7 +101,32 @@ function saveProgress() { localStorage.setItem(PROGRESS_KEY, JSON.stringify(stat
 function loadStats() {
   try { return JSON.parse(localStorage.getItem(STATS_KEY) || '{}'); } catch (e) { return {}; }
 }
-function saveStats() { localStorage.setItem(STATS_KEY, JSON.stringify(state.stats)); }
+function saveStats() { localStorage.setItem(STATS_KEY, JSON.stringify(state.stats)); sbSyncStats(); }
+function sbReady() { return !!(window.DB && window.UEG_CONFIG && window.UEG_CONFIG.supabase); }
+function sbUser() { try { const u = JSON.parse(localStorage.getItem('ueg_current_user') || 'null'); return u && u.username ? u.username : ''; } catch (e) { return ''; } }
+function sbGet(path) { if (!sbReady()) return Promise.resolve({ code: 500 }); return window.DB.rest(path, { method: 'GET' }); }
+function sbWrite(path, method, body) { if (!sbReady()) return Promise.resolve({ code: 500 }); const o = { method: method, body: body }; if (method === 'PATCH' || method === 'POST') o.prefer = 'return=representation'; return window.DB.rest(path, o); }
+function sbSyncFleet() {
+  const u = sbUser(); if (!u) return;
+  const byId = {};
+  state.hand.forEach(function (c) { if (!c.ship) return; if (!byId[c.ship.id]) byId[c.ship.id] = { id: c.ship.id, count: 0, mod: c.mod || '' }; byId[c.ship.id].count++; });
+  const list = [];
+  for (const k in byId) list.push(byId[k]);
+  sbWrite('/rest/v1/weishu_data?username=eq.' + encodeURIComponent(u), 'PATCH', { fleet_json: JSON.stringify(list), updated_at: new Date().toISOString() }).catch(function () {});
+}
+function sbSyncStats() {
+  const u = sbUser(); if (!u) return;
+  sbWrite('/rest/v1/weishu_data?username=eq.' + encodeURIComponent(u), 'PATCH', { stats_json: JSON.stringify(state.stats || {}), updated_at: new Date().toISOString() }).catch(function () {});
+}
+function sbPull() {
+  const u = sbUser(); if (!u) return;
+  sbGet('/rest/v1/weishu_data?username=eq.' + encodeURIComponent(u) + '&select=fleet_json,stats_json').then(function (r) {
+    if (r.code === 200 && Array.isArray(r.data) && r.data[0]) {
+      if (r.data[0].fleet_json) { try { localStorage.setItem('ueg_weishu_fleet', r.data[0].fleet_json); } catch (e) {} }
+      if (r.data[0].stats_json) { try { const st = JSON.parse(r.data[0].stats_json); localStorage.setItem(STATS_KEY, JSON.stringify(st)); } catch (e) {} }
+    }
+  }).catch(function () {});
+}
 
 function cityLevelOf(wave) {
   if (wave <= 3) return '2';
@@ -327,6 +352,50 @@ function openModModal(s) {
     });
   });
 }
+function saveFleetConfig() {
+  const byId = {};
+  state.hand.forEach(function (c) {
+    if (!c.ship) return;
+    if (!byId[c.ship.id]) byId[c.ship.id] = { id: c.ship.id, count: 0, mod: c.mod || '' };
+    byId[c.ship.id].count++;
+  });
+  const list = [];
+  for (const k in byId) list.push(byId[k]);
+  try {
+    localStorage.setItem('ueg_weishu_fleet', JSON.stringify(list));
+    flashTip('舰队配置已保存');
+    sbSyncFleet();
+  } catch (e) { flashTip('保存失败：' + e.message); }
+}
+function loadFleetConfig() {
+  try {
+    const raw = localStorage.getItem('ueg_weishu_fleet');
+    if (!raw) {
+      const u = sbUser();
+      if (u) {
+        sbGet('/rest/v1/weishu_data?username=eq.' + encodeURIComponent(u) + '&select=fleet_json').then(function (r) {
+          if (r.code === 200 && Array.isArray(r.data) && r.data[0] && r.data[0].fleet_json) {
+            localStorage.setItem('ueg_weishu_fleet', r.data[0].fleet_json);
+            flashTip('已从云端加载配置');
+            loadFleetConfig();
+          } else flashTip('本地与云端均无已保存的配置');
+        }).catch(function () { flashTip('没有已保存的配置'); });
+      } else flashTip('没有已保存的配置');
+      return;
+    }
+    const list = JSON.parse(raw);
+    const pool = buildShipPool();
+    state.hand = [];
+    list.forEach(function (it) {
+      const s = pool.find(function (x) { return x.id === it.id; });
+      if (!s) return;
+      const mod = s.mods && s.mods.length ? (it.mod || s.mods[0]) : '';
+      for (let i = 0; i < it.count; i++) state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: mod, spentTech: 0 });
+    });
+    flashTip('配置已加载：' + state.hand.length + ' 艘');
+    showDeployModal();
+  } catch (e) { flashTip('加载失败：' + e.message); }
+}
 function showDeployModal() {
   const modal = document.getElementById('deployModal');
   const body = document.getElementById('deployBody');
@@ -339,7 +408,7 @@ function showDeployModal() {
   const airLimitF = total.f;
   const airLimitC = total.c;
   const cmd = totalCommand();
-  let html = '<div class="deploy-cmd"><span>舰队指挥值</span><b class="' + (cmd > 400 ? 'over' : '') + '">' + cmd + '/400</b><span class="dp-cmd-hint">舰载机不占指挥值</span></div>';
+  let html = '<div class="deploy-cmd"><span>舰队指挥值</span><b class="' + (cmd > 400 ? 'over' : '') + '">' + cmd + '/400</b><span class="dp-cmd-hint">舰载机不占指挥值</span><span class="dp-cmd-actions"><button class="btn-action tiny" id="saveFleetBtn">保存配置</button><button class="btn-action tiny" id="loadFleetBtn">加载配置</button></span></div>';
   html += '<div class="deploy-layout">';
   html += '<div class="deploy-left">';
   const clsOrder = ['carrier', 'battlecruiser', 'battleship', 'cruiser', 'destroyer', 'frigate', 'fighter', 'corvette', 'support'];
@@ -385,6 +454,10 @@ function showDeployModal() {
   html += renderDeployRight();
   body.innerHTML = html;
   modal.classList.add('active');
+  const sf = document.getElementById('saveFleetBtn');
+  if (sf) sf.addEventListener('click', saveFleetConfig);
+  const lf = document.getElementById('loadFleetBtn');
+  if (lf) lf.addEventListener('click', loadFleetConfig);
   body.querySelectorAll('[data-plus]').forEach(function (el) {
     el.addEventListener('click', function () {
       const s = pool.find(function (x) { return x.id === el.dataset.plus; });
@@ -808,7 +881,6 @@ function buyPoolItem(idx) {
   if (item.type === 'ship') {
     state.hand.push({ ship: item.ship, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
     pushNews('购入舰船：' + item.ship.name, 'good');
-    tryMergeShips();
   } else if (item.type === 'equip') {
     state.hand.push({ type: 'equip', eq: item.eq, lv: 1 });
     pushNews('购入装备：' + item.eq.name, 'good');
@@ -1011,7 +1083,6 @@ function castSpell(sp) {
     const s = randomShipByLevel(0);
     state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
     pushNews('增援编队：获得舰船 ' + s.name, 'good');
-    tryMergeShips();
   } else if (sp.id === 'freeze') {
     state.enemies.forEach(function (e) { e.frozenUntil = now + 3000; });
     pushNews('时间冻结：敌方停止移动3秒', 'good');
@@ -1280,7 +1351,7 @@ function finalRoundNextWave() {
   let units = [];
   if (w <= 3) {
     const cfg = (window.CITY_DEFENSE || {})['9'] || [];
-    const take = w <= 2 ? 6 : 8;
+    const take = w <= 2 ? 7 : 9;
     cfg.slice(0, take).forEach(function (e) { for (let k = 0; k < e.count; k++) units.push(e); });
     state.enemies = units.map(function (e, i) {
       const zone = e.cls === 'cruiser' ? 'mid' : (e.cls === 'destroyer' || e.cls === 'frigate' || e.cls === 'corvette' ? 'front' : 'back');
@@ -1363,7 +1434,7 @@ function spawnEnemyWave() {
   const config = (window.CITY_DEFENSE || {})[lv] || [];
   const scale = Math.pow(3, state.wave - 1);
   const units = [];
-  config.forEach(function (e) { for (let k = 0; k < e.count; k++) units.push(e); });
+  config.slice(0, 6).forEach(function (e) { for (let k = 0; k < e.count; k++) units.push(e); });
   const seg = Math.max(1, Math.ceil(units.length / 4));
   state.enemies = units.map(function (e, i) {
     const grp = Math.min(3, Math.floor(i / seg));
@@ -1960,6 +2031,7 @@ function endGame(victory) {
 }
 
 document.addEventListener('DOMContentLoaded', function () {
+  sbPull();
   initGame();
   document.getElementById('btnSolo').addEventListener('click', function () {
     if (state.phase === 'prep' || state.phase === 'battle') {
