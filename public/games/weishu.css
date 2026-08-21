@@ -420,7 +420,7 @@ body {
 .bc-hint { font-size: 0.72rem; color: #6f8aa6; text-align: center; }
 .battle-clock {
   position: absolute;
-  top: 10px;
+  top: 76px;
   right: 14px;
   font-size: 1.4rem;
   font-weight: 800;
