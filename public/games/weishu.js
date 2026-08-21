@@ -1307,6 +1307,21 @@ function makeFortress(scale) {
     ]
   };
 }
+function finalRoundRandomShips(count, minCar, minBc) {
+  const pool = window.PLAYER_SHIPS || [];
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  const carriers = pool.filter(function (s) { return s.cls === 'carrier'; });
+  const bcs = pool.filter(function (s) { return s.cls === 'battlecruiser' || s.cls === 'battleship'; });
+  const others = pool.filter(function (s) { return s.cls !== 'carrier' && s.cls !== 'battlecruiser' && s.cls !== 'battleship'; });
+  const list = [];
+  for (let i = 0; i < minCar; i++) list.push(pick(carriers));
+  for (let i = 0; i < minBc; i++) list.push(pick(bcs));
+  while (list.length < count) list.push(pick(others));
+  return list.slice(0, count).map(function (s) {
+    const nm = /天枢/.test(s.name) ? s.name + '（黑色）' : s.name;
+    return { name: nm, cls: s.cls, hp: s.hp, dmg: s.dmg, armor: s.armor, shield: s.shield, dmgType: s.dmgType, weapon: s.weapon, tier: 6, repair: s.repair ? 1 : 0 };
+  });
+}
 function finalRoundWave4Ships() {
   const pool = window.PLAYER_SHIPS || [];
   const list = [];
@@ -1344,20 +1359,21 @@ function finalRoundNextWave() {
   if (w > 4) {
     state.phase = 'settle';
     renderPrep();
-    endGame(state.factionHp[0] <= 0 && state.factionHp[1] <= 0);
+    endGame(true);
     return;
   }
   const scale = 1 + state.wave * 0.25;
   let units = [];
   if (w <= 3) {
-    const cfg = (window.CITY_DEFENSE || {})['9'] || [];
-    const take = w <= 2 ? 7 : 9;
-    cfg.slice(0, take).forEach(function (e) { for (let k = 0; k < e.count; k++) units.push(e); });
-    state.enemies = units.map(function (e, i) {
+    const cnt = w === 3 ? 130 : 100;
+    const minCar = w === 3 ? 10 : 8;
+    const minBc = w === 3 ? 28 : 25;
+    const ships = finalRoundRandomShips(cnt, minCar, minBc);
+    state.enemies = ships.map(function (e, i) {
       const zone = e.cls === 'cruiser' ? 'mid' : (e.cls === 'destroyer' || e.cls === 'frigate' || e.cls === 'corvette' ? 'front' : 'back');
       return {
-        id: 'en_' + i, name: e.zh, shortName: e.zh, cls: e.cls, zone: zone, count: 1, group: 0, factionIdx: 0,
-        maxHp: Math.round(e.hp * scale), hp: Math.round(e.hp * scale), dmg: Math.round(e.atk * scale),
+        id: 'en_' + i, name: e.name, shortName: e.name, cls: e.cls, zone: zone, count: 1, group: 0, factionIdx: 0,
+        maxHp: Math.round(e.hp * scale), hp: Math.round(e.hp * scale), dmg: Math.round(e.dmg * scale),
         armor: Math.round(e.armor * scale), shield: Math.round(e.shield * scale), dmgType: e.dmgType, weapon: e.weapon,
         tier: e.tier, repair: e.repair ? 1 : 0, alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
       };
@@ -1435,6 +1451,7 @@ function spawnEnemyWave() {
   const scale = Math.pow(1.4, state.wave - 1);
   const units = [];
   config.slice(0, 6).forEach(function (e) { for (let k = 0; k < e.count; k++) units.push(e); });
+  for (let k = 0; k < 30; k++) units.push(config[Math.floor(Math.random() * config.length)]);
   const seg = Math.max(1, Math.ceil(units.length / 4));
   state.enemies = units.map(function (e, i) {
     const grp = Math.min(3, Math.floor(i / seg));
