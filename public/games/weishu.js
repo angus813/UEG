@@ -733,15 +733,21 @@ function updateDeployLight() {
     el.classList.toggle('off', !can);
     const num = el.parentNode.querySelector('.dp-num');
     if (num) num.textContent = have + '/' + s.maxShip;
-    const badge = el.parentNode.querySelector('.dp-lock-badge');
-    if (badge) badge.remove();
-    if (isAir && !hasCarrier()) {
-      const b = document.createElement('div');
-      b.className = 'dp-lock-badge';
-      b.textContent = '需先选择搭载舰船';
-      el.parentNode.appendChild(b);
-    }
   });
+  body.querySelectorAll('.dp-lock-badge').forEach(function (b) { b.remove(); });
+  if (!hasCarrier()) {
+    body.querySelectorAll('.dp-ship').forEach(function (shipEl) {
+      const plus = shipEl.querySelector('[data-plus]');
+      if (!plus) return;
+      const s = pool.find(function (x) { return x.id === plus.dataset.plus; });
+      if (s && (s.cls === 'fighter' || s.cls === 'corvette')) {
+        const b = document.createElement('div');
+        b.className = 'dp-lock-badge';
+        b.textContent = '需先选择搭载舰船';
+        shipEl.insertBefore(b, shipEl.firstChild);
+      }
+    });
+  }
   const right = body.querySelector('.deploy-right');
   if (right) {
     right.outerHTML = renderDeployRight();
