@@ -1744,7 +1744,7 @@ function warpInit() {
   function resize() { W = c.width = window.innerWidth; H = c.height = window.innerHeight; }
   resize();
   window.addEventListener('resize', resize);
-  const N = 10000;
+  const N = 6000;
   const parts = [];
   for (let i = 0; i < N; i++) {
     parts.push({ x: (Math.random() * 2 - 1) * 2000, y: (Math.random() * 2 - 1) * 2000, z: Math.random() * 2000 - 1000, s: 0.5 + Math.random() * 1.5, tw: Math.random() * 6.28 });
@@ -1780,7 +1780,7 @@ function warpInit() {
     return 'rgba(170,120,255,';
   }
   function spawnShipParticles(item) {
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 14; i++) {
       const ang = Math.random() * 6.2832;
       const rad = Math.random() * 160;
       shipP.push({
@@ -1815,7 +1815,7 @@ function warpInit() {
       shake = Math.min(5, shake + 3 * dt);
       entrance.timer -= dt;
       if (entrance.timer <= 0) {
-        entrance.timer = 0.26;
+        entrance.timer = 0.3;
         for (let k = 0; k < 5 && entrance.idx < entrance.list.length; k++) {
           const it = entrance.list[entrance.idx];
           spawnShipParticles(it);
@@ -1877,19 +1877,21 @@ function warpInit() {
       p.dx *= 0.985;
       p.dy *= 0.985;
       p.z += p.v * dt * 12;
-      const pr = project(p.bx + p.dx, p.by + p.dy, p.z, cx, cy);
+      const prx = p.bx + p.dx;
+      const pry = p.by + p.dy;
       const a = Math.max(0, p.life / p.maxLife);
-      const len = Math.min(70, p.v * 0.9 * a);
-      const vx = (pr.x - cx) / (W / 2), vy = (pr.y - cy) / (H / 2);
+      const dl = Math.max(1, Math.sqrt(p.dx * p.dx + p.dy * p.dy));
+      const ux = p.dx / dl, uy = p.dy / dl;
+      const len = Math.min(60, p.v * 0.8 * a);
       ctx.strokeStyle = 'rgba(150,220,255,' + (a * 0.95) + ')';
-      ctx.lineWidth = 1.6;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.moveTo(pr.x, pr.y);
-      ctx.lineTo(pr.x - vx * len, pr.y - vy * len);
+      ctx.moveTo(prx, pry);
+      ctx.lineTo(prx - ux * len, pry - uy * len);
       ctx.stroke();
       ctx.fillStyle = 'rgba(255,255,255,' + a + ')';
       ctx.beginPath();
-      ctx.arc(pr.x, pr.y, 1.6, 0, 6.2832);
+      ctx.arc(prx, pry, 1.5, 0, 6.2832);
       ctx.fill();
     }
     ctx.shadowBlur = 0;
@@ -1967,12 +1969,10 @@ function warpPlayEntrance(list, done) {
   warpInitEntranceFallback(list, done);
 }
 function warpInitEntranceFallback(list, done) {
-  const W = window.innerWidth || 1280;
-  const H = window.innerHeight || 800;
   let idx = 0;
   function nextBatch() {
     for (let k = 0; k < 5 && idx < list.length; k++) idx++;
-    if (idx >= list.length) { setTimeout(done, 200); return; }
+    if (idx >= list.length) { setTimeout(done, 2200); return; }
     setTimeout(nextBatch, 60);
   }
   nextBatch();
