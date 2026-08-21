@@ -8,14 +8,14 @@ const LOCK_SEQUENCE = [{cls:'carrier'}, {cls:'battlecruiser'}, {cls:'cruiser'}, 
 const CONFIG = {
   TOTAL_ROUNDS: 15,
   ROUND_CLOCK: 60,
-  BREACH_CAP: 20,
+  BREACH_CAP: 80,
   HAND_LIMIT: 24,
-  ASSAULT_FACTOR: 0.025,
+  ASSAULT_FACTOR: 0.06,
   DEPLOY_LIMIT: {carrier: 2, battlecruiser: 2, battleship: 2, cruiser: 5, destroyer: 5, frigate: 5, fighter: 5, corvette: 5, support: 5},
   MODES: {
-    beginner: {name: '入门协议', life: 20, funds: [5, 13, 10], reward: 1},
-    prototype: {name: '原型协议', life: 45, funds: [5, 1, 12], reward: 1.5},
-    core: {name: '核心协议', life: 45, funds: [3, 1, 12], reward: 2}
+    beginner: {name: '入门协议', life: 1000, funds: [5, 13, 10], reward: 1},
+    prototype: {name: '原型协议', life: 1000, funds: [5, 1, 12], reward: 1.5},
+    core: {name: '核心协议', life: 1000, funds: [3, 1, 12], reward: 2}
   },
   BARGE: [
     {slots: 1, equipSlots: 0, shield: 1, cost: 2},
@@ -51,14 +51,14 @@ const SPELL_BLUEPRINTS = [
 ];
 
 const DEFENSE_STRATEGIES = [
-  {id: 'aegis', name: '全域防御', org: '联合防御阵列', life: 70, unlock: 0, desc: '我方生命值提高，所有舰船攻击、装甲、生命+15%；入门协议中敌方攻击与生命-30%', effect: function () { state.life = 70; state.maxLife = 70; state.bonuses.dmgMul *= 1.15; state.bonuses.armorMul *= 1.15; if (state.mode === 'beginner') state.enemyDmgMul *= 0.7; }},
-  {id: 'swift', name: '精准打击', org: '雷火科技突击舰队', life: 55, unlock: 1, desc: '战斗开始后，攻击力最高的舰船获得攻击力+70%加成', effect: function () { state.life = 55; state.maxLife = 55; state.swift = true; }},
-  {id: 'recycle', name: '战利品回收', org: '诺玛运输护航编队', life: 55, unlock: 1, desc: '每击倒30个敌方单位，战斗结束时奖励2-3资金', effect: function () { state.life = 55; state.maxLife = 55; state.recycle = true; }},
-  {id: 'gamer', name: '军火商人', org: '比邻星自由贸易同盟', life: 50, unlock: 1, desc: '每消耗18资金，随机获得1艘不高于当前补给等级的舰船', effect: function () { state.life = 50; state.maxLife = 50; state.gacha = true; }},
-  {id: 'intel', name: '情报网络', org: '未央资助计划', life: 30, unlock: 2, desc: '每回合第一次刷新为特殊刷新，可刷出补给等级+1的舰船（最高6级）', effect: function () { state.life = 30; state.maxLife = 30; state.intel = true; }},
-  {id: 'spell', name: '战术支援', org: '安东尼奥斯联合舰队', life: 45, unlock: 2, desc: '补给等级到达3级后，每回合开始时随机获得1个战术指令', effect: function () { state.life = 45; state.maxLife = 45; state.spellStrategy = true; }},
-  {id: 'drill', name: '军官学院', org: '木星工业学院', life: 60, unlock: 3, desc: '同名舰船仅需2艘即可晋升精锐，晋升时额外奖励1资金', effect: function () { state.life = 60; state.maxLife = 60; state.mergeCount = 2; state.mergeBonus = 1; }},
-  {id: 'craft', name: '精工制造', org: '安东塔斯重工', life: 50, unlock: 3, desc: '购买舰船资金-1，购买装备与刷新资金+1', effect: function () { state.life = 50; state.maxLife = 50; state.craft = true; }}
+  {id: 'aegis', name: '全域防御', org: '联合防御阵列', life: 1000, unlock: 0, desc: '我方生命值提高，所有舰船攻击、装甲、生命+15%；入门协议中敌方攻击与生命-30%', effect: function () { state.life = 1000; state.maxLife = 1000; state.bonuses.dmgMul *= 1.15; state.bonuses.armorMul *= 1.15; if (state.mode === 'beginner') state.enemyDmgMul *= 0.7; }},
+  {id: 'swift', name: '精准打击', org: '雷火科技突击舰队', life: 850, unlock: 1, desc: '战斗开始后，攻击力最高的舰船获得攻击力+70%加成', effect: function () { state.life = 850; state.maxLife = 850; state.swift = true; }},
+  {id: 'recycle', name: '战利品回收', org: '诺玛运输护航编队', life: 850, unlock: 1, desc: '每击倒30个敌方单位，战斗结束时奖励2-3资金', effect: function () { state.life = 850; state.maxLife = 850; state.recycle = true; }},
+  {id: 'gamer', name: '军火商人', org: '比邻星自由贸易同盟', life: 800, unlock: 1, desc: '每消耗18资金，随机获得1艘不高于当前补给等级的舰船', effect: function () { state.life = 800; state.maxLife = 800; state.gacha = true; }},
+  {id: 'intel', name: '情报网络', org: '未央资助计划', life: 700, unlock: 2, desc: '每回合第一次刷新为特殊刷新，可刷出补给等级+1的舰船（最高6级）', effect: function () { state.life = 700; state.maxLife = 700; state.intel = true; }},
+  {id: 'spell', name: '战术支援', org: '安东尼奥斯联合舰队', life: 750, unlock: 2, desc: '补给等级到达3级后，每回合开始时随机获得1个战术指令', effect: function () { state.life = 750; state.maxLife = 750; state.spellStrategy = true; }},
+  {id: 'drill', name: '军官学院', org: '木星工业学院', life: 900, unlock: 3, desc: '同名舰船仅需2艘即可晋升精锐，晋升时额外奖励1资金', effect: function () { state.life = 900; state.maxLife = 900; state.mergeCount = 2; state.mergeBonus = 1; }},
+  {id: 'craft', name: '精工制造', org: '安东塔斯重工', life: 800, unlock: 3, desc: '购买舰船资金-1，购买装备与刷新资金+1', effect: function () { state.life = 800; state.maxLife = 800; state.craft = true; }}
 ];
 
 const UPGRADE_POOL = [
@@ -170,7 +170,7 @@ function initGame() {
   state = {
     phase: 'welcome', mode: 'beginner', strategy: null,
     factions: [], factionHp: [], factionMaxHp: [],
-    life: 70, maxLife: 70, funds: 0, techPoints: 0,
+    life: 1000, maxLife: 70, funds: 0, techPoints: 0,
     wave: 1, bargeLevel: 1, upgradeDiscount: 0, shield: 1,
     pool: [], poolFrozen: false, hand: [], units: [], enemies: [],
     bonuses: { dmgMul: 1, hpMul: 1, rateMul: 1, armorBonus: 0, armorMul: 1, rangeBonus: 0, directMul: 1, projMul: 1, airMul: 1, shieldBonus: 0, critChance: 0, energyMul: 1 },
@@ -298,7 +298,7 @@ function showDeployModal() {
     let locked = false;
     if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || airSel >= airLimit;
     html += '<div class="dp-group' + (locked ? ' locked' : '') + '" data-cls="' + cls + '">';
-    html += '<div class="dp-group-title">' + CLS_ZH[cls] + ' <span class="dp-limit">' + cnt + '/' + limit + '</span>';
+    html += '<div class="dp-group-title">' + CLS_ZH[cls] + ' <span class="dp-limit">' + cnt + '/' + (cls === 'fighter' || cls === 'corvette' ? '∞' : limit) + '</span>';
     if (cls === 'fighter' || cls === 'corvette') {
       html += ' <span class="dp-aircap">搭载 ' + airSel + '/' + airLimit + '</span>';
     }
@@ -309,7 +309,7 @@ function showDeployModal() {
     html += '<div class="dp-ships">';
     list.forEach(function (s) {
       const on = state.hand.some(function (c) { return c.ship.id === s.id; });
-      const disabled = !on && (cnt >= limit || locked);
+      const disabled = !on && ((cls !== 'fighter' && cls !== 'corvette' && cnt >= limit) || locked);
       html += '<div class="dp-ship' + (on ? ' on' : '') + (disabled ? ' off' : '') + '" data-id="' + s.id + '">';
       html += '<div class="dp-name">' + s.name + '</div>';
       html += '<div class="dp-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' 甲 ' + s.armor + ' ' + WEAPON_LABEL[s.weapon] + DMGTYPE_LABEL[s.dmgType] + '</div>';
@@ -347,7 +347,7 @@ function showDeployModal() {
         return;
       }
       const cnt = selectedShipCount(s.cls);
-      if (cnt >= CONFIG.DEPLOY_LIMIT[s.cls]) { flashTip('该舰种已达配队上限'); return; }
+      if (s.cls !== 'fighter' && s.cls !== 'corvette' && cnt >= CONFIG.DEPLOY_LIMIT[s.cls]) { flashTip('该舰种已达配队上限'); return; }
       if ((s.cls === 'fighter' || s.cls === 'corvette') && !hasCarrier()) { flashTip('需先选择搭载舰船'); return; }
       if ((s.cls === 'fighter' || s.cls === 'corvette') && selectedAirCount() >= carrierTotal().f + carrierTotal().c) { flashTip('航母搭载已满'); return; }
       state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
@@ -912,7 +912,7 @@ function tryMergeShips() {
       const base = three[0].card;
       const equips = [];
       three.forEach(function (x) {
-        if (x.card.equips) equips = equips.concat(x.card.equips);
+        if (x.card.equips) equips.push.apply(equips, x.card.equips);
         const gi = state.hand.indexOf(x.card);
         if (gi > -1) state.hand.splice(gi, 1);
       });
@@ -1287,9 +1287,10 @@ function settleRound(win) {
   }
   if (win) {
     const assault = calcAssault();
-    const dmg = Math.round(state.shield + assault);
+    const cap = 40 + state.wave * 9;
+    const dmg = Math.round(state.shield + Math.min(assault, cap));
     state.factionHp = state.factionHp.map(function (h) { return Math.max(0, h - dmg); });
-    pushNews('防线反击：护盾 ' + Math.round(state.shield) + ' + 攻坚 ' + assault + '，对敌方造成 ' + dmg + ' 点伤害', 'good');
+    pushNews('防线反击：护盾 ' + Math.round(state.shield) + ' + 攻坚 ' + Math.min(assault, cap) + '，对敌方造成 ' + dmg + ' 点伤害', 'good');
   } else {
     const remaining = state.enemies.reduce(function (s, e) { return s + (e.alive ? e.dmg : 0); }, 0);
     const actual = Math.min(CONFIG.BREACH_CAP, Math.round(remaining * 0.3));
