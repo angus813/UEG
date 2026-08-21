@@ -313,7 +313,7 @@ function openModModal(s) {
       state.hand.forEach(function (c) { if (c.ship && c.ship.id === s.id) c.mod = m; });
       flashTip('已更换模块：' + m);
       modal.classList.remove('active');
-      updateDeployRight();
+      updateDeployLight();
       const pb = document.getElementById('deployBody');
       if (pb) pb.querySelectorAll('.dp-ship').forEach(function (x) { x.classList.remove('on'); });
       showDeployModal();
@@ -371,23 +371,7 @@ function showDeployModal() {
     html += '</div></div>';
   }
   html += '</div>';
-  html += '<div class="deploy-right">';
-  html += '<div class="dp-right-title">我方编组（' + state.hand.length + ' 艘）</div>';
-  html += renderDeployPreview();
-  html += '<div class="dp-selected" id="dpSelected">';
-  if (!state.hand.length) html += '<div class="dp-empty-tip">尚未选择舰船</div>';
-  const byId = {};
-  state.hand.forEach(function (card) { (byId[card.ship.id] = byId[card.ship.id] || []).push(card); });
-  for (const id in byId) {
-    const cards = byId[id];
-    const card = cards[0];
-    html += '<div class="dp-sel-item"><span>' + card.ship.name + ' ×' + cards.length + (card.mod ? ' [' + card.mod + ']' : '') + '</span><button class="btn-action small danger" data-remove="' + id + '">移除</button></div>';
-  }
-  html += '</div>';
-  html += '<div class="dp-actions">';
-  html += '<button class="btn-action primary-btn" id="deployConfirm">确认配队，开始模拟</button>';
-  html += '<button class="btn-action" id="deployClear">清空</button>';
-  html += '</div></div></div>';
+  html += renderDeployRight();
   body.innerHTML = html;
   modal.classList.add('active');
   body.querySelectorAll('[data-plus]').forEach(function (el) {
@@ -405,14 +389,14 @@ function showDeployModal() {
       }
       state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: s.mods && s.mods.length ? s.mods[0] : '', spentTech: 0 });
       flashTip('已加入编组：' + s.name);
-      showDeployModal();
+      updateDeployLight();
     });
   });
   body.querySelectorAll('[data-minus]').forEach(function (el) {
     el.addEventListener('click', function () {
       const id = el.dataset.minus;
       const idx = state.hand.findIndex(function (c) { return c.ship && c.ship.id === id; });
-      if (idx > -1) { state.hand.splice(idx, 1); flashTip('已移除 1 艘'); showDeployModal(); }
+      if (idx > -1) { state.hand.splice(idx, 1); flashTip('已移除 1 艘'); updateDeployLight(); }
     });
   });
   body.querySelectorAll('[data-mod]').forEach(function (el) {
@@ -421,90 +405,8 @@ function showDeployModal() {
       if (s) openModModal(s);
     });
   });
-  body.querySelectorAll('[data-remove]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      const id = btn.dataset.remove;
-      state.hand = state.hand.filter(function (c) { return !(c.ship && c.ship.id === id); });
-      showDeployModal();
-    });
-  });
-  document.getElementById('deployConfirm').addEventListener('click', function () {
-    if (!state.hand.length) { flashTip('请至少选择 1 艘舰船'); return; }
-    modal.classList.remove('active');
-    startSimulation();
-  });
-  document.getElementById('deployClear').addEventListener('click', function () {
-    state.hand = [];
-    showDeployModal();
-  });
+  bindDeployRight(body);
 }
-function updateDeployRight() {
-  const body = document.getElementById('deployBody');
-  if (!body) return;
-  const right = body.querySelector('.deploy-right');
-  if (!right) return;
-  const cmd = totalCommand();
-  let html = '<div class="deploy-cmd"><span>舰队指挥值</span><b class="' + (cmd > 400 ? 'over' : '') + '">' + cmd + '/400</b></div>';
-  html += '<div class="dp-right-title">我方编组（' + state.hand.length + ' 艘）</div>';
-  html += renderDeployPreview();
-  html += '<div class="dp-selected">';
-  if (!state.hand.length) html += '<div class="dp-empty-tip">尚未选择舰船</div>';
-  const byId = {};
-  state.hand.forEach(function (card) { (byId[card.ship.id] = byId[card.ship.id] || []).push(card); });
-  for (const id in byId) {
-    const cards = byId[id];
-    const card = cards[0];
-    html += '<div class="dp-sel-item"><span>' + card.ship.name + ' ×' + cards.length + (card.mod ? ' [' + card.mod + ']' : '') + '</span><button class="btn-action small danger" data-remove="' + id + '">移除</button></div>';
-  }
-  html += '</div>';
-  html += '<div class="dp-actions">';
-  html += '<button class="btn-action primary-btn" id="deployConfirm">确认配队，开始模拟</button>';
-  html += '<button class="btn-action" id="deployClear">清空</button>';
-  html += '</div>';
-  right.innerHTML = html;
-  right.querySelectorAll('[data-remove]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      const id = btn.dataset.remove;
-      state.hand = state.hand.filter(function (c) { return !(c.ship && c.ship.id === id); });
-      showDeployModal();
-    });
-  });
-  document.getElementById('deployConfirm').addEventListener('click', function () {
-    if (!state.hand.length) { flashTip('请至少选择 1 艘舰船'); return; }
-    document.getElementById('deployModal').classList.remove('active');
-    startSimulation();
-  });
-  document.getElementById('deployClear').addEventListener('click', function () { state.hand = []; showDeployModal(); });
-}
-
-function renderDeployPreview() {
-  const rows = [[], [], []];
-  state.hand.forEach(function (card) {
-    rows[clsToRow(card.ship.cls)].push(card);
-  });
-  const labels = ['前排', '中排', '后排'];
-  let html = '<div class="dp-preview">';
-  rows.forEach(function (arr, i) {
-    html += '<div class="dp-prow">';
-    html += '<div class="dp-plabel">' + labels[i] + '</div>';
-    html += '<div class="dp-pcells">';
-    if (!arr.length) {
-      html += '<div class="dp-pempty">—</div>';
-    } else {
-      arr.forEach(function (card) {
-        const color = CLS_COLOR[card.ship.cls] || '#8fa3c8';
-        html += '<div class="dp-pcell" style="border-color:' + color + ';" title="' + card.ship.name + '">';
-        html += '<span class="dp-picon" style="background:' + color + '26;color:' + color + ';">' + (CLS_ICON[card.ship.cls] || '◇') + '</span>';
-        html += '<span class="dp-pname">' + (card.ship.shortName || card.ship.name) + '</span>';
-        html += '</div>';
-      });
-    }
-    html += '</div></div>';
-  });
-  html += '</div>';
-  return html;
-}
-
 function startSimulation() {
   const f1 = Math.floor(Math.random() * 6);
   let f2 = Math.floor(Math.random() * 6);
@@ -538,24 +440,6 @@ function startSimulation() {
   state.phase = 'prep';
   startPrepRound();
 }
-
-function fundsOfRound(wave) {
-  const m = CONFIG.MODES[state.mode].funds;
-  if (state.mode === 'beginner') {
-    if (wave === 1) return m[0];
-    if (wave === 2) return m[1];
-    return m[2];
-  }
-  return Math.min(m[2], m[0] + (wave - 1));
-}
-function bargeShield() {
-  return CONFIG.BARGE[state.bargeLevel - 1].shield + state.bonuses.shieldBonus;
-}
-function bargeUpgradeCost() {
-  const base = CONFIG.BARGE[state.bargeLevel - 1].cost;
-  return Math.max(0, base - state.upgradeDiscount);
-}
-
 function startPrepRound() {
   state.phase = 'prep';
   stopBattleLoop();
@@ -589,34 +473,6 @@ function startPrepRound() {
   }
   renderPrep();
 }
-
-function randomShipByLevel(plus) {
-  const pool = buildShipPool().filter(function (s) {
-    const order = { frigate: 1, destroyer: 2, corvette: 2, fighter: 2, cruiser: 3, support: 3, battlecruiser: 4, battleship: 5, carrier: 6 };
-    return (order[s.cls] || 3) <= state.bargeLevel + (plus || 0);
-  });
-  if (!pool.length) return buildShipPool()[Math.floor(Math.random() * buildShipPool().length)];
-  return pool[Math.floor(Math.random() * pool.length)];
-}
-
-function generatePool() {
-  const b = CONFIG.BARGE[state.bargeLevel - 1];
-  const pool = [];
-  for (let i = 0; i < b.slots; i++) {
-    const s = randomShipByLevel(0);
-    pool.push({ type: 'ship', ship: s, price: Math.max(2, Math.round(s.hp / 120)) });
-  }
-  for (let i = 0; i < b.equipSlots; i++) {
-    const eq = EQUIP_BLUEPRINTS[Math.floor(Math.random() * EQUIP_BLUEPRINTS.length)];
-    pool.push({ type: 'equip', eq: eq, price: eq.cost });
-  }
-  if (state.bargeLevel >= 3 && Math.random() < 0.5) {
-    const sp = SPELL_BLUEPRINTS[Math.floor(Math.random() * SPELL_BLUEPRINTS.length)];
-    pool.push({ type: 'spell', sp: sp, price: sp.cost });
-  }
-  state.pool = pool;
-}
-
 function renderTopStatus() {
   const m = CONFIG.MODES[state.mode];
   let html = '<div class="top-status">';
@@ -633,12 +489,6 @@ function renderTopStatus() {
   html += '</div></div>';
   return html;
 }
-
-function renderNewsTicker() {
-  let items = newsList.slice(-3).map(function (n) { return '<span class="nt-item ' + n.cls + '">' + n.msg + '</span>'; }).join('');
-  return '<div class="news-ticker" id="newsTicker">' + items + '</div>';
-}
-
 function renderPrep() {
   const panel = document.getElementById('leftPanel');
   panel.dataset.mode = 'prep';
@@ -657,7 +507,6 @@ function renderPrep() {
   panel.innerHTML = html;
   renderPoolSectionBind();
 }
-
 function renderBarge() {
   const b = CONFIG.BARGE[state.bargeLevel - 1];
   const next = state.bargeLevel < 6 ? CONFIG.BARGE[state.bargeLevel] : null;
@@ -675,7 +524,155 @@ function renderBarge() {
   html += '</div>';
   return html;
 }
-
+function bargeShield() {
+  return CONFIG.BARGE[state.bargeLevel - 1].shield + state.bonuses.shieldBonus;
+}
+function bargeUpgradeCost() {
+  const base = CONFIG.BARGE[state.bargeLevel - 1].cost;
+  return Math.max(0, base - state.upgradeDiscount);
+}
+function fundsOfRound(wave) {
+  const m = CONFIG.MODES[state.mode].funds;
+  if (state.mode === 'beginner') {
+    if (wave === 1) return m[0];
+    if (wave === 2) return m[1];
+    return m[2];
+  }
+  return Math.min(m[2], m[0] + (wave - 1));
+}
+function generatePool() {
+  const b = CONFIG.BARGE[state.bargeLevel - 1];
+  const pool = [];
+  for (let i = 0; i < b.slots; i++) {
+    const s = randomShipByLevel(0);
+    pool.push({ type: 'ship', ship: s, price: Math.max(2, Math.round(s.hp / 120)) });
+  }
+  for (let i = 0; i < b.equipSlots; i++) {
+    const eq = EQUIP_BLUEPRINTS[Math.floor(Math.random() * EQUIP_BLUEPRINTS.length)];
+    pool.push({ type: 'equip', eq: eq, price: eq.cost });
+  }
+  if (state.bargeLevel >= 3 && Math.random() < 0.5) {
+    const sp = SPELL_BLUEPRINTS[Math.floor(Math.random() * SPELL_BLUEPRINTS.length)];
+    pool.push({ type: 'spell', sp: sp, price: sp.cost });
+  }
+  state.pool = pool;
+}
+function randomShipByLevel(plus) {
+  const pool = buildShipPool().filter(function (s) {
+    const order = { frigate: 1, destroyer: 2, corvette: 2, fighter: 2, cruiser: 3, support: 3, battlecruiser: 4, battleship: 5, carrier: 6 };
+    return (order[s.cls] || 3) <= state.bargeLevel + (plus || 0);
+  });
+  if (!pool.length) return buildShipPool()[Math.floor(Math.random() * buildShipPool().length)];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function refreshCost() {
+  return 2 + (state.craft ? 1 : 0);
+}
+function renderDeployPreview() {
+  const rows = [[], [], []];
+  state.hand.forEach(function (card) {
+    rows[clsToRow(card.ship.cls)].push(card);
+  });
+  const labels = ['前排', '中排', '后排'];
+  let html = '<div class="dp-preview">';
+  rows.forEach(function (arr, i) {
+    html += '<div class="dp-prow">';
+    html += '<div class="dp-plabel">' + labels[i] + '</div>';
+    html += '<div class="dp-pcells">';
+    if (!arr.length) {
+      html += '<div class="dp-pempty">—</div>';
+    } else {
+      arr.forEach(function (card) {
+        const color = CLS_COLOR[card.ship.cls] || '#8fa3c8';
+        html += '<div class="dp-pcell" style="border-color:' + color + ';" title="' + card.ship.name + '">';
+        html += '<span class="dp-picon" style="background:' + color + '26;color:' + color + ';">' + (CLS_ICON[card.ship.cls] || '◇') + '</span>';
+        html += '<span class="dp-pname">' + (card.ship.shortName || card.ship.name) + '</span>';
+        html += '</div>';
+      });
+    }
+    html += '</div></div>';
+  });
+  html += '</div>';
+  return html;
+}
+function renderNewsTicker() {
+  let items = newsList.slice(-3).map(function (n) { return '<span class="nt-item ' + n.cls + '">' + n.msg + '</span>'; }).join('');
+  return '<div class="news-ticker" id="newsTicker">' + items + '</div>';
+}
+function freezePool() {
+  if (state.funds < 2) { flashTip('资金不足'); return; }
+  state.funds -= 2;
+  state.poolFrozen = true;
+  pushNews('补给栏位已冻结至下一回合', 'good');
+  renderPrep();
+}
+function refreshPool() {
+  const cost = refreshCost();
+  let free = false;
+  if (state.intel) {
+    if (!state.poolRefreshed) { free = true; state.poolRefreshed = true; }
+  }
+  if (!free && state.funds < cost) { flashTip('资金不足'); return; }
+  if (!free) state.funds -= cost;
+  generatePool();
+  pushNews('补给已重新调配', '');
+  renderPrep();
+}
+function updateDeployRight() {
+  const body = document.getElementById('deployBody');
+  if (!body) return;
+  const right = body.querySelector('.deploy-right');
+  const pool = buildShipPool();
+  const total = carrierTotal();
+  const airSel = selectedAirCount();
+  const airLimit = total.f + total.c;
+  let html = '<div class="dp-right-title">我方编组（' + state.hand.length + ' 艘）</div>';
+  html += renderDeployPreview();
+  html += '<div class="dp-selected">';
+  if (!state.hand.length) html += '<div class="dp-empty-tip">尚未选择舰船</div>';
+  state.hand.forEach(function (card, i) {
+    html += '<div class="dp-sel-item"><span>' + card.ship.name + '</span><button class="btn-action small danger" data-remove="' + i + '">移除</button></div>';
+  });
+  html += '</div>';
+  html += '<div class="dp-actions">';
+  html += '<button class="btn-action primary-btn" id="deployConfirm">确认配队，开始模拟</button>';
+  html += '<button class="btn-action" id="deployClear">清空</button>';
+  html += '</div>';
+  right.innerHTML = html;
+  right.querySelectorAll('[data-remove]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const i = parseInt(btn.dataset.remove, 10);
+      state.hand.splice(i, 1);
+      updateDeployRight();
+    });
+  });
+  document.getElementById('deployConfirm').addEventListener('click', function () {
+    if (!state.hand.length) { flashTip('请至少选择 1 艘舰船'); return; }
+    document.getElementById('deployModal').classList.remove('active');
+    startSimulation();
+  });
+  document.getElementById('deployClear').addEventListener('click', function () {
+    state.hand = [];
+    updateDeployRight();
+  });
+  body.querySelectorAll('.dp-group').forEach(function (g) {
+    const cls = g.dataset.cls;
+    if (!cls) return;
+    const limit = CONFIG.DEPLOY_LIMIT[cls];
+    const cnt = selectedShipCount(cls);
+    const cap = g.querySelector('.dp-limit');
+    if (cap) cap.textContent = cnt + '/' + limit;
+    let locked = false;
+    if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || airSel >= airLimit;
+    g.classList.toggle('locked', locked);
+    g.querySelectorAll('.dp-ship').forEach(function (el) {
+      const id = el.dataset.id;
+      const on = state.hand.some(function (c) { return c.ship.id === id; });
+      el.classList.toggle('on', on);
+      el.classList.toggle('off', !on && (cnt >= limit || locked));
+    });
+  });
+}
 function upgradeBarge() {
   if (state.bargeLevel >= 6) { flashTip('补给等级已满'); return; }
   const cost = bargeUpgradeCost();
@@ -691,28 +688,66 @@ function upgradeBarge() {
   }
   renderPrep();
 }
-
-function refreshCost() {
-  return 2 + (state.craft ? 1 : 0);
-}
-function refreshPool() {
-  const cost = refreshCost();
-  let free = false;
-  if (state.intel) {
-    if (!state.poolRefreshed) { free = true; state.poolRefreshed = true; }
+function renderDeployRight() {
+  const cmd = totalCommand();
+  let html = '<div class="deploy-right">';
+  html += '<div class="deploy-cmd"><span>舰队指挥值</span><b class="' + (cmd > 400 ? 'over' : '') + '">' + cmd + '/400</b><span class="cmd-hint">舰载机不占指挥值</span></div>';
+  html += '<div class="dp-right-title">我方编组（' + state.hand.length + ' 艘）</div>';
+  html += renderDeployPreview();
+  html += '<div class="dp-selected" id="dpSelected">';
+  if (!state.hand.length) html += '<div class="dp-empty-tip">尚未选择舰船</div>';
+  const byId = {};
+  state.hand.forEach(function (card) { (byId[card.ship.id] = byId[card.ship.id] || []).push(card); });
+  for (const id in byId) {
+    const cards = byId[id];
+    const card = cards[0];
+    html += '<div class="dp-sel-item"><span>' + card.ship.name + ' ×' + cards.length + (card.mod ? ' [' + card.mod + ']' : '') + '</span><button class="btn-action small danger" data-remove="' + id + '">移除</button></div>';
   }
-  if (!free && state.funds < cost) { flashTip('资金不足'); return; }
-  if (!free) state.funds -= cost;
-  generatePool();
-  pushNews('补给已重新调配', '');
-  renderPrep();
+  html += '</div>';
+  html += '<div class="dp-actions">';
+  html += '<button class="btn-action primary-btn" id="deployConfirm">确认配队，开始模拟</button>';
+  html += '<button class="btn-action" id="deployClear">清空</button>';
+  html += '</div></div></div>';
+  return html;
 }
-function freezePool() {
-  if (state.funds < 2) { flashTip('资金不足'); return; }
-  state.funds -= 2;
-  state.poolFrozen = true;
-  pushNews('补给栏位已冻结至下一回合', 'good');
-  renderPrep();
+function updateDeployLight() {
+  const body = document.getElementById('deployBody');
+  if (!body) return;
+  const pool = buildShipPool();
+  body.querySelectorAll('[data-plus]').forEach(function (el) {
+    const s = pool.find(function (x) { return x.id === el.dataset.plus; });
+    if (!s) return;
+    const have = countOfId(s.id);
+    const isAir = s.cls === 'fighter' || s.cls === 'corvette';
+    let can = have < s.maxShip;
+    if (isAir) can = can && hasCarrier() && selectedAirCount() < carrierTotal().f + carrierTotal().c;
+    else can = can && totalCommand() + s.command <= 400;
+    el.classList.toggle('off', !can);
+    const num = el.parentNode.querySelector('.dp-num');
+    if (num) num.textContent = have + '/' + s.maxShip;
+  });
+  const right = body.querySelector('.deploy-right');
+  if (right) {
+    right.outerHTML = renderDeployRight();
+    bindDeployRight(body.querySelector('.deploy-right'));
+  }
+}
+function bindDeployRight(root) {
+  root.querySelectorAll('[data-remove]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      const id = btn.dataset.remove;
+      state.hand = state.hand.filter(function (c) { return !(c.ship && c.ship.id === id); });
+      updateDeployLight();
+    });
+  });
+  const cf = root.querySelector('#deployConfirm');
+  if (cf) cf.addEventListener('click', function () {
+    if (!state.hand.length) { flashTip('请至少选择 1 艘舰船'); return; }
+    document.getElementById('deployModal').classList.remove('active');
+    startSimulation();
+  });
+  const cl = root.querySelector('#deployClear');
+  if (cl) cl.addEventListener('click', function () { state.hand = []; updateDeployLight(); });
 }
 function countHand(type) { return state.hand.filter(function (c) { return type === 'ship' ? !!c.ship : c.type === type; }).length; }
 
@@ -1835,8 +1870,6 @@ function warpInit() {
     const offX = Math.sin(t * 6.9) * shake;
     const offY = Math.cos(t * 5.7) * shake * 0.7;
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(3,5,14,0.28)';
-    ctx.fillRect(0, 0, W, H);
     ctx.save();
     ctx.translate(offX, offY);
     const cx = W / 2 + offX, cy = H / 2 + offY;
