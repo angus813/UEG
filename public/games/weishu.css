@@ -701,3 +701,6 @@ body {
 .mod-item:hover{border-color:#7fd4ff}
 .mod-item em{color:#7a8aa0;font-style:normal;font-size:12px}
 #warpCanvas{position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:300;pointer-events:none}
+
+.fleet-card.warp-in{opacity:.25;border-color:#4a8aff;box-shadow:0 0 18px rgba(80,160,255,.55);animation:warpPulse .35s infinite alternate}
+@keyframes warpPulse{from{opacity:.12}to{opacity:.5}}
