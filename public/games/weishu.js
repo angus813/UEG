@@ -8,7 +8,7 @@ const LOCK_SEQUENCE = [{cls:'carrier'}, {cls:'battlecruiser'}, {cls:'cruiser'}, 
 const CONFIG = {
   TOTAL_ROUNDS: 15,
   ROUND_CLOCK: 120,
-  BREACH_CAP: 80,
+  BREACH_CAP: 60,
   HAND_LIMIT: 24,
   EQUIP_LIMIT: 12,
   SPELL_LIMIT: 8,
@@ -638,6 +638,7 @@ function generatePool() {
     pool.push({ type: 'spell', sp: sp, price: sp.cost });
   }
   state.pool = pool;
+  return pool;
 }
 function randomShipByLevel(plus) {
   const pool = buildShipPool().filter(function (s) {
@@ -1272,7 +1273,7 @@ function rebuildUnits() {
       else if (eq.id === 'energy') energyMul *= 1.4;
       else if (eq.id === 'crit') critBonus += 0.15;
     });
-    const waveScale = 1 + (state.wave - 1) * 0.04;
+    const waveScale = 1 + (state.wave - 1) * 0.08;
     const maxHp = Math.round(s.hp * hpMul * state.bonuses.hpMul * waveScale);
     const hasShield = s.dmgType === 'energy' || (card.equips || []).some(function (e) { return e.id === 'shield'; });
     return {
@@ -1463,7 +1464,7 @@ function fortressAttack(now) {
 function spawnEnemyWave() {
   const lv = cityLevelOf(state.wave);
   const config = (window.CITY_DEFENSE || {})[lv] || [];
-  const scale = Math.pow(1.4, state.wave - 1);
+  const scale = Math.pow(1.1, state.wave - 1);
   const units = [];
   config.slice(0, 6).forEach(function (e) { for (let k = 0; k < e.count; k++) units.push(e); });
   for (let k = 0; k < 30; k++) units.push(config[Math.floor(Math.random() * config.length)]);
@@ -1484,6 +1485,7 @@ function spawnEnemyWave() {
 }
 function startBattle() {
   if (state.phase !== 'prep') return;
+  if (typeof interTimer !== 'undefined' && interTimer) { clearInterval(interTimer); interTimer = null; }
   if (!state.hand.some(function (c) { return c.ship; })) { flashTip('编组中没有舰船'); return; }
   state.phase = 'battle';
   state.repairUntil = Date.now() + 2500;
@@ -1666,8 +1668,8 @@ function gameTick(now, dt) {
   }
   const myAlive = state.units.some(function (u) { return u.alive; });
   const enAlive = state.enemies.some(function (e) { return e.alive; });
-  if (!enAlive) { settleRound(true); return; }
   if (!myAlive) { settleRound(false); return; }
+  if (!enAlive) { settleRound(true); return; }
   if (state.life <= 0) { state.life = 0; endGame(false); }
 }
 
