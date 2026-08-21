@@ -1,4 +1,4 @@
-// 舰船属性数据（ship_database.json + 舰船详情.xlsx + 百科全书：评级/描述/故事/语录）
+
 window.SHIP_STATS_ALIAS = {
   "乌拉诺斯之矛级": "乌拉诺斯之矛",
   "RB7-13型": "RB7",

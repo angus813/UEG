@@ -680,3 +680,5 @@ body {
   .fleet-card { flex: 1 1 140px; min-width: 130px; }
   .action-panel { width: 130px; }
 }
+.fc-repair { font-size: 0.62rem; color: #7dffa9; border: 1px solid #2f9e63; border-radius: 3px; padding: 0 3px; margin-left: 4px; background: rgba(45, 180, 105, 0.12); }
+.dmg-pop.heal { color: #6dff9e; text-shadow: 0 0 6px rgba(80, 255, 150, 0.7); }

@@ -594,7 +594,7 @@
                         if (!placed) { success = false; break; }
                     }
                     if (success) {
-                        // 障碍格（第10关起，最多4个）
+                        
                         let blockedCells = [];
                         if (levelNumber >= 10) {
                             const obstacleCount = Math.min(2 + Math.floor((levelNumber - 10) / 5) * 2, 4);
@@ -612,7 +612,7 @@
                         return { gridSize, targetPattern: grid, pieces, blockedCells };
                     }
                 }
-                // 后备关卡
+                
                 return {
                     gridSize: 4,
                     targetPattern: [

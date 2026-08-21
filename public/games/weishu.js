@@ -432,7 +432,7 @@ function updateDeployRight() {
 function renderDeployPreview() {
   const rows = [[], [], []];
   state.hand.forEach(function (card) {
-    rows[card.ship.row].push(card);
+    rows[clsToRow(card.ship.cls)].push(card);
   });
   const labels = ['前排', '中排', '后排'];
   let html = '<div class="dp-preview">';
@@ -447,7 +447,7 @@ function renderDeployPreview() {
         const color = CLS_COLOR[card.ship.cls] || '#8fa3c8';
         html += '<div class="dp-pcell" style="border-color:' + color + ';" title="' + card.ship.name + '">';
         html += '<span class="dp-picon" style="background:' + color + '26;color:' + color + ';">' + (CLS_ICON[card.ship.cls] || '◇') + '</span>';
-        html += '<span class="dp-pname">' + card.ship.shortName + '</span>';
+        html += '<span class="dp-pname">' + (card.ship.shortName || card.ship.name) + '</span>';
         html += '</div>';
       });
     }
@@ -733,7 +733,7 @@ function renderHandSection() {
     if (card.ship) {
       const s = card.ship;
       html += '<div class="hand-card' + (card.elite ? ' elite' : '') + '" data-idx="' + i + '">';
-      html += '<div class="hc-name">' + s.shortName + '</div>';
+      html += '<div class="hc-name">' + (s.shortName || s.name) + '</div>';
       html += '<div class="hc-cls">' + CLS_ZH[s.cls] + '</div>';
       if (card.elite) html += '<div class="hc-tag">精锐</div>';
       if (card.lv && Object.keys(card.lv).length) html += '<div class="hc-lv">强化' + Object.keys(card.lv).length + '</div>';
@@ -775,7 +775,7 @@ function renderFleetRows() {
       const color = CLS_COLOR[s.cls] || '#8fa3c8';
       html += '<div class="prep-card' + (card.elite ? ' elite' : '') + '">';
       html += '<span class="fc-icon" style="background:' + color + '26;border-color:' + color + ';color:' + color + ';">' + (CLS_ICON[s.cls] || '◇') + '</span>';
-      html += '<div class="prep-card-info"><div class="pci-name">' + s.shortName + '</div><div class="pci-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' ' + CLS_ZH[s.cls] + '</div></div>';
+      html += '<div class="prep-card-info"><div class="pci-name">' + (s.shortName || s.name) + '</div><div class="pci-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' ' + CLS_ZH[s.cls] + '</div></div>';
       html += '</div>';
     });
     html += '</div></div>';
@@ -1044,7 +1044,7 @@ function rebuildUnits() {
     const maxHp = Math.round(s.hp * hpMul * state.bonuses.hpMul);
     const hasShield = s.dmgType === 'energy' || (card.equips || []).some(function (e) { return e.id === 'shield'; });
     return {
-      cardIdx: i, id: 'my_' + i, name: s.name, shortName: s.shortName, cls: s.cls, row: s.row,
+      cardIdx: i, id: 'my_' + i, name: s.name, shortName: s.shortName || s.name, cls: s.cls, row: s.row, repair: s.repair ? 1 : 0,
       maxHp: maxHp, hp: maxHp,
       shield: hasShield ? Math.round(maxHp * 0.2) + ((card.equips || []).filter(function (e) { return e.id === 'shield'; }).length ? 40 : 0) : 0,
       dmg: Math.round(s.dmg * dmgMul * state.bonuses.dmgMul),
@@ -1061,11 +1061,13 @@ function spawnEnemyWave() {
   const lv = cityLevelOf(state.wave);
   const config = (window.CITY_DEFENSE || {})[lv] || [];
   state.enemies = config.map(function (e, i) {
+    const zone = e.zone || (e.cls === 'cruiser' ? 'mid' : (e.cls === 'destroyer' || e.cls === 'frigate' || e.cls === 'corvette' ? 'front' : 'back'));
     return {
       id: 'en_' + i, name: e.zh, shortName: e.zh, cls: e.cls,
-      zone: e.zone, count: e.count, maxHp: e.hp * e.count, hp: e.hp * e.count,
+      zone: zone, count: e.count, maxHp: e.totalHp, hp: e.totalHp,
       dmg: e.atk * e.count, armor: e.armor, shield: e.shield * e.count,
-      dmgType: e.dmgType, weapon: e.weapon, tier: e.tier, alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
+      dmgType: e.dmgType, weapon: e.weapon, tier: e.tier, repair: e.repair ? 1 : 0,
+      alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
     };
   });
   pushNews('敌方舰队抵达：' + lv + ' 级城防（' + state.enemies.length + ' 个编队）', 'warn');
@@ -1075,6 +1077,7 @@ function startBattle() {
   if (state.phase !== 'prep') return;
   if (!state.hand.some(function (c) { return c.ship; })) { flashTip('编组中没有舰船'); return; }
   state.phase = 'battle';
+  state.repairUntil = Date.now() + 2500;
   if (!state.poolFrozen) state.pool = [];
   else { state.poolFrozen = false; state.pool.forEach(function (p) { p.frozen = false; }); }
   const spells = state.hand.filter(function (c) { return c.type === 'spell'; });
@@ -1110,6 +1113,28 @@ function stopBattleLoop() {
   if (uiTimer) { clearInterval(uiTimer); uiTimer = null; }
 }
 
+function repairTick(now) {
+  if (!state.repairUntil || now < state.repairUntil) return;
+  state.repairUntil = now + 2500;
+  healSide(state.units, false);
+  healSide(state.enemies, true);
+}
+function healSide(list, isEnemy) {
+  const healers = list.filter(function (u) { return u.alive && u.repair; });
+  if (!healers.length) return;
+  const targets = list.filter(function (u) { return u.alive && u.hp < u.maxHp; });
+  if (!targets.length) return;
+  healers.forEach(function (h) {
+    let target = targets[0];
+    for (let i = 1; i < targets.length; i++) {
+      if (targets[i].hp / targets[i].maxHp < target.hp / target.maxHp) target = targets[i];
+    }
+    const heal = Math.max(1, Math.round(h.dmg * 1.25));
+    target.hp = Math.min(target.maxHp, target.hp + heal);
+    const el = document.getElementById(target.id);
+    if (el) spawnDamagePop(el, heal, false, isEnemy, true);
+  });
+}
 function gameTick(now, dt) {
   if (state.phase !== 'battle') return;
   clockLeft -= dt;
@@ -1123,6 +1148,7 @@ function gameTick(now, dt) {
   if (state.corrodeUntil && now < state.corrodeUntil) {
     state.enemies.forEach(function (e) { if (e.alive) e.hp -= e.maxHp * 0.03 * dt; });
   }
+  repairTick(now);
   myAttack(now);
   enemyAttack(now);
   if (state.breakthroughUntil && now > state.breakthroughUntil) {
@@ -1369,6 +1395,11 @@ function renderBattle() {
   panel.innerHTML = html;
 }
 
+function clsToRow(cls) {
+  if (cls === 'frigate' || cls === 'destroyer' || cls === 'fighter' || cls === 'corvette') return 0;
+  if (cls === 'cruiser' || cls === 'battlecruiser' || cls === 'battleship') return 1;
+  return 2;
+}
 function renderRows(list, side) {
   const rows = [[], [], []];
   list.forEach(function (u) {
@@ -1376,7 +1407,7 @@ function renderRows(list, side) {
     if (u.zone === 'front') r = 0;
     else if (u.zone === 'mid') r = 1;
     else if (u.zone === 'back') r = 2;
-    else r = u.row !== undefined ? u.row : (u.cls === 'frigate' || u.cls === 'corvette' || u.cls === 'fighter' ? 0 : (u.cls === 'destroyer' || u.cls === 'cruiser' ? 1 : 2));
+    else r = u.row !== undefined ? u.row : clsToRow(u.cls);
     rows[r].push(u);
   });
   const labels = ['前排', '中排', '后排'];
@@ -1402,7 +1433,7 @@ function renderFleetCard(u, side) {
   const countTxt = (side === 'en' && u.count && u.count > 1) ? ' ×' + u.count : '';
   return '<div class="fleet-card' + (dead ? ' dead' : '') + (u.elite ? ' elite' : '') + (side === 'en' ? ' enemy' : '') + '" id="' + u.id + '" data-hp="' + Math.round(u.hp) + '">' +
     '<div class="fc-head"><span class="fc-icon" style="background:' + color + '26;border-color:' + color + ';">' + icon + '</span>' +
-    '<div class="fc-id"><div class="fc-name">' + u.shortName + '</div><div class="fc-cls" style="color:' + color + ';">' + (CLS_ZH[u.cls] || '') + countTxt + '</div></div></div>' +
+    '<div class="fc-id"><div class="fc-name">' + (u.shortName || u.name) + '</div><div class="fc-cls" style="color:' + color + ';">' + (CLS_ZH[u.cls] || '') + countTxt + (u.repair ? ' <span class="fc-repair">维修</span>' : '') + '</div></div></div>' +
     '<div class="fc-bar"><div class="fc-hp"><div class="fill" style="width:' + pct + '%"></div></div>' +
     (u.shield > 0 ? '<div class="fc-shield"><div class="fill" style="width:' + shieldPct + '%"></div></div>' : '') + '</div>' +
     '<div class="fc-hpnum">' + Math.max(0, Math.round(u.hp)) + '/' + u.maxHp + '</div>' +
@@ -1410,12 +1441,12 @@ function renderFleetCard(u, side) {
     '<div class="dmg-pop-wrap"></div></div>';
 }
 
-function spawnDamagePop(el, amount, isCrit, isEnemy) {
+function spawnDamagePop(el, amount, isCrit, isEnemy, isHeal) {
   const wrap = el.querySelector('.dmg-pop-wrap');
   if (!wrap) return;
   const div = document.createElement('div');
-  div.className = 'dmg-pop' + (isCrit ? ' crit' : '') + (isEnemy ? ' from-enemy' : '');
-  div.textContent = '-' + Math.max(1, Math.round(amount));
+  div.className = 'dmg-pop' + (isCrit ? ' crit' : '') + (isEnemy ? ' from-enemy' : '') + (isHeal ? ' heal' : '');
+  div.textContent = (isHeal ? '+' : '-') + Math.max(1, Math.round(amount));
   wrap.appendChild(div);
   setTimeout(function () { if (div.parentNode) div.parentNode.removeChild(div); }, 950);
 }
@@ -1442,6 +1473,7 @@ function updateBattleUI() {
     if (!el) return;
     const prev = parseInt(el.dataset.hp || '0', 10);
     if (u.alive && u.hp < prev && prev - u.hp > 0.4) spawnDamagePop(el, prev - u.hp, false, true);
+    else if (u.alive && u.hp > prev && u.hp - prev > 0.4) spawnDamagePop(el, u.hp - prev, false, true, true);
     el.dataset.hp = Math.round(u.hp);
     const f = el.querySelector('.fc-hp .fill');
     if (f) f.style.width = Math.max(0, u.hp / u.maxHp * 100) + '%';
@@ -1456,6 +1488,7 @@ function updateBattleUI() {
     if (!el) return;
     const prev = parseInt(el.dataset.hp || '0', 10);
     if (e.alive && e.hp < prev && prev - e.hp > 0.4) spawnDamagePop(el, prev - e.hp, false, false);
+    else if (e.alive && e.hp > prev && e.hp - prev > 0.4) spawnDamagePop(el, e.hp - prev, false, false, true);
     el.dataset.hp = Math.round(e.hp);
     const f = el.querySelector('.fc-hp .fill');
     if (f) f.style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';

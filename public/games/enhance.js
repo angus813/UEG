@@ -1,13 +1,13 @@
-// ============================================================
-//  enhance.js —— 舰船强化系统（参照网易官方强化界面重设计）
-//  数据：ships_data.js（window.SHIPS_DATA，全中文 + 结构化实际效果）
-//  机制：
-//   · 全局技术点（所有舰船共用，localStorage 持久化）
-//   · 每个科技项可加点 / 降级，每级消耗点数（progress 数组逐级定义）
-//   · 等级状态按 舰船 → 系统 → 科技 保存
-//   · 每个科技项展示：效果描述、详细说明、实际游戏效果标签
-//     （伤害加成 / 冷却缩减 / 命中率提升 等，按等级线性估算当前值）
-// ============================================================
+
+
+
+
+
+
+
+
+
+
 (function () {
   const DATA = window.SHIPS_DATA || {};
   const TYPE_ORDER = ['战列巡洋舰', '航空母舰', '巡洋舰', '驱逐舰', '护卫舰', '护航艇', '战机', '支援舰'];
@@ -23,7 +23,7 @@
 };
   const LS_POINTS = 'ueg_enhance_points';
   const LS_STATE = 'ueg_enhance_state';
-  // ---------- 武器系统选择状态 ----------
+  
   let weaponChoice = {};
   try { weaponChoice = JSON.parse(localStorage.getItem('ueg_weapon_choice') || '{}'); } catch (e) { weaponChoice = {}; }
   function saveWeaponChoice() { localStorage.setItem('ueg_weapon_choice', JSON.stringify(weaponChoice)); }
@@ -39,7 +39,7 @@
     saveWeaponChoice();
   }
   function getSelectedWeapons() {
-    // 武器系统不互斥：全部武器计入
+    
     const sysMap = (window.SYSTEM_STATS || {})[currentKey];
     const out = [];
     if (!sysMap) return out;
@@ -51,7 +51,7 @@
     if (t) { t.textContent = msg; t.style.opacity = '1'; setTimeout(() => { t.style.opacity = '0'; }, 2600); }
     else console.log('[提示]', msg);
   }
-    // ============ Python 数据处理引擎（Pyodide，加载失败降级 JS）============
+    
   let pyEngine = null, pyMode = false, pyInitPromise = null;
   function loadScriptAsync(src, timeoutMs) {
     return new Promise(function (resolve) {
@@ -94,7 +94,7 @@
       return r;
     } catch (e) { console.warn('⚠️ Python 计算失败，降级 JS：' + fnName + ' ' + e.message); return null; }
   }
-    // ============ 舰船分类（新定义）============
+    
   function shipClass(type) {
     const t = type || '';
     if (['航空母舰', '支援舰', '战列巡洋舰'].includes(t)) return '超主力舰';
@@ -109,7 +109,7 @@
     if (['驱逐舰', '护卫舰'].includes(t)) return '小型舰船';
     return '';
   }
-  // ============ 蓝图获取系统 ============
+  
   const BP_PROGRESS = { '护卫舰': 35, '护航艇': 35, '战机': 35, '驱逐舰': 25, '巡洋舰': 20 };
   const BP_TIMES = { '护卫舰': 3, '护航艇': 3, '战机': 3, '驱逐舰': 4, '巡洋舰': 5 };
   let bpState = {};
@@ -154,7 +154,7 @@
     h += '</div>';
     return h;
   }
-  // ============ 超主力舰模块系统 ============
+  
   let moduleState = {};
   try { moduleState = JSON.parse(localStorage.getItem('ueg_module_state') || '{}'); } catch (e) { moduleState = {}; }
   window._pickModule = function (cls, opt) {
@@ -257,12 +257,12 @@
   }
 
 
-  // ---------- 状态 ----------
+  
   let points = parseInt(localStorage.getItem(LS_POINTS)) || 300;
   let state = {};
   try { state = JSON.parse(localStorage.getItem(LS_STATE)) || {}; } catch (e) { state = {}; }
   let currentKey = null;
-  let collapsedSys = {}; // 折叠的系统
+  let collapsedSys = {}; 
 
   function saveState() { localStorage.setItem(LS_STATE, JSON.stringify(state)); }
   function savePoints() { localStorage.setItem(LS_POINTS, String(points)); }
@@ -274,26 +274,26 @@
     else state[shipKey][sys][tech] = lv;
     saveState();
   }
-  // 升到第 level 级所需的点数（1-based；progress 数组逐级定义）
+  
   function costOf(tech, level) {
     const p = tech.progress && tech.progress[level - 1];
     return (typeof p === 'number' && p > 0) ? p : (tech.points || 5);
   }
-  // 线性估算某等级的实际效果值（value 为满级值）
+  
   function effValue(effect, level, max) {
     if (typeof effect.value !== 'number' || !max) return effect.value;
     const v = effect.value * level / max;
     return Math.round(v * 10) / 10;
   }
 
-  // ---------- DOM ----------
+  
   const listEl = document.getElementById('shipList');
   const panelEl = document.getElementById('panel');
   const pointsEl = document.getElementById('pointsNum');
 
   function renderPoints() { pointsEl.textContent = points; }
 
-  // ---------- 舰船列表（按类型分组） ----------
+  
   function renderShipList() {
     const grouped = {};
     for (const key of Object.keys(DATA)) {
@@ -329,9 +329,9 @@
     });
   }
 
-  // ---------- 舰船属性面板（中文，来自 ship_stats.js） ----------
-  // ---------- 强化加成计算：科技 effects → 属性变化（按当前等级线性） ----------
-  // 返回：乘数（比例加成/减少）+ 加值（基础数值增加）
+  
+  
+  
   function computeEnhancement(ship) {
     const levels = {};
     (ship.systems || []).forEach(sys => {
@@ -357,7 +357,7 @@
         const raw = Number(e.value);
         if (!isFinite(raw) || raw === 0) return;
         const type = e.type || '';
-        // 机制类效果不体现在面板数值
+        
         if (/集火|战略打击|子系统暴击|被武器命中|被导弹|被鱼雷|失效|自动维修|拦截|锁定|目标选择|飞行时间|闪避|反击|警戒|战斗|站位|撤退|隐藏|伪装|干扰|探测|识别/.test(type)) return;
         const frac = lv / Math.max(1, t.max);
         if (e.action === '比例加成' || e.action === '比例减少') {
@@ -382,12 +382,12 @@
           else if (/曲速/.test(T)) acc.warp += absV * dirV;
           else if (/伤害/.test(T)) acc.dmg += absV * dirV;
         } else if (/增加|减少/.test(e.action || '')) {
-          // 基础数值增加/减少：直接加值（装甲类为主）
+          
           const add = (e.action.indexOf('减') >= 0 ? -raw : raw) * frac;
           if (/装甲|抗性|物理抵抗/.test(type)) {
             if (/能量/.test(type)) acc.energyAdd += add; else acc.physAdd += add;
           } else if (/生命|结构值/.test(type)) acc.hpAdd += add;
-          else if (/伤害/.test(type)) acc.dmg += (add / 100); // 数值伤害加成近似为百分比
+          else if (/伤害/.test(type)) acc.dmg += (add / 100); 
         }
       });
     }));
@@ -405,7 +405,7 @@
     };
   }
 
-  // 带强化数值显示：基础 → 强化后（含乘数与加值）；基础为 0 且无加成时显示 —
+  
   function fmtStat(base, mul, add, fmtFn) {
     const hasMul = mul && mul > 1.0001;
     const hasAdd = add && Math.abs(add) >= 0.5;
@@ -422,7 +422,7 @@
     return `<b class="boost">${fmtFn(boosted)}</b>${gain}`;
   }
 
-  // 型号匹配：别名 + 变体关键词
+  
   function resolveStats(ship) {
     const S = window.SHIP_STATS || {};
     const A = window.SHIP_STATS_ALIAS || {};
