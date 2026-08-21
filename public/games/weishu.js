@@ -1783,7 +1783,7 @@ function warpInit() {
   resize();
   window.addEventListener('resize', resize);
   let phase = 'off';
-  let t = 0, flash = 0, shake = 0;
+  let t = 0, flash = 0, shake = 0, speed = 8, charge = 0, autoSeq = 0;
   const shipP = [];
   const rings = [];
   const entrance = { list: [], idx: 0, timer: 0, done: null };
@@ -1803,6 +1803,16 @@ function warpInit() {
     t += dt;
     if (phase === 'off') { c.style.display = 'none'; return; }
     c.style.display = 'block';
+    if (autoSeq > 0) {
+      autoSeq -= dt;
+      if (phase === 'charge' && autoSeq <= 1.2) phase = 'warp';
+      else if (phase === 'warp' && autoSeq <= 0.4) phase = 'exit';
+      else if (phase === 'exit' && autoSeq <= 0) { phase = 'off'; flash = 0.85; }
+    }
+    if (phase === 'warp') { shake = Math.min(8, shake + 14 * dt); }
+    else if (phase === 'exit') { shake = Math.max(0, shake - 20 * dt); }
+    else if (phase === 'charge') { charge = Math.min(1, charge + 0.5 * dt); shake = Math.min(5, shake + 10 * dt); }
+    else { charge = Math.max(0, charge - 0.3 * dt); shake = Math.max(0, shake - 6 * dt); }
     if (phase === 'entrance') {
       shake = Math.min(5, shake + 3 * dt);
       entrance.timer -= dt;
@@ -1869,6 +1879,35 @@ function warpInit() {
       ctx.arc(r.x, r.y, r.r * 0.86, 0, 6.2832);
       ctx.fill();
     }
+    const cx = W / 2 + offX, cy = H / 2 + offY;
+    if (phase === 'charge') {
+      const g2 = ctx.createRadialGradient(cx, cy, W * 0.1, cx, cy, Math.max(W, H) * 0.72);
+      g2.addColorStop(0, 'rgba(0,0,0,0)');
+      g2.addColorStop(1, 'rgba(80,40,200,' + (0.22 + charge * 0.3) + ')');
+      ctx.fillStyle = g2;
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(120,90,255,' + (0.2 + charge * 0.3) + ')';
+      ctx.lineWidth = 1;
+      for (let y = 0; y < H; y += 3) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    }
+    if (phase === 'warp' || phase === 'exit') {
+      const rr = 26 + 8 * Math.sin(t * 5);
+      ctx.strokeStyle = 'rgba(200,30,40,0.75)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr, 0, 6.2832);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(140,20,30,0.5)';
+      for (let a = 0; a < 6; a++) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr * (0.4 + a * 0.12), t * 1.5 + a * 1.05, t * 1.5 + a * 1.05 + 1.2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(160,20,30,0.35)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr * 0.5, 0, 6.2832);
+      ctx.fill();
+    }
     ctx.restore();
     if (flash > 0) {
       ctx.fillStyle = 'rgba(255,255,255,' + flash.toFixed(2) + ')';
@@ -1877,11 +1916,22 @@ function warpInit() {
   }
   requestAnimationFrame(step);
   return {
+    trigger: function (mode) {
+      if (mode === 'manual') {
+        if (phase === 'off' || phase === 'idle') { phase = 'charge'; charge = 0; speed = 8; autoSeq = 2.2; }
+        else if (phase === 'charge') { phase = 'warp'; }
+      }
+    },
     entrancePlay: function (list, done) {
       entrance.list = list; entrance.idx = 0; entrance.timer = 0.15; entrance.done = done;
-      phase = 'entrance'; shake = 0;
+      phase = 'entrance'; shake = 0; speed = 60;
     }
   };
+}
+let warpFX = null;
+function warpTrigger(mode) {
+  if (!warpFX) { try { warpFX = warpInit(); } catch (e) { return; } }
+  warpFX.trigger(mode || 'auto');
 }
 function warpPlayEntrance(list, done) {
   try {
@@ -1900,3 +1950,6 @@ function warpInitEntranceFallback(list, done) {
   }
   nextBatch();
 }
+window.addEventListener('keydown', function (e) {
+  if (e.code === 'Space') { e.preventDefault(); warpTrigger('manual'); }
+});
