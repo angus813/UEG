@@ -1187,9 +1187,12 @@ function gameTick(now, dt) {
       const tp = Math.max(2, e.tier * 2);
       state.techPoints += tp;
       const cost = CONFIG.DEATH_COST[e.cls] || 2;
-      const fDmg = cost * e.count;
-      state.factionHp = state.factionHp.map(function (h) { return Math.max(0, h - fDmg); });
-      pushNews('击毁敌方编队：' + e.shortName + '（两势力生命 -' + fDmg + '，强化点 +' + tp + '）', 'good');
+      let fDmg = Math.round(cost * e.count * 1.5);
+      const take0 = Math.min(state.factionHp[0], fDmg);
+      state.factionHp[0] -= take0;
+      fDmg -= take0;
+      if (fDmg > 0) state.factionHp[1] = Math.max(0, state.factionHp[1] - fDmg);
+      pushNews('击毁敌方编队：' + e.shortName + '（势力1生命 -' + take0 + (fDmg > 0 ? '，势力2生命 -' + fDmg : '') + '，强化点 +' + tp + '）', 'good');
     }
   }
   const myAlive = state.units.some(function (u) { return u.alive; });
