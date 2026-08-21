@@ -704,3 +704,6 @@ body {
 
 .fleet-card.warp-in{opacity:.25;border-color:#4a8aff;box-shadow:0 0 18px rgba(80,160,255,.55);animation:warpPulse .35s infinite alternate}
 @keyframes warpPulse{from{opacity:.12}to{opacity:.5}}
+
+.dp-lock-badge{display:inline-block;margin:2px 0 0;padding:1px 8px;font-size:11px;color:#ff9a8a;border:1px solid #ff9a8a55;border-radius:8px;background:#ff9a8a14}
+.dp-ship.off .dp-lock-badge{color:#8fa3c8;border-color:#8fa3c855;background:#8fa3c814}

@@ -360,6 +360,7 @@ function showDeployModal() {
       html += '<div class="dp-name">' + s.name + '</div>';
       html += '<div class="dp-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' 甲 ' + s.armor + ' ' + WEAPON_LABEL[s.weapon] + DMGTYPE_LABEL[s.dmgType] + ' 指挥' + s.command + '</div>';
       if (s.carry) html += '<div class="dp-carry">搭载 战机' + s.carry.fighter + ' 护航艇' + s.carry.corvette + '</div>';
+      if (isAir && !hasCarrier()) html += '<div class="dp-lock-badge">需先选择搭载舰船</div>';
       html += '<div class="dp-qty">';
       html += '<button class="dp-minus" data-minus="' + s.id + '">-</button>';
       html += '<span class="dp-num">' + have + '/' + s.maxShip + '</span>';
@@ -389,7 +390,7 @@ function showDeployModal() {
       }
       state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: s.mods && s.mods.length ? s.mods[0] : '', spentTech: 0 });
       flashTip('已加入编组：' + s.name);
-      updateDeployLight();
+      try { updateDeployLight(); } catch (e) { if (window.console) console.error(e); }
     });
   });
   body.querySelectorAll('[data-minus]').forEach(function (el) {
@@ -728,6 +729,14 @@ function updateDeployLight() {
     el.classList.toggle('off', !can);
     const num = el.parentNode.querySelector('.dp-num');
     if (num) num.textContent = have + '/' + s.maxShip;
+    const badge = el.parentNode.querySelector('.dp-lock-badge');
+    if (badge) badge.remove();
+    if (isAir && !hasCarrier()) {
+      const b = document.createElement('div');
+      b.className = 'dp-lock-badge';
+      b.textContent = '需先选择搭载舰船';
+      el.parentNode.appendChild(b);
+    }
   });
   const right = body.querySelector('.deploy-right');
   if (right) {
