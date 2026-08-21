@@ -443,7 +443,6 @@ function startSimulation() {
 function startPrepRound() {
   state.phase = 'prep';
   stopBattleLoop();
-  warpTrigger('idle');
   const fog = document.getElementById('toxicFog');
   if (fog) fog.remove();
   const reward = 2 + state.wave + Math.floor(state.techPoints * 0) ;
@@ -1783,53 +1782,17 @@ function warpInit() {
   function resize() { W = c.width = window.innerWidth; H = c.height = window.innerHeight; }
   resize();
   window.addEventListener('resize', resize);
-  const N = 6000;
-  const parts = [];
-  for (let i = 0; i < N; i++) {
-    parts.push({ x: (Math.random() * 2 - 1) * 2000, y: (Math.random() * 2 - 1) * 2000, z: Math.random() * 2000 - 1000, s: 0.5 + Math.random() * 1.5, tw: Math.random() * 6.28 });
-  }
   let phase = 'off';
-  let t = 0, speed = 8, flash = 0, charge = 0, shake = 0;
-  let autoSeq = 0;
-  const f = 640, viewZ = 2500;
+  let t = 0, flash = 0, shake = 0;
   const shipP = [];
   const rings = [];
   const entrance = { list: [], idx: 0, timer: 0, done: null };
   let last = 0;
-  function project(x, y, z, ox, oy) {
-    const zz = z + viewZ;
-    let sx = ox + (x * f) / zz;
-    let sy = oy + (y * f) / zz;
-    if (phase === 'warp' || phase === 'exit') {
-      const rx = (sx - ox) / (W / 2), ry = (sy - oy) / (H / 2);
-      const r2 = rx * rx + ry * ry;
-      const k = 1 + 0.22 * r2;
-      sx = ox + (sx - ox) * k;
-      sy = oy + (sy - oy) * k;
-    }
-    return { x: sx, y: sy };
-  }
-  function colorOf() {
-    const v = Math.min(1, speed / 90);
-    if (phase === 'idle') return 'rgba(210,225,255,';
-    if (phase === 'entrance') return 'rgba(120,200,255,';
-    if (phase === 'charge') return 'rgba(170,150,255,';
-    if (v < 0.4) return 'rgba(225,235,255,';
-    if (v < 0.75) return 'rgba(0,170,255,';
-    return 'rgba(170,120,255,';
-  }
   function spawnShipParticles(item) {
     for (let i = 0; i < 14; i++) {
       const ang = Math.random() * 6.2832;
       const rad = Math.random() * 160;
-      shipP.push({
-        bx: item.x, by: item.y,
-        dx: Math.cos(ang) * rad, dy: Math.sin(ang) * rad,
-        z: Math.random() * 800 - 400,
-        v: 90 + Math.random() * 140,
-        life: 0.5 + Math.random() * 0.4,
-        maxLife: 0.5 + Math.random() * 0.4
-      });
+      shipP.push({ bx: item.x, by: item.y, dx: Math.cos(ang) * rad, dy: Math.sin(ang) * rad, v: 90 + Math.random() * 140, life: 0.5 + Math.random() * 0.4, maxLife: 0.5 + Math.random() * 0.4 });
     }
   }
   function step(now) {
@@ -1840,19 +1803,7 @@ function warpInit() {
     t += dt;
     if (phase === 'off') { c.style.display = 'none'; return; }
     c.style.display = 'block';
-    if (autoSeq > 0) {
-      autoSeq -= dt;
-      if (phase === 'charge' && autoSeq <= 1.2) phase = 'warp';
-      else if (phase === 'warp' && autoSeq <= 0.4) phase = 'exit';
-      else if (phase === 'exit' && autoSeq <= 0) { phase = 'off'; flash = 0.85; }
-    }
-    if (phase === 'warp') { speed = Math.min(130, speed + 90 * dt); shake = Math.min(8, shake + 14 * dt); }
-    else if (phase === 'exit') { speed = Math.max(0, speed - 120 * dt); shake = Math.max(0, shake - 20 * dt); }
-    else if (phase === 'charge') { charge = Math.min(1, charge + 0.5 * dt); shake = Math.min(5, shake + 10 * dt); }
-    else { charge = Math.max(0, charge - 0.3 * dt); speed = 8; shake = Math.max(0, shake - 6 * dt); }
-    if (phase === 'idle') { charge = 0; speed = 8; }
     if (phase === 'entrance') {
-      speed = 60;
       shake = Math.min(5, shake + 3 * dt);
       entrance.timer -= dt;
       if (entrance.timer <= 0) {
@@ -1872,50 +1823,19 @@ function warpInit() {
         }
       }
     }
+    shake = Math.max(0, shake - 6 * dt);
     flash = Math.max(0, flash - 0.09 * dt * 60);
     const offX = Math.sin(t * 6.9) * shake;
     const offY = Math.cos(t * 5.7) * shake * 0.7;
     ctx.clearRect(0, 0, W, H);
     ctx.save();
     ctx.translate(offX, offY);
-    const cx = W / 2 + offX, cy = H / 2 + offY;
-    const breathe = 0.55 + 0.25 * Math.sin(t * 2);
-    for (let i = 0; i < N; i++) {
-      const p = parts[i];
-      if (phase === 'charge') { p.x *= 0.99; p.y *= 0.99; p.z += 40 * dt; }
-      else if (phase === 'warp') { p.z += speed * 1.6 * dt * 60 * 0.016; }
-      else if (phase === 'exit') { p.z += Math.max(8, speed * 1.6) * dt * 60 * 0.016; }
-      else { p.z += 6 * dt * 60 * 0.016; }
-      if (p.z > 1800) { p.z = -1200; p.x = (Math.random() * 2 - 1) * 2000; p.y = (Math.random() * 2 - 1) * 2000; }
-      if (p.z < -1400) { p.z = 1800; }
-      const pr = project(p.x, p.y, p.z, cx, cy);
-      if (pr.x < -40 || pr.x > W + 40 || pr.y < -40 || pr.y > H + 40) continue;
-      const alpha = breathe * (0.6 + 0.4 * Math.random());
-      ctx.fillStyle = colorOf() + alpha + ')';
-      ctx.shadowBlur = phase === 'warp' || phase === 'entrance' ? 10 : 6;
-      ctx.shadowColor = 'rgba(120,180,255,0.9)';
-      if (phase === 'warp' || phase === 'entrance') {
-        const len = Math.min(110, speed * 1.3);
-        const vx = (pr.x - cx) / (W / 2), vy = (pr.y - cy) / (H / 2);
-        ctx.strokeStyle = ctx.fillStyle;
-        ctx.lineWidth = p.s * 0.8;
-        ctx.beginPath();
-        ctx.moveTo(pr.x, pr.y);
-        ctx.lineTo(pr.x - vx * len, pr.y - vy * len);
-        ctx.stroke();
-      } else {
-        ctx.beginPath();
-        ctx.arc(pr.x, pr.y, p.s, 0, 6.2832);
-        ctx.fill();
-      }
-    }
     for (let i = shipP.length - 1; i >= 0; i--) {
       const p = shipP[i];
       p.life -= dt;
       if (p.life <= 0) { shipP.splice(i, 1); continue; }
       p.dx *= 0.985;
       p.dy *= 0.985;
-      p.z += p.v * dt * 12;
       const prx = p.bx + p.dx;
       const pry = p.by + p.dy;
       const a = Math.max(0, p.life / p.maxLife);
@@ -1949,34 +1869,6 @@ function warpInit() {
       ctx.arc(r.x, r.y, r.r * 0.86, 0, 6.2832);
       ctx.fill();
     }
-    if (phase === 'charge') {
-      const g2 = ctx.createRadialGradient(cx, cy, W * 0.1, cx, cy, Math.max(W, H) * 0.72);
-      g2.addColorStop(0, 'rgba(0,0,0,0)');
-      g2.addColorStop(1, 'rgba(80,40,200,' + (0.22 + charge * 0.3) + ')');
-      ctx.fillStyle = g2;
-      ctx.fillRect(0, 0, W, H);
-      ctx.strokeStyle = 'rgba(120,90,255,' + (0.2 + charge * 0.3) + ')';
-      ctx.lineWidth = 1;
-      for (let y = 0; y < H; y += 3) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-    }
-    if (phase === 'warp' || phase === 'exit') {
-      const rr = 26 + 8 * Math.sin(t * 5);
-      ctx.strokeStyle = 'rgba(200,30,40,0.75)';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(cx, cy, rr, 0, 6.2832);
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(140,20,30,0.5)';
-      for (let a = 0; a < 6; a++) {
-        ctx.beginPath();
-        ctx.arc(cx, cy, rr * (0.4 + a * 0.12), t * 1.5 + a * 1.05, t * 1.5 + a * 1.05 + 1.2);
-        ctx.stroke();
-      }
-      ctx.fillStyle = 'rgba(160,20,30,0.35)';
-      ctx.beginPath();
-      ctx.arc(cx, cy, rr * 0.5, 0, 6.2832);
-      ctx.fill();
-    }
     ctx.restore();
     if (flash > 0) {
       ctx.fillStyle = 'rgba(255,255,255,' + flash.toFixed(2) + ')';
@@ -1985,23 +1877,11 @@ function warpInit() {
   }
   requestAnimationFrame(step);
   return {
-    trigger: function (mode) {
-      if (mode === 'idle') { phase = 'idle'; speed = 8; charge = 0; shake = 0; autoSeq = 0; }
-      else if (mode === 'manual') {
-        if (phase === 'off' || phase === 'idle') { phase = 'charge'; charge = 0; speed = 8; autoSeq = 2.2; }
-        else if (phase === 'charge') { phase = 'warp'; }
-      }
-    },
     entrancePlay: function (list, done) {
       entrance.list = list; entrance.idx = 0; entrance.timer = 0.15; entrance.done = done;
-      phase = 'entrance'; autoSeq = 0; charge = 0; speed = 60;
+      phase = 'entrance'; shake = 0;
     }
   };
-}
-let warpFX = null;
-function warpTrigger(mode) {
-  if (!warpFX) { try { warpFX = warpInit(); } catch (e) { return; } }
-  warpFX.trigger(mode || 'auto');
 }
 function warpPlayEntrance(list, done) {
   try {
@@ -2020,6 +1900,3 @@ function warpInitEntranceFallback(list, done) {
   }
   nextBatch();
 }
-window.addEventListener('keydown', function (e) {
-  if (e.code === 'Space') { e.preventDefault(); warpTrigger('manual'); }
-});
