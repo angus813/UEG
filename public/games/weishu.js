@@ -10,6 +10,9 @@ const CONFIG = {
   ROUND_CLOCK: 60,
   BREACH_CAP: 80,
   HAND_LIMIT: 24,
+  EQUIP_LIMIT: 12,
+  SPELL_LIMIT: 8,
+  DEATH_COST: {fighter: 1, corvette: 1, frigate: 2, destroyer: 3, cruiser: 4, support: 4, battlecruiser: 5, battleship: 6, carrier: 7},
   ASSAULT_FACTOR: 0.06,
   DEPLOY_LIMIT: {carrier: 2, battlecruiser: 2, battleship: 2, cruiser: 5, destroyer: 5, frigate: 5, fighter: 5, corvette: 5, support: 5},
   MODES: {
@@ -666,6 +669,8 @@ function freezePool() {
   pushNews('补给栏位已冻结至下一回合', 'good');
   renderPrep();
 }
+function countHand(type) { return state.hand.filter(function (c) { return type === 'ship' ? !!c.ship : c.type === type; }).length; }
+
 function buyPoolItem(idx) {
   const item = state.pool[idx];
   if (!item) return;
@@ -673,7 +678,9 @@ function buyPoolItem(idx) {
   if (item.type === 'ship') price = Math.max(1, price - (state.craft ? 1 : 0));
   else if (state.craft) price += 1;
   if (state.funds < price) { flashTip('资金不足'); return; }
-  if (state.hand.length >= CONFIG.HAND_LIMIT) { flashTip('手牌区已满'); return; }
+  if (item.type === 'ship' && countHand('ship') >= CONFIG.HAND_LIMIT) { flashTip('舰船手牌区已满'); return; }
+  if (item.type === 'equip' && countHand('equip') >= CONFIG.EQUIP_LIMIT) { flashTip('装备栏已满'); return; }
+  if (item.type === 'spell' && countHand('spell') >= CONFIG.SPELL_LIMIT) { flashTip('战术指令栏已满'); return; }
   state.funds -= price;
   state.spentFunds += price;
   if (item.type === 'ship') {
@@ -727,7 +734,7 @@ function renderPoolSection() {
 
 function renderHandSection() {
   let html = '<div class="hand-section">';
-  html += '<div class="hand-head"><span>手牌区（' + state.hand.length + '/' + CONFIG.HAND_LIMIT + '）</span><button class="btn-action tiny" id="blueOpenBtn">本局蓝图数据库</button></div>';
+  html += '<div class="hand-head"><span>手牌区 舰船 ' + countHand('ship') + '/' + CONFIG.HAND_LIMIT + ' 装备 ' + countHand('equip') + '/' + CONFIG.EQUIP_LIMIT + ' 战术 ' + countHand('spell') + '/' + CONFIG.SPELL_LIMIT + '</span><button class="btn-action tiny" id="blueOpenBtn">本局蓝图数据库</button></div>';
   html += '<div class="hand-list">';
   if (!state.hand.length) html += '<div class="pool-empty">手牌区为空</div>';
   state.hand.forEach(function (card, i) {
@@ -937,7 +944,7 @@ function tryMergeEquips() {
   for (const gid in groups) {
     const arr = groups[gid];
     while (arr.length >= 2) {
-      if (state.hand.length >= CONFIG.HAND_LIMIT) break;
+      if (countHand('equip') >= CONFIG.EQUIP_LIMIT) break;
       const two = arr.splice(0, 2);
       const baseEq = two[0].card.eq;
       const lv = baseEq.lv || 1;
@@ -1061,17 +1068,19 @@ function rebuildUnits() {
 function spawnEnemyWave() {
   const lv = cityLevelOf(state.wave);
   const config = (window.CITY_DEFENSE || {})[lv] || [];
+  const scale = 1 + (state.wave - 1) * 0.05;
   state.enemies = config.map(function (e, i) {
     const zone = e.zone || (e.cls === 'cruiser' ? 'mid' : (e.cls === 'destroyer' || e.cls === 'frigate' || e.cls === 'corvette' ? 'front' : 'back'));
     return {
       id: 'en_' + i, name: e.zh, shortName: e.zh, cls: e.cls,
-      zone: zone, count: e.count, maxHp: e.totalHp, hp: e.totalHp,
-      dmg: e.atk * e.count, armor: e.armor, shield: e.shield * e.count,
+      zone: zone, count: e.count, factionIdx: i % 2,
+      maxHp: Math.round(e.totalHp * scale), hp: Math.round(e.totalHp * scale),
+      dmg: Math.round(e.atk * e.count * scale), armor: Math.round(e.armor * scale), shield: Math.round(e.shield * e.count * scale),
       dmgType: e.dmgType, weapon: e.weapon, tier: e.tier, repair: e.repair ? 1 : 0,
       alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
     };
   });
-  pushNews('敌方舰队抵达：' + lv + ' 级城防（' + state.enemies.length + ' 个编队）', 'warn');
+  pushNews('敌方舰队抵达：' + lv + ' 级城防（' + state.enemies.length + ' 个编队，强度 ' + scale.toFixed(2) + '）', 'warn');
 }
 
 function startBattle() {
@@ -1156,23 +1165,18 @@ function gameTick(now, dt) {
     state.breakthroughUntil = now + 5000;
     const dmg = Math.round(state.enemies.reduce(function (s, e) { return s + (e.alive ? e.dmg : 0); }, 0) * 0.2);
     if (dmg > 0) {
-      const absorbed = Math.min(state.shield, dmg);
-      state.shield -= absorbed;
-      const overflow = dmg - absorbed;
-      if (overflow > 0) {
-        const cap = CONFIG.BREACH_CAP - state.roundLifeLost;
-        const actual = Math.min(overflow, cap);
-        state.roundLifeLost += actual;
-        state.life -= actual;
-        pushNews('防线被突破！护盾耗尽，生命 -' + actual, 'bad');
-      } else {
-        pushNews('防御护盾抵挡敌方突破（剩余护盾 ' + Math.round(state.shield) + '）', '');
-      }
+      state.shield = Math.max(0, state.shield - dmg);
+      pushNews('敌方突破防线，防御护盾 -' + dmg + '（剩余护盾 ' + Math.round(state.shield) + '）', '');
     }
   }
   for (let i = state.units.length - 1; i >= 0; i--) {
     const u = state.units[i];
-    if (u.alive && u.hp <= 0) { u.alive = false; u.hp = 0; pushNews(u.shortName + ' 被击毁', 'bad'); }
+    if (u.alive && u.hp <= 0) {
+      u.alive = false; u.hp = 0;
+      const cost = CONFIG.DEATH_COST[u.cls] || 2;
+      state.life -= cost;
+      pushNews(u.shortName + ' 被击毁（我方生命 -' + cost + '）', 'bad');
+    }
   }
   for (let i = state.enemies.length - 1; i >= 0; i--) {
     const e = state.enemies[i];
@@ -1182,7 +1186,10 @@ function gameTick(now, dt) {
       state.roundKills++;
       const tp = Math.max(2, e.tier * 2);
       state.techPoints += tp;
-      pushNews('击毁敌方编队：' + e.shortName + '（强化点 +' + tp + '）', 'good');
+      const cost = CONFIG.DEATH_COST[e.cls] || 2;
+      const fDmg = cost * e.count;
+      state.factionHp = state.factionHp.map(function (h) { return Math.max(0, h - fDmg); });
+      pushNews('击毁敌方编队：' + e.shortName + '（两势力生命 -' + fDmg + '，强化点 +' + tp + '）', 'good');
     }
   }
   const myAlive = state.units.some(function (u) { return u.alive; });
@@ -1286,16 +1293,9 @@ function settleRound(win) {
     pushNews('战利品回收：奖励 ' + bonus + ' 资金', 'good');
   }
   if (win) {
-    const assault = calcAssault();
-    const cap = 40 + state.wave * 9;
-    const dmg = Math.round(state.shield + Math.min(assault, cap));
-    state.factionHp = state.factionHp.map(function (h) { return Math.max(0, h - dmg); });
-    pushNews('防线反击：护盾 ' + Math.round(state.shield) + ' + 攻坚 ' + Math.min(assault, cap) + '，对敌方造成 ' + dmg + ' 点伤害', 'good');
+    pushNews('本回合战斗胜利：敌方舰队已被全歼', 'good');
   } else {
-    const remaining = state.enemies.reduce(function (s, e) { return s + (e.alive ? e.dmg : 0); }, 0);
-    const actual = Math.min(CONFIG.BREACH_CAP, Math.round(remaining * 0.3));
-    state.life -= actual;
-    pushNews('防线被突破！生命 -' + actual, 'bad');
+    pushNews('我方舰队全灭，防线告急', 'bad');
   }
   if (state.factionHp.every(function (h) { return h <= 0; })) { endGame(true); return; }
   if (state.life <= 0) { state.life = 0; endGame(false); return; }
