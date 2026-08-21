@@ -7,7 +7,7 @@ const LOCK_SEQUENCE = [{cls:'carrier'}, {cls:'battlecruiser'}, {cls:'cruiser'}, 
 
 const CONFIG = {
   TOTAL_ROUNDS: 15,
-  ROUND_CLOCK: 60,
+  ROUND_CLOCK: 120,
   BREACH_CAP: 80,
   HAND_LIMIT: 24,
   EQUIP_LIMIT: 12,
@@ -281,6 +281,12 @@ function selectedAirCount() {
     return a;
   }, 0);
 }
+function selectedFighterCount() {
+  return state.hand.reduce(function (a, c) { return a + (c.ship && c.ship.cls === 'fighter' ? 1 : 0); }, 0);
+}
+function selectedCorvetteCount() {
+  return state.hand.reduce(function (a, c) { return a + (c.ship && c.ship.cls === 'corvette' ? 1 : 0); }, 0);
+}
 
 function countOfId(id) {
   return state.hand.reduce(function (a, c) { return a + (c.ship && c.ship.id === id ? 1 : 0); }, 0);
@@ -328,8 +334,10 @@ function showDeployModal() {
   const groups = {};
   for (const s of pool) (groups[s.cls] = groups[s.cls] || []).push(s);
   const total = carrierTotal();
-  const airSel = selectedAirCount();
-  const airLimit = total.f + total.c;
+  const airSelF = selectedFighterCount();
+  const airSelC = selectedCorvetteCount();
+  const airLimitF = total.f;
+  const airLimitC = total.c;
   const cmd = totalCommand();
   let html = '<div class="deploy-cmd"><span>舰队指挥值</span><b class="' + (cmd > 400 ? 'over' : '') + '">' + cmd + '/400</b><span class="dp-cmd-hint">舰载机不占指挥值</span></div>';
   html += '<div class="deploy-layout">';
@@ -340,11 +348,11 @@ function showDeployModal() {
     if (!list.length) continue;
     const cnt = selectedShipCount(cls);
     let locked = false;
-    if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || airSel >= airLimit;
+    if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || (cls === 'fighter' ? airSelF >= airLimitF : airSelC >= airLimitC);
     html += '<div class="dp-group' + (locked ? ' locked' : '') + '" data-cls="' + cls + '">';
     html += '<div class="dp-group-title">' + CLS_ZH[cls] + ' <span class="dp-limit">' + cnt + ' 艘</span>';
     if (cls === 'fighter' || cls === 'corvette') {
-      html += ' <span class="dp-aircap">搭载 ' + airSel + '/' + airLimit + '</span>';
+      html += ' <span class="dp-aircap">搭载 ' + (cls === 'fighter' ? airSelF + '/' + airLimitF : airSelC + '/' + airLimitC) + '</span>';
     }
     html += '</div>';
     if (locked && (cls === 'fighter' || cls === 'corvette')) {
@@ -354,7 +362,8 @@ function showDeployModal() {
     list.forEach(function (s) {
       const have = countOfId(s.id);
       const isAir = s.cls === 'fighter' || s.cls === 'corvette';
-      const maxByAir = isAir ? Math.max(0, airLimit - (airSel - have)) : 99999;
+      const airUsed = s.cls === 'fighter' ? (airSelF - have) : (airSelC - have);
+      const maxByAir = isAir ? Math.max(0, (s.cls === 'fighter' ? airLimitF : airLimitC) - airUsed) : 99999;
       const maxN = Math.min(s.maxShip, maxByAir);
       const canAdd = have < maxN && !locked && cmd + (isAir ? 0 : s.command) <= 400;
       html += '<div class="dp-ship' + (have ? ' on' : '') + '" data-id="' + s.id + '">';
@@ -385,7 +394,7 @@ function showDeployModal() {
       if (have >= s.maxShip) { flashTip('已达该舰船服役数上限'); return; }
       if (isAir) {
         if (!hasCarrier()) { flashTip('需先选择搭载舰船'); return; }
-        if (selectedAirCount() >= carrierTotal().f + carrierTotal().c) { flashTip('搭载量已满'); return; }
+        if (s.cls === 'fighter' ? selectedFighterCount() >= carrierTotal().f : selectedCorvetteCount() >= carrierTotal().c) { flashTip('该机种搭载量已满'); return; }
       } else {
         if (totalCommand() + s.command > 400) { flashTip('指挥值不足（' + totalCommand() + '+' + s.command + '>400）'); return; }
       }
@@ -623,9 +632,6 @@ function updateDeployRight() {
   if (!body) return;
   const right = body.querySelector('.deploy-right');
   const pool = buildShipPool();
-  const total = carrierTotal();
-  const airSel = selectedAirCount();
-  const airLimit = total.f + total.c;
   let html = '<div class="dp-right-title">我方编组（' + state.hand.length + ' 艘）</div>';
   html += renderDeployPreview();
   html += '<div class="dp-selected">';
@@ -663,7 +669,7 @@ function updateDeployRight() {
     const cap = g.querySelector('.dp-limit');
     if (cap) cap.textContent = cnt + '/' + limit;
     let locked = false;
-    if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || airSel >= airLimit;
+    if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || (cls === 'fighter' ? airSelF >= airLimitF : airSelC >= airLimitC);
     g.classList.toggle('locked', locked);
     g.querySelectorAll('.dp-ship').forEach(function (el) {
       const id = el.dataset.id;
@@ -717,20 +723,22 @@ function updateDeployLight() {
     if (b) { b.textContent = totalCommand() + '/400'; b.className = totalCommand() > 400 ? 'over' : ''; }
   }
   const pool = buildShipPool();
-  const airSel = selectedAirCount();
+  const airSelF = selectedFighterCount();
+  const airSelC = selectedCorvetteCount();
   const airTotal = carrierTotal();
-  const airLimit = airTotal.f + airTotal.c;
-  const airUnlocked = hasCarrier() && airSel < airLimit;
+  const airLimitF = airTotal.f;
+  const airLimitC = airTotal.c;
+  const airUnlocked = hasCarrier() && (airSelF < airLimitF || airSelC < airLimitC);
   body.querySelectorAll('.dp-group[data-cls]').forEach(function (g2) {
     const cls = g2.dataset.cls;
     const cnt = selectedShipCount(cls);
     const limit = g2.querySelector('.dp-limit');
     if (limit) limit.textContent = cnt + ' 艘';
     if (cls === 'fighter' || cls === 'corvette') {
-      const locked = !hasCarrier() || airSel >= airLimit;
+      const locked = !hasCarrier() || (cls === 'fighter' ? airSelF >= airLimitF : airSelC >= airLimitC);
       g2.classList.toggle('locked', locked);
       const air = g2.querySelector('.dp-aircap');
-      if (air) air.textContent = '搭载 ' + airSel + '/' + airLimit;
+      if (air) air.textContent = '搭载 ' + (cls === 'fighter' ? airSelF + '/' + airLimitF : airSelC + '/' + airLimitC);
       const tip = g2.querySelector('.dp-lock-tip');
       if (tip) tip.style.display = airUnlocked ? 'none' : '';
     }
@@ -741,7 +749,7 @@ function updateDeployLight() {
     const have = countOfId(s.id);
     const isAir = s.cls === 'fighter' || s.cls === 'corvette';
     let can = have < s.maxShip;
-    if (isAir) can = can && hasCarrier() && selectedAirCount() < carrierTotal().f + carrierTotal().c;
+    if (isAir) can = can && hasCarrier() && (s.cls === 'fighter' ? selectedFighterCount() < carrierTotal().f : selectedCorvetteCount() < carrierTotal().c);
     else can = can && totalCommand() + s.command <= 400;
     el.classList.toggle('off', !can);
     const num = el.parentNode.querySelector('.dp-num');
@@ -793,7 +801,6 @@ function buyPoolItem(idx) {
   if (item.type === 'ship') price = Math.max(1, price - (state.craft ? 1 : 0));
   else if (state.craft) price += 1;
   if (state.funds < price) { flashTip('资金不足'); return; }
-  if (item.type === 'ship' && countHand('ship') >= CONFIG.HAND_LIMIT) { flashTip('舰船手牌区已满'); return; }
   if (item.type === 'equip' && countHand('equip') >= CONFIG.EQUIP_LIMIT) { flashTip('装备栏已满'); return; }
   if (item.type === 'spell' && countHand('spell') >= CONFIG.SPELL_LIMIT) { flashTip('战术指令栏已满'); return; }
   state.funds -= price;
@@ -1079,6 +1086,7 @@ function showBlueModal() {
   const body = document.getElementById('blueBody');
   state.blueOpenedIn = state.phase === 'battle' ? 'settle' : state.phase;
   let html = '<div class="blue-head">强化点 ' + state.techPoints + ' | 编组 ' + state.hand.filter(function (c) { return c.ship; }).length + ' 艘</div>';
+  html += '<div class="blue-actions"><button class="btn-action" id="autoUpgradeBtn">一键花费所有强化点自动强化</button></div>';
   html += '<div class="blue-list">';
   state.hand.forEach(function (card, i) {
     if (!card.ship) return;
@@ -1093,6 +1101,8 @@ function showBlueModal() {
   html += '</div>';
   body.innerHTML = html;
   modal.classList.add('active');
+  const au = document.getElementById('autoUpgradeBtn');
+  if (au) au.addEventListener('click', autoUpgradeAll);
   body.querySelectorAll('.blue-item').forEach(function (el) {
     el.addEventListener('click', function () {
       showShipUpgrade(parseInt(el.dataset.i, 10));
@@ -1100,6 +1110,30 @@ function showBlueModal() {
   });
 }
 
+function autoUpgradeAll() {
+  const cards = state.hand.filter(function (c) { return c.ship; });
+  if (!cards.length) { flashTip('编组中没有舰船'); return; }
+  let spent = 0, guard = 0;
+  while (state.techPoints > 0 && guard < 3000) {
+    guard++;
+    let best = null;
+    cards.forEach(function (card) {
+      const lv = card.lv || {};
+      ['dmg', 'hp', 'rate', 'armor', 'range'].forEach(function (k) {
+        const cost = (lv[k] || 0) + 1;
+        if (cost <= state.techPoints && (!best || cost < best.cost)) best = { card: card, k: k, cost: cost };
+      });
+    });
+    if (!best) break;
+    best.card.lv = best.card.lv || {};
+    best.card.lv[best.k] = (best.card.lv[best.k] || 0) + 1;
+    best.card.spentTech = (best.card.spentTech || 0) + best.cost;
+    state.techPoints -= best.cost;
+    spent += best.cost;
+  }
+  if (spent > 0) { pushNews('一键强化：共花费 ' + spent + ' 强化点', 'good'); showBlueModal(); }
+  else flashTip('强化点不足或已全部满级');
+}
 function showShipUpgrade(handIdx) {
   const card = state.hand[handIdx];
   if (!card || !card.ship) return;
@@ -1343,7 +1377,7 @@ function spawnEnemyWave() {
       alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
     };
   });
-  pushNews('敌方舰队抵达：' + lv + ' 级城防，' + state.enemies.length + ' 艘敌舰（势力1两组 / 势力2两组，强度 ' + scale.toFixed(2) + '）', 'warn');
+  pushNews('敌方舰队抵达：' + lv + ' 级舰队，' + state.enemies.length + ' 艘敌舰（势力1两组 / 势力2两组，强度 ' + scale.toFixed(2) + '）', 'warn');
 }
 function startBattle() {
   if (state.phase !== 'prep') return;
@@ -1735,7 +1769,7 @@ function renderBattle() {
   html += renderRows(state.units, 'my');
   html += '</div>';
   html += '<div class="battle-center">';
-  html += '<div class="bc-info">城防等级 <b>' + cityLevelOf(state.wave) + '</b></div>';
+  html += '<div class="bc-info">舰队等级 <b>' + cityLevelOf(state.wave) + '</b></div>';
   html += '<div class="bc-log" id="bcLog"></div>';
   html += '<div class="bc-hint">自动作战中 · 剩余时间 <span id="clockNum">' + Math.ceil(clockLeft) + '</span>s</div>';
   html += '</div>';

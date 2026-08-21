@@ -721,3 +721,6 @@ body {
 .fleet-card.fortress-hit{border-color:#ff2222;box-shadow:0 0 14px rgba(255,34,34,.7)}
 .fh-count{background:rgba(255,34,34,.85);color:#fff;border-radius:9px;padding:0 6px;font-size:.6rem;margin-left:4px;font-weight:700}
 .final-banner{background:linear-gradient(90deg,rgba(120,0,0,.9),rgba(30,10,8,.9));border:1px solid #ff4444;color:#ffd27f;font-weight:700;text-align:center;padding:8px;margin:6px 12px;border-radius:8px;font-size:.85rem;letter-spacing:1px;text-shadow:0 0 10px rgba(255,68,68,.8)}
+
+.blue-actions{display:flex;gap:8px;margin:6px 0;padding:0 4px}
+.blue-actions .btn-action{flex:1;background:linear-gradient(90deg,#3a6ea5,#4a9ac5);color:#fff;font-weight:700}
