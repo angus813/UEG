@@ -281,6 +281,45 @@ function selectedAirCount() {
   }, 0);
 }
 
+function countOfId(id) {
+  return state.hand.reduce(function (a, c) { return a + (c.ship && c.ship.id === id ? 1 : 0); }, 0);
+}
+function totalCommand() {
+  return state.hand.reduce(function (a, c) { return a + (c.ship && c.ship.cls !== 'fighter' && c.ship.cls !== 'corvette' ? c.ship.command : 0); }, 0);
+}
+function modOffset(card) {
+  const mod = card.mod || '';
+  const o = { dmgMul: 1, hpMul: 1, armorBonus: 0, repair: 0, carry: null };
+  if (/炮击|攻击|火力|突击|鱼雷|导弹|离子/.test(mod)) o.dmgMul = 1.15;
+  if (/装甲|防御|防护/.test(mod)) { o.hpMul = 1.1; o.armorBonus = 5; }
+  if (/载机|机库|舰载/.test(mod)) o.carry = 'add';
+  if (/维修|支援|后勤|工程/.test(mod)) o.repair = 1;
+  return o;
+}
+function openModModal(s) {
+  const modal = document.getElementById('modModal');
+  const body = document.getElementById('modBody');
+  if (!s.mods || !s.mods.length) { flashTip('该舰船没有可更换模块'); return; }
+  let html = '<div class="mod-ship-name">' + s.name + '</div><div class="mod-list">';
+  s.mods.forEach(function (m) {
+    html += '<div class="mod-item" data-mod="' + m + '"><span>' + m + '</span><em>' + (modOffset({ mod: m }).dmgMul > 1 ? '火力型' : modOffset({ mod: m }).repair ? '支援型' : modOffset({ mod: m }).carry ? '载机型' : modOffset({ mod: m }).armorBonus ? '防御型' : '标准型') + '</em></div>';
+  });
+  html += '</div>';
+  body.innerHTML = html;
+  modal.classList.add('active');
+  body.querySelectorAll('.mod-item').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const m = el.dataset.mod;
+      state.hand.forEach(function (c) { if (c.ship && c.ship.id === s.id) c.mod = m; });
+      flashTip('已更换模块：' + m);
+      modal.classList.remove('active');
+      updateDeployRight();
+      const pb = document.getElementById('deployBody');
+      if (pb) pb.querySelectorAll('.dp-ship').forEach(function (x) { x.classList.remove('on'); });
+      showDeployModal();
+    });
+  });
+}
 function showDeployModal() {
   const modal = document.getElementById('deployModal');
   const body = document.getElementById('deployBody');
@@ -290,33 +329,43 @@ function showDeployModal() {
   const total = carrierTotal();
   const airSel = selectedAirCount();
   const airLimit = total.f + total.c;
-  let html = '<div class="deploy-layout">';
+  const cmd = totalCommand();
+  let html = '<div class="deploy-cmd"><span>舰队指挥值</span><b class="' + (cmd > 400 ? 'over' : '') + '">' + cmd + '/400</b><span class="dp-cmd-hint">舰载机不占指挥值</span></div>';
+  html += '<div class="deploy-layout">';
   html += '<div class="deploy-left">';
   const clsOrder = ['carrier', 'battlecruiser', 'battleship', 'cruiser', 'destroyer', 'frigate', 'fighter', 'corvette', 'support'];
   for (const cls of clsOrder) {
     const list = groups[cls] || [];
     if (!list.length) continue;
-    const limit = CONFIG.DEPLOY_LIMIT[cls];
     const cnt = selectedShipCount(cls);
     let locked = false;
     if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || airSel >= airLimit;
     html += '<div class="dp-group' + (locked ? ' locked' : '') + '" data-cls="' + cls + '">';
-    html += '<div class="dp-group-title">' + CLS_ZH[cls] + ' <span class="dp-limit">' + cnt + '/' + (cls === 'fighter' || cls === 'corvette' ? '∞' : limit) + '</span>';
+    html += '<div class="dp-group-title">' + CLS_ZH[cls] + ' <span class="dp-limit">' + cnt + ' 艘</span>';
     if (cls === 'fighter' || cls === 'corvette') {
       html += ' <span class="dp-aircap">搭载 ' + airSel + '/' + airLimit + '</span>';
     }
     html += '</div>';
     if (locked && (cls === 'fighter' || cls === 'corvette')) {
-      html += '<div class="dp-lock-tip">需先选择搭载舰船</div>';
+      html += '<div class="dp-lock-tip">需先选择搭载舰船，且战机/护航艇数量不得超过搭载量</div>';
     }
     html += '<div class="dp-ships">';
     list.forEach(function (s) {
-      const on = state.hand.some(function (c) { return c.ship.id === s.id; });
-      const disabled = !on && ((cls !== 'fighter' && cls !== 'corvette' && cnt >= limit) || locked);
-      html += '<div class="dp-ship' + (on ? ' on' : '') + (disabled ? ' off' : '') + '" data-id="' + s.id + '">';
+      const have = countOfId(s.id);
+      const isAir = s.cls === 'fighter' || s.cls === 'corvette';
+      const maxByAir = isAir ? Math.max(0, airLimit - (airSel - have)) : 99999;
+      const maxN = Math.min(s.maxShip, maxByAir);
+      const canAdd = have < maxN && !locked && cmd + (isAir ? 0 : s.command) <= 400;
+      html += '<div class="dp-ship' + (have ? ' on' : '') + '" data-id="' + s.id + '">';
       html += '<div class="dp-name">' + s.name + '</div>';
-      html += '<div class="dp-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' 甲 ' + s.armor + ' ' + WEAPON_LABEL[s.weapon] + DMGTYPE_LABEL[s.dmgType] + '</div>';
+      html += '<div class="dp-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' 甲 ' + s.armor + ' ' + WEAPON_LABEL[s.weapon] + DMGTYPE_LABEL[s.dmgType] + ' 指挥' + s.command + '</div>';
       if (s.carry) html += '<div class="dp-carry">搭载 战机' + s.carry.fighter + ' 护航艇' + s.carry.corvette + '</div>';
+      html += '<div class="dp-qty">';
+      html += '<button class="dp-minus" data-minus="' + s.id + '">-</button>';
+      html += '<span class="dp-num">' + have + '/' + s.maxShip + '</span>';
+      html += '<button class="dp-plus' + (canAdd ? '' : ' off') + '" data-plus="' + s.id + '">+</button>';
+      if (s.mods && s.mods.length) html += '<button class="dp-mod" data-mod="' + s.id + '">模块</button>';
+      html += '</div>';
       html += '</div>';
     });
     html += '</div></div>';
@@ -327,9 +376,13 @@ function showDeployModal() {
   html += renderDeployPreview();
   html += '<div class="dp-selected" id="dpSelected">';
   if (!state.hand.length) html += '<div class="dp-empty-tip">尚未选择舰船</div>';
-  state.hand.forEach(function (card, i) {
-    html += '<div class="dp-sel-item"><span>' + card.ship.name + '</span><button class="btn-action small danger" data-remove="' + i + '">移除</button></div>';
-  });
+  const byId = {};
+  state.hand.forEach(function (card) { (byId[card.ship.id] = byId[card.ship.id] || []).push(card); });
+  for (const id in byId) {
+    const cards = byId[id];
+    const card = cards[0];
+    html += '<div class="dp-sel-item"><span>' + card.ship.name + ' ×' + cards.length + (card.mod ? ' [' + card.mod + ']' : '') + '</span><button class="btn-action small danger" data-remove="' + id + '">移除</button></div>';
+  }
   html += '</div>';
   html += '<div class="dp-actions">';
   html += '<button class="btn-action primary-btn" id="deployConfirm">确认配队，开始模拟</button>';
@@ -337,32 +390,42 @@ function showDeployModal() {
   html += '</div></div></div>';
   body.innerHTML = html;
   modal.classList.add('active');
-  body.querySelectorAll('.dp-ship').forEach(function (el) {
+  body.querySelectorAll('[data-plus]').forEach(function (el) {
     el.addEventListener('click', function () {
-      const id = el.dataset.id;
-      const s = pool.find(function (x) { return x.id === id; });
+      const s = pool.find(function (x) { return x.id === el.dataset.plus; });
       if (!s) return;
-      const idx = state.hand.findIndex(function (c) { return c.ship.id === id; });
-      if (idx > -1) {
-        state.hand.splice(idx, 1);
-        flashTip('已移除：' + s.name);
-        updateDeployRight();
-        return;
+      const have = countOfId(s.id);
+      const isAir = s.cls === 'fighter' || s.cls === 'corvette';
+      if (have >= s.maxShip) { flashTip('已达该舰船服役数上限'); return; }
+      if (isAir) {
+        if (!hasCarrier()) { flashTip('需先选择搭载舰船'); return; }
+        if (selectedAirCount() >= carrierTotal().f + carrierTotal().c) { flashTip('搭载量已满'); return; }
+      } else {
+        if (totalCommand() + s.command > 400) { flashTip('指挥值不足（' + totalCommand() + '+' + s.command + '>400）'); return; }
       }
-      const cnt = selectedShipCount(s.cls);
-      if (s.cls !== 'fighter' && s.cls !== 'corvette' && cnt >= CONFIG.DEPLOY_LIMIT[s.cls]) { flashTip('该舰种已达配队上限'); return; }
-      if ((s.cls === 'fighter' || s.cls === 'corvette') && !hasCarrier()) { flashTip('需先选择搭载舰船'); return; }
-      if ((s.cls === 'fighter' || s.cls === 'corvette') && selectedAirCount() >= carrierTotal().f + carrierTotal().c) { flashTip('航母搭载已满'); return; }
-      state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
+      state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: s.mods && s.mods.length ? s.mods[0] : '', spentTech: 0 });
       flashTip('已加入编组：' + s.name);
-      updateDeployRight();
+      showDeployModal();
+    });
+  });
+  body.querySelectorAll('[data-minus]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const id = el.dataset.minus;
+      const idx = state.hand.findIndex(function (c) { return c.ship && c.ship.id === id; });
+      if (idx > -1) { state.hand.splice(idx, 1); flashTip('已移除 1 艘'); showDeployModal(); }
+    });
+  });
+  body.querySelectorAll('[data-mod]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      const s = pool.find(function (x) { return x.id === el.dataset.mod; });
+      if (s) openModModal(s);
     });
   });
   body.querySelectorAll('[data-remove]').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      const i = parseInt(btn.dataset.remove, 10);
-      state.hand.splice(i, 1);
-      updateDeployRight();
+      const id = btn.dataset.remove;
+      state.hand = state.hand.filter(function (c) { return !(c.ship && c.ship.id === id); });
+      showDeployModal();
     });
   });
   document.getElementById('deployConfirm').addEventListener('click', function () {
@@ -372,25 +435,27 @@ function showDeployModal() {
   });
   document.getElementById('deployClear').addEventListener('click', function () {
     state.hand = [];
-    updateDeployRight();
+    showDeployModal();
   });
 }
-
 function updateDeployRight() {
   const body = document.getElementById('deployBody');
   if (!body) return;
   const right = body.querySelector('.deploy-right');
-  const pool = buildShipPool();
-  const total = carrierTotal();
-  const airSel = selectedAirCount();
-  const airLimit = total.f + total.c;
-  let html = '<div class="dp-right-title">我方编组（' + state.hand.length + ' 艘）</div>';
+  if (!right) return;
+  const cmd = totalCommand();
+  let html = '<div class="deploy-cmd"><span>舰队指挥值</span><b class="' + (cmd > 400 ? 'over' : '') + '">' + cmd + '/400</b></div>';
+  html += '<div class="dp-right-title">我方编组（' + state.hand.length + ' 艘）</div>';
   html += renderDeployPreview();
   html += '<div class="dp-selected">';
   if (!state.hand.length) html += '<div class="dp-empty-tip">尚未选择舰船</div>';
-  state.hand.forEach(function (card, i) {
-    html += '<div class="dp-sel-item"><span>' + card.ship.name + '</span><button class="btn-action small danger" data-remove="' + i + '">移除</button></div>';
-  });
+  const byId = {};
+  state.hand.forEach(function (card) { (byId[card.ship.id] = byId[card.ship.id] || []).push(card); });
+  for (const id in byId) {
+    const cards = byId[id];
+    const card = cards[0];
+    html += '<div class="dp-sel-item"><span>' + card.ship.name + ' ×' + cards.length + (card.mod ? ' [' + card.mod + ']' : '') + '</span><button class="btn-action small danger" data-remove="' + id + '">移除</button></div>';
+  }
   html += '</div>';
   html += '<div class="dp-actions">';
   html += '<button class="btn-action primary-btn" id="deployConfirm">确认配队，开始模拟</button>';
@@ -399,9 +464,9 @@ function updateDeployRight() {
   right.innerHTML = html;
   right.querySelectorAll('[data-remove]').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      const i = parseInt(btn.dataset.remove, 10);
-      state.hand.splice(i, 1);
-      updateDeployRight();
+      const id = btn.dataset.remove;
+      state.hand = state.hand.filter(function (c) { return !(c.ship && c.ship.id === id); });
+      showDeployModal();
     });
   });
   document.getElementById('deployConfirm').addEventListener('click', function () {
@@ -409,27 +474,7 @@ function updateDeployRight() {
     document.getElementById('deployModal').classList.remove('active');
     startSimulation();
   });
-  document.getElementById('deployClear').addEventListener('click', function () {
-    state.hand = [];
-    updateDeployRight();
-  });
-  body.querySelectorAll('.dp-group').forEach(function (g) {
-    const cls = g.dataset.cls;
-    if (!cls) return;
-    const limit = CONFIG.DEPLOY_LIMIT[cls];
-    const cnt = selectedShipCount(cls);
-    const cap = g.querySelector('.dp-limit');
-    if (cap) cap.textContent = cnt + '/' + limit;
-    let locked = false;
-    if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || airSel >= airLimit;
-    g.classList.toggle('locked', locked);
-    g.querySelectorAll('.dp-ship').forEach(function (el) {
-      const id = el.dataset.id;
-      const on = state.hand.some(function (c) { return c.ship.id === id; });
-      el.classList.toggle('on', on);
-      el.classList.toggle('off', !on && (cnt >= limit || locked));
-    });
-  });
+  document.getElementById('deployClear').addEventListener('click', function () { state.hand = []; showDeployModal(); });
 }
 
 function renderDeployPreview() {
@@ -970,7 +1015,7 @@ function showBlueModal() {
     const s = card.ship;
     const lv = card.lv || {};
     html += '<div class="blue-item" data-i="' + i + '">';
-    html += '<div class="bi-name">' + s.name + (card.elite ? ' [精锐]' : '') + '</div>';
+    html += '<div class="bi-name' + ((card.spentTech || 0) >= 100 ? ' gold' : '') + '">' + s.name + (card.elite ? ' [精锐]' : '') + (card.spentTech >= 100 ? ' [金色]' : '') + '</div>';
     html += '<div class="bi-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' 甲 ' + s.armor + '</div>';
     html += '<div class="bi-lv">攻' + (lv.dmg || 0) + ' 命' + (lv.hp || 0) + ' 速' + (lv.rate || 0) + ' 甲' + (lv.armor || 0) + ' 程' + (lv.range || 0) + '</div>';
     html += '</div>';
@@ -997,7 +1042,7 @@ function showShipUpgrade(handIdx) {
     { k: 'armor', name: '装甲', base: s.armor, pct: 0 },
     { k: 'range', name: '射程', base: s.range, pct: 0 }
   ];
-  let html = '<div class="su-head">' + s.name + (card.elite ? ' [精锐]' : '') + '</div>';
+  let html = '<div class="su-head' + ((card.spentTech || 0) >= 100 ? ' gold' : '') + '">' + s.name + (card.elite ? ' [精锐]' : '') + ' <em>累计强化 ' + (card.spentTech || 0) + '/100</em></div>';
   html += '<div class="su-points">强化点 ' + state.techPoints + '</div>';
   items.forEach(function (it) {
     const cur = lv[it.k] || 0;
@@ -1018,6 +1063,7 @@ function showShipUpgrade(handIdx) {
       const cost = cur + 1;
       if (state.techPoints < cost) { flashTip('强化点不足'); return; }
       state.techPoints -= cost;
+    card.spentTech = (card.spentTech || 0) + cost;
       lv[k] = cur + 1;
       pushNews('强化完成：' + s.shortName + ' ' + k + ' +1', 'good');
       showShipUpgrade(handIdx);
@@ -1040,6 +1086,8 @@ function rebuildUnits() {
     armorBonus += (lv.armor || 0) * 2;
     rangeBonus += (lv.range || 0) * 0.4;
     if (card.elite) { dmgMul *= 1.4; hpMul *= 1.4; rateMul *= 1.2; armorBonus += 3; }
+    const mo = modOffset(card);
+    dmgMul *= mo.dmgMul; hpMul *= mo.hpMul; armorBonus += mo.armorBonus;
     (card.equips || []).forEach(function (eq) {
       if (eq.id === 'dmg') dmgMul *= 1.25;
       else if (eq.id === 'armor') armorBonus += 3;
@@ -1049,13 +1097,14 @@ function rebuildUnits() {
       else if (eq.id === 'energy') energyMul *= 1.4;
       else if (eq.id === 'crit') critBonus += 0.15;
     });
-    const maxHp = Math.round(s.hp * hpMul * state.bonuses.hpMul);
+    const waveScale = 1 + (state.wave - 1) * 0.04;
+    const maxHp = Math.round(s.hp * hpMul * state.bonuses.hpMul * waveScale);
     const hasShield = s.dmgType === 'energy' || (card.equips || []).some(function (e) { return e.id === 'shield'; });
     return {
       cardIdx: i, id: 'my_' + i, name: s.name, shortName: s.shortName || s.name, cls: s.cls, row: s.row, repair: s.repair ? 1 : 0,
       maxHp: maxHp, hp: maxHp,
       shield: hasShield ? Math.round(maxHp * 0.2) + ((card.equips || []).filter(function (e) { return e.id === 'shield'; }).length ? 40 : 0) : 0,
-      dmg: Math.round(s.dmg * dmgMul * state.bonuses.dmgMul),
+      dmg: Math.round(s.dmg * dmgMul * state.bonuses.dmgMul * waveScale),
       armor: s.armor + armorBonus + state.bonuses.armorBonus,
       rate: s.rate * rateMul * state.bonuses.rateMul,
       range: s.range + rangeBonus + state.bonuses.rangeBonus,
@@ -1069,25 +1118,29 @@ function spawnEnemyWave() {
   const lv = cityLevelOf(state.wave);
   const config = (window.CITY_DEFENSE || {})[lv] || [];
   const scale = 1 + (state.wave - 1) * 0.05;
-  state.enemies = config.map(function (e, i) {
-    const zone = e.zone || (e.cls === 'cruiser' ? 'mid' : (e.cls === 'destroyer' || e.cls === 'frigate' || e.cls === 'corvette' ? 'front' : 'back'));
+  const units = [];
+  config.forEach(function (e) { for (let k = 0; k < e.count; k++) units.push(e); });
+  const seg = Math.max(1, Math.ceil(units.length / 4));
+  state.enemies = units.map(function (e, i) {
+    const grp = Math.min(3, Math.floor(i / seg));
+    const zone = e.cls === 'cruiser' ? 'mid' : (e.cls === 'destroyer' || e.cls === 'frigate' || e.cls === 'corvette' ? 'front' : 'back');
     return {
       id: 'en_' + i, name: e.zh, shortName: e.zh, cls: e.cls,
-      zone: zone, count: e.count, factionIdx: i % 2,
-      maxHp: Math.round(e.totalHp * scale), hp: Math.round(e.totalHp * scale),
-      dmg: Math.round(e.atk * e.count * scale), armor: Math.round(e.armor * scale), shield: Math.round(e.shield * e.count * scale),
+      zone: zone, count: 1, group: grp, factionIdx: grp < 2 ? 0 : 1,
+      maxHp: Math.round(e.hp * scale), hp: Math.round(e.hp * scale),
+      dmg: Math.round(e.atk * scale), armor: Math.round(e.armor * scale), shield: Math.round(e.shield * scale),
       dmgType: e.dmgType, weapon: e.weapon, tier: e.tier, repair: e.repair ? 1 : 0,
       alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
     };
   });
-  pushNews('敌方舰队抵达：' + lv + ' 级城防（' + state.enemies.length + ' 个编队，强度 ' + scale.toFixed(2) + '）', 'warn');
+  pushNews('敌方舰队抵达：' + lv + ' 级城防，' + state.enemies.length + ' 艘敌舰（势力1两组 / 势力2两组，强度 ' + scale.toFixed(2) + '）', 'warn');
 }
-
 function startBattle() {
   if (state.phase !== 'prep') return;
   if (!state.hand.some(function (c) { return c.ship; })) { flashTip('编组中没有舰船'); return; }
   state.phase = 'battle';
   state.repairUntil = Date.now() + 2500;
+  warpTrigger('auto');
   if (!state.poolFrozen) state.pool = [];
   else { state.poolFrozen = false; state.pool.forEach(function (p) { p.frozen = false; }); }
   const spells = state.hand.filter(function (c) { return c.type === 'spell'; });
@@ -1191,7 +1244,10 @@ function gameTick(now, dt) {
       const take0 = Math.min(state.factionHp[0], fDmg);
       state.factionHp[0] -= take0;
       fDmg -= take0;
-      if (fDmg > 0) state.factionHp[1] = Math.max(0, state.factionHp[1] - fDmg);
+      if (fDmg > 0) {
+        if (state.wave < CONFIG.TOTAL_ROUNDS) state.factionHp[1] = Math.max(100, state.factionHp[1] - fDmg);
+        else state.factionHp[1] = Math.max(0, state.factionHp[1] - fDmg);
+      }
       pushNews('击毁敌方编队：' + e.shortName + '（势力1生命 -' + take0 + (fDmg > 0 ? '，势力2生命 -' + fDmg : '') + '，强化点 +' + tp + '）', 'good');
     }
   }
@@ -1436,9 +1492,10 @@ function renderFleetCard(u, side) {
   const icon = CLS_ICON[u.cls] || '◇';
   const color = CLS_COLOR[u.cls] || '#8fa3c8';
   const countTxt = (side === 'en' && u.count && u.count > 1) ? ' ×' + u.count : '';
+  const grpTxt = (side === 'en' && u.group !== undefined) ? '<span class="grp-tag">势力' + (u.factionIdx + 1) + '·第' + ((u.group % 2) + 1) + '组</span>' : '';
   return '<div class="fleet-card' + (dead ? ' dead' : '') + (u.elite ? ' elite' : '') + (side === 'en' ? ' enemy' : '') + '" id="' + u.id + '" data-hp="' + Math.round(u.hp) + '">' +
     '<div class="fc-head"><span class="fc-icon" style="background:' + color + '26;border-color:' + color + ';">' + icon + '</span>' +
-    '<div class="fc-id"><div class="fc-name">' + (u.shortName || u.name) + '</div><div class="fc-cls" style="color:' + color + ';">' + (CLS_ZH[u.cls] || '') + countTxt + (u.repair ? ' <span class="fc-repair">维修</span>' : '') + '</div></div></div>' +
+    '<div class="fc-id"><div class="fc-name">' + (u.shortName || u.name) + '</div><div class="fc-cls" style="color:' + color + ';">' + (CLS_ZH[u.cls] || '') + countTxt + grpTxt + (u.repair ? ' <span class="fc-repair">维修</span>' : '') + '</div></div></div>' +
     '<div class="fc-bar"><div class="fc-hp"><div class="fill" style="width:' + pct + '%"></div></div>' +
     (u.shield > 0 ? '<div class="fc-shield"><div class="fill" style="width:' + shieldPct + '%"></div></div>' : '') + '</div>' +
     '<div class="fc-hpnum">' + Math.max(0, Math.round(u.hp)) + '/' + u.maxHp + '</div>' +
@@ -1660,4 +1717,152 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   document.getElementById('confirmOk').addEventListener('click', function () {});
   document.getElementById('confirmCancel').addEventListener('click', function () {});
+});
+
+function warpInit() {
+  let c = document.getElementById('warpCanvas');
+  if (!c) { c = document.createElement('canvas'); c.id = 'warpCanvas'; document.body.appendChild(c); }
+  const ctx = c.getContext('2d');
+  let W = 0, H = 0;
+  function resize() { W = c.width = window.innerWidth; H = c.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+  const N = 10000;
+  const parts = [];
+  for (let i = 0; i < N; i++) {
+    parts.push({ x: (Math.random() * 2 - 1) * 2000, y: (Math.random() * 2 - 1) * 2000, z: Math.random() * 2000 - 1000 });
+  }
+  let phase = 'idle';
+  let t = 0;
+  let speed = 0;
+  let charge = 0;
+  let flash = 0;
+  let autoSeq = 0;
+  const f = 640, viewZ = 2500;
+  function project(p) {
+    const zz = p.z + viewZ;
+    let sx = W / 2 + (p.x * f) / zz;
+    let sy = H / 2 + (p.y * f) / zz;
+    if (phase === 'warp' || phase === 'exit') {
+      const rx = (sx - W / 2) / (W / 2);
+      const ry = (sy - H / 2) / (H / 2);
+      const r2 = rx * rx + ry * ry;
+      const k = 1 + 0.22 * r2;
+      sx = W / 2 + (sx - W / 2) * k;
+      sy = H / 2 + (sy - H / 2) * k;
+    }
+    return { x: sx, y: sy };
+  }
+  function colorOf() {
+    const v = Math.min(1, speed / 90);
+    if (phase === 'idle') return 'rgba(210,225,255,';
+    if (phase === 'charge') return 'rgba(170,150,255,';
+    if (v < 0.4) return 'rgba(225,235,255,';
+    if (v < 0.75) return 'rgba(0,170,255,';
+    return 'rgba(170,120,255,';
+  }
+  function frame() {
+    requestAnimationFrame(frame);
+    t += 0.016;
+    if (autoSeq > 0) {
+      autoSeq -= 0.016;
+      if (phase === 'charge' && autoSeq <= 1.6) phase = 'warp';
+      else if (phase === 'warp' && autoSeq <= 0.6) phase = 'exit';
+      else if (phase === 'exit' && autoSeq <= 0) { phase = 'idle'; flash = 0.9; }
+    }
+    if (phase === 'warp') speed = Math.min(110, speed + 30);
+    else if (phase === 'exit') speed = Math.max(0, speed - 60);
+    else if (phase === 'charge') charge = Math.min(1, charge + 0.06);
+    else { charge = Math.max(0, charge - 0.05); speed = 8; }
+    if (phase === 'idle') { charge = 0; speed = 8; }
+    flash = Math.max(0, flash - 0.05);
+    ctx.clearRect(0, 0, W, H);
+    const breathe = 0.55 + 0.25 * Math.sin(t * 2);
+    if (phase === 'charge' || phase === 'warp' || phase === 'exit') {
+      ctx.fillStyle = 'rgba(4,2,14,0.35)';
+      ctx.fillRect(0, 0, W, H);
+    }
+    for (let i = 0; i < N; i++) {
+      const p = parts[i];
+      if (phase === 'charge') { p.x *= 0.988; p.y *= 0.988; p.z += 20; }
+      else if (phase === 'warp') { p.z += speed * 1.6; }
+      else if (phase === 'exit') { p.z += Math.max(8, speed * 1.6); }
+      else { p.z += 6; }
+      if (p.z > 1800) { p.z = -1200; p.x = (Math.random() * 2 - 1) * 2000; p.y = (Math.random() * 2 - 1) * 2000; }
+      if (p.z < -1400) { p.z = 1800; }
+      const pr = project(p);
+      let size = 0.5 + Math.random() * 1.5;
+      let alpha = breathe * (0.6 + 0.4 * Math.random());
+      if (phase === 'charge') alpha *= 0.7 + 0.5 * Math.sin(t * (8 + charge * 14) + i * 0.01);
+      if (pr.x < -40 || pr.x > W + 40 || pr.y < -40 || pr.y > H + 40) continue;
+      ctx.fillStyle = colorOf() + alpha + ')';
+      ctx.shadowBlur = phase === 'warp' ? 10 : 6;
+      ctx.shadowColor = 'rgba(120,180,255,0.9)';
+      if (phase === 'warp' || phase === 'exit') {
+        const len = Math.min(90, speed * 1.1);
+        const vx = (pr.x - W / 2) / (W / 2);
+        const vy = (pr.y - H / 2) / (H / 2);
+        ctx.strokeStyle = ctx.fillStyle;
+        ctx.lineWidth = size * 0.8;
+        ctx.beginPath();
+        ctx.moveTo(pr.x, pr.y);
+        ctx.lineTo(pr.x - vx * len, pr.y - vy * len);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(pr.x, pr.y, size, 0, 6.2832);
+        ctx.fill();
+      }
+    }
+    ctx.shadowBlur = 0;
+    if (phase === 'charge') {
+      const g2 = ctx.createRadialGradient(W / 2, H / 2, W * 0.1, W / 2, H / 2, Math.max(W, H) * 0.72);
+      g2.addColorStop(0, 'rgba(0,0,0,0)');
+      g2.addColorStop(1, 'rgba(80,40,200,' + (0.22 + charge * 0.3) + ')');
+      ctx.fillStyle = g2;
+      ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = 'rgba(120,90,255,' + (0.2 + charge * 0.3) + ')';
+      ctx.lineWidth = 1;
+      for (let y = 0; y < H; y += 3) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    }
+    if (phase === 'warp' || phase === 'exit') {
+      const cx = W / 2, cy = H / 2;
+      const rr = 26 + 8 * Math.sin(t * 5);
+      ctx.strokeStyle = 'rgba(200,30,40,0.75)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr, 0, 6.2832);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(140,20,30,0.5)';
+      for (let a = 0; a < 6; a++) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr * (0.4 + a * 0.12), t * 1.5 + a * 1.05, t * 1.5 + a * 1.05 + 1.2);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(160,20,30,0.35)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr * 0.5, 0, 6.2832);
+      ctx.fill();
+    }
+    if (flash > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,' + flash.toFixed(2) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+  frame();
+  return {
+    trigger: function (mode) {
+      if (mode === 'auto') { phase = 'charge'; charge = 0; speed = 8; autoSeq = 3.4; }
+      else if (phase === 'idle') { phase = 'charge'; charge = 0; speed = 8; autoSeq = 0; }
+      else if (phase === 'charge') { phase = 'warp'; }
+    }
+  };
+}
+let warpFX = null;
+function warpTrigger(mode) {
+  if (!warpFX) { try { warpFX = warpInit(); } catch (e) { return; } }
+  warpFX.trigger(mode || 'auto');
+}
+window.addEventListener('keydown', function (e) {
+  if (e.code === 'Space') { e.preventDefault(); warpTrigger('manual'); }
 });
