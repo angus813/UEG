@@ -718,6 +718,10 @@ function updateDeployLight() {
     if (b) { b.textContent = totalCommand() + '/400'; b.className = totalCommand() > 400 ? 'over' : ''; }
   }
   const pool = buildShipPool();
+  const airUnlocked = hasCarrier() && selectedAirCount() < carrierTotal().f + carrierTotal().c;
+  body.querySelectorAll('.dp-lock-tip').forEach(function (t) {
+    t.style.display = airUnlocked ? 'none' : '';
+  });
   body.querySelectorAll('[data-plus]').forEach(function (el) {
     const s = pool.find(function (x) { return x.id === el.dataset.plus; });
     if (!s) return;
