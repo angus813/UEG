@@ -16,9 +16,9 @@ const CONFIG = {
   ASSAULT_FACTOR: 0.06,
   DEPLOY_LIMIT: {carrier: 2, battlecruiser: 2, battleship: 2, cruiser: 5, destroyer: 5, frigate: 5, fighter: 5, corvette: 5, support: 5},
   MODES: {
-    beginner: {name: '入门协议', life: 1000, funds: [5, 13, 10], reward: 1},
-    prototype: {name: '原型协议', life: 1000, funds: [5, 1, 12], reward: 1.5},
-    core: {name: '核心协议', life: 1000, funds: [3, 1, 12], reward: 2}
+    beginner: {name: '入门协议', life: 1000, funds: [60, 3, 100], reward: 1},
+    prototype: {name: '原型协议', life: 1000, funds: [60, 3, 100], reward: 1.5},
+    core: {name: '核心协议', life: 1000, funds: [60, 3, 100], reward: 2}
   },
   BARGE: [
     {slots: 1, equipSlots: 0, shield: 1, cost: 2},
@@ -175,6 +175,7 @@ function initGame() {
     factions: [], factionHp: [], factionMaxHp: [],
     life: 1000, maxLife: 70, funds: 0, techPoints: 0,
     wave: 1, bargeLevel: 1, upgradeDiscount: 0, shield: 1,
+    finalRound: { active: false, wave: 0, intermission: false, timer: 0, fortress: null, lockPrompted: false, fortressAoEDone: false },
     pool: [], poolFrozen: false, hand: [], units: [], enemies: [],
     bonuses: { dmgMul: 1, hpMul: 1, rateMul: 1, armorBonus: 0, armorMul: 1, rangeBonus: 0, directMul: 1, projMul: 1, airMul: 1, shieldBonus: 0, critChance: 0, energyMul: 1 },
     enhanceMul: 1, enemyDmgMul: 1,
@@ -479,7 +480,7 @@ function renderTopStatus() {
   let html = '<div class="top-status">';
   for (let i = 0; i < 2; i++) {
     const pct = state.factionMaxHp[i] ? Math.max(0, state.factionHp[i] / state.factionMaxHp[i] * 100) : 0;
-    html += '<div class="faction-bar"><div class="fb-name">敌方势力 ' + (i + 1) + '</div><div class="fb-track"><div class="fb-fill" style="width:' + pct + '%"></div></div><div class="fb-num">' + Math.max(0, state.factionHp[i]) + '</div></div>';
+    html += '<div class="faction-bar"><div class="fb-name">' + factionName(i) + '</div><div class="fb-track"><div class="fb-fill" style="width:' + pct + '%"></div></div><div class="fb-num">' + Math.max(0, state.factionHp[i]) + '</div></div>';
   }
   html += '<div class="my-bar">';
   html += '<div class="mb-row"><span class="mb-label">护盾</span><div class="shield-bar"><div class="fill" style="width:' + Math.min(100, state.shield / Math.max(1, bargeShield() + 5) * 100) + '%"></div></div><span class="mb-val">' + Math.round(state.shield) + '</span></div>';
@@ -495,6 +496,9 @@ function renderPrep() {
   panel.dataset.mode = 'prep';
   let html = '<div class="game-header">';
   html += renderTopStatus();
+  if (state.finalRound && state.finalRound.active) {
+    html += '<div class="final-banner">最终回合 · 第 ' + state.finalRound.wave + ' 波次' + (state.finalRound.intermission ? '（间期 <span id="interTimer">' + Math.max(0, state.finalRound.timer) + '</span> 秒，可驳船补给）' : '') + '</div>';
+  }
   html += renderNewsTicker();
   html += renderBarge();
   html += '<div class="prep-fleet">';
@@ -534,19 +538,14 @@ function bargeUpgradeCost() {
 }
 function fundsOfRound(wave) {
   const m = CONFIG.MODES[state.mode].funds;
-  if (state.mode === 'beginner') {
-    if (wave === 1) return m[0];
-    if (wave === 2) return m[1];
-    return m[2];
-  }
-  return Math.min(m[2], m[0] + (wave - 1));
+  return Math.min(m[2], m[0] + (wave - 1) * m[1]);
 }
 function generatePool() {
   const b = CONFIG.BARGE[state.bargeLevel - 1];
   const pool = [];
   for (let i = 0; i < b.slots; i++) {
     const s = randomShipByLevel(0);
-    pool.push({ type: 'ship', ship: s, price: Math.max(2, Math.round(s.hp / 120)) });
+    pool.push({ type: 'ship', ship: s, price: Math.min(20, Math.max(10, Math.round(s.hp / 20000))) });
   }
   for (let i = 0; i < b.equipSlots; i++) {
     const eq = EQUIP_BLUEPRINTS[Math.floor(Math.random() * EQUIP_BLUEPRINTS.length)];
@@ -728,6 +727,8 @@ function updateDeployLight() {
     const limit = g2.querySelector('.dp-limit');
     if (limit) limit.textContent = cnt + ' 艘';
     if (cls === 'fighter' || cls === 'corvette') {
+      const locked = !hasCarrier() || airSel >= airLimit;
+      g2.classList.toggle('locked', locked);
       const air = g2.querySelector('.dp-aircap');
       if (air) air.textContent = '搭载 ' + airSel + '/' + airLimit;
       const tip = g2.querySelector('.dp-lock-tip');
@@ -1183,10 +1184,150 @@ function rebuildUnits() {
   }).filter(function (u) { return u; });
 }
 
+function factionName(i) {
+  if (state.finalRound && state.finalRound.active) return i === 0 ? '黑色舰队先锋' : '黑色打击舰队';
+  return i === 0 ? '亚空间第一巡航舰队' : '亚空间第二巡航舰队';
+}
+function makeFortress(scale) {
+  return {
+    id: 'fortress', name: '特拉法加', shortName: '特拉法加', cls: 'support', zone: 'mid', count: 1,
+    maxHp: 3000000, hp: 3000000, maxShield: 300000, shield: 300000,
+    armor: 50, dmgType: 'physical', weapon: 'direct', tier: 99, repair: 1,
+    fortress: true, alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0, lockUntil: 0,
+    fortressHits: 0, modules: [
+      { weapon: 'direct', dmgType: 'physical', targets: 2, dpm: 3000 },
+      { weapon: 'direct', dmgType: 'energy', targets: 2, dpm: 4000 },
+      { weapon: 'projectile', dmgType: 'physical', targets: 4, dpm: 1500 },
+      { weapon: 'air', dmgType: 'physical', targets: 6, dpm: 1000 }
+    ]
+  };
+}
+function finalRoundWave4Ships() {
+  const pool = window.PLAYER_SHIPS || [];
+  const list = [];
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  const carriers = pool.filter(function (s) { return s.cls === 'carrier'; });
+  const tianshu = pool.filter(function (s) { return /天枢/.test(s.name); });
+  const warspite = pool.filter(function (s) { return /止战/.test(s.name); });
+  const bcs = pool.filter(function (s) { return s.cls === 'battlecruiser' || s.cls === 'battleship'; });
+  const others = pool.filter(function (s) { return s.cls !== 'carrier' && !/止战/.test(s.name) && s.cls !== 'battlecruiser' && s.cls !== 'battleship'; });
+  for (let i = 0; i < 5; i++) list.push(pick(tianshu.length ? tianshu : carriers));
+  for (let i = 0; i < 10; i++) list.push(pick(carriers));
+  for (let i = 0; i < 3; i++) list.push(pick(warspite.length ? warspite : bcs));
+  for (let i = 0; i < 30; i++) list.push(pick(bcs));
+  while (list.length < 150) list.push(pick(others));
+  return list.slice(0, 150).map(function (s, idx) {
+    const nm = /天枢/.test(s.name) ? s.name + '（黑色）' : s.name;
+    return { name: nm, cls: s.cls, hp: s.hp, dmg: s.dmg, armor: s.armor, shield: s.shield, dmgType: s.dmgType, weapon: s.weapon, tier: 6, repair: s.repair ? 1 : 0 };
+  });
+}
+let interTimer = null;
+function finalRoundStart() {
+  if (state.finalRound.active) return;
+  state.finalRound.active = true;
+  state.finalRound.wave = 0;
+  state.finalRound.fortress = null;
+  state.finalRound.fortressAoEDone = false;
+  state.factionHp = [2000, 2000];
+  state.factionMaxHp = [2000, 2000];
+  pushNews('最终回合开启：黑色舰队先锋 / 黑色打击舰队（生命 2000）', 'warn');
+  finalRoundNextWave();
+}
+function finalRoundNextWave() {
+  state.finalRound.wave++;
+  const w = state.finalRound.wave;
+  if (w > 4) {
+    state.phase = 'settle';
+    renderPrep();
+    endGame(state.factionHp[0] <= 0 && state.factionHp[1] <= 0);
+    return;
+  }
+  const scale = 1 + state.wave * 0.25;
+  let units = [];
+  if (w <= 3) {
+    const cfg = (window.CITY_DEFENSE || {})['9'] || [];
+    const take = w <= 2 ? 6 : 8;
+    cfg.slice(0, take).forEach(function (e) { for (let k = 0; k < e.count; k++) units.push(e); });
+    state.enemies = units.map(function (e, i) {
+      const zone = e.cls === 'cruiser' ? 'mid' : (e.cls === 'destroyer' || e.cls === 'frigate' || e.cls === 'corvette' ? 'front' : 'back');
+      return {
+        id: 'en_' + i, name: e.zh, shortName: e.zh, cls: e.cls, zone: zone, count: 1, group: 0, factionIdx: 0,
+        maxHp: Math.round(e.hp * scale), hp: Math.round(e.hp * scale), dmg: Math.round(e.atk * scale),
+        armor: Math.round(e.armor * scale), shield: Math.round(e.shield * scale), dmgType: e.dmgType, weapon: e.weapon,
+        tier: e.tier, repair: e.repair ? 1 : 0, alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
+      };
+    });
+  } else {
+    const ships = finalRoundWave4Ships();
+    state.enemies = ships.map(function (e, i) {
+      const zone = e.cls === 'cruiser' ? 'mid' : (e.cls === 'destroyer' || e.cls === 'frigate' || e.cls === 'corvette' ? 'front' : 'back');
+      return {
+        id: 'en_' + i, name: e.name, shortName: e.name, cls: e.cls, zone: zone, count: 1, group: 0, factionIdx: 0,
+        maxHp: Math.round(e.hp * scale), hp: Math.round(e.hp * scale), dmg: Math.round(e.dmg * scale),
+        armor: Math.round(e.armor * scale), shield: Math.round(e.shield * scale), dmgType: e.dmgType, weapon: e.weapon,
+        tier: e.tier, repair: e.repair ? 1 : 0, alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
+      };
+    });
+    state.enemies.forEach(function (e) { e.shield += 1000; });
+    const fs2 = makeFortress(scale);
+    fs2.lockUntil = Date.now() + 30000;
+    state.finalRound.fortress = fs2;
+    state.enemies.push(fs2);
+    pushNews('要塞舰特拉法加登场！HP 3000000 · 护盾 300000 · 登场锁血30秒', 'warn');
+  }
+  state.finalRound.intermission = true;
+  state.finalRound.timer = 20;
+  state.phase = 'prep';
+  state.shield = bargeShield() + state.bonuses.shieldBonus;
+  renderPrep();
+  pushNews('最终回合 · 第 ' + w + ' 波次准备中（20秒间期，可驳船补给，舰船血量不重置）', 'warn');
+  if (interTimer) clearInterval(interTimer);
+  interTimer = setInterval(function () {
+    state.finalRound.timer -= 1;
+    const tEl = document.getElementById('interTimer');
+    if (tEl) tEl.textContent = Math.max(0, state.finalRound.timer);
+    if (state.finalRound.timer <= 0) {
+      clearInterval(interTimer);
+      interTimer = null;
+      if (state.phase === 'prep' && state.finalRound.wave <= 4) {
+        state.finalRound.intermission = false;
+        startBattle();
+      }
+    }
+  }, 1000);
+}
+function fortressAttack(now) {
+  const fs2 = state.finalRound && state.finalRound.fortress;
+  if (!fs2 || !fs2.alive) return;
+  if (now - fs2.lastFireTime < 250) return;
+  fs2.lastFireTime = now;
+  const myUnits = state.units.filter(function (u) { return u.alive; });
+  if (!myUnits.length) return;
+  myUnits.forEach(function (u) { u.fortressHits = 0; });
+  fs2.modules.forEach(function (m) {
+    const perHit = m.dpm / 60;
+    for (let k = 0; k < m.targets; k++) {
+      const t = acquireTarget({ weapon: m.weapon, dmgType: m.dmgType, col: 2, range: 5 }, myUnits.filter(function (u) { return u.alive; }));
+      if (!t) break;
+      t.fortressHits = (t.fortressHits || 0) + 1;
+      const dealt = calcDamage(perHit, m.dmgType, t, m.weapon);
+      t.hp -= dealt;
+      const el = document.getElementById(t.id);
+      if (el) {
+        spawnDamagePop(el, dealt, false, true);
+        el.classList.add('fortress-hit');
+        let cnt = el.querySelector('.fh-count');
+        if (!cnt) { cnt = document.createElement('span'); cnt.className = 'fh-count'; el.appendChild(cnt); }
+        cnt.textContent = '×' + t.fortressHits;
+      }
+    }
+  });
+}
+
 function spawnEnemyWave() {
   const lv = cityLevelOf(state.wave);
   const config = (window.CITY_DEFENSE || {})[lv] || [];
-  const scale = 1 + (state.wave - 1) * 0.05;
+  const scale = Math.pow(3, state.wave - 1);
   const units = [];
   config.forEach(function (e) { for (let k = 0; k < e.count; k++) units.push(e); });
   const seg = Math.max(1, Math.ceil(units.length / 4));
@@ -1216,13 +1357,23 @@ function startBattle() {
   spells.forEach(function (c) { castSpell(c.sp); });
   rebuildUnits();
   spawnEnemyWave();
-  clockLeft = CONFIG.ROUND_CLOCK;
+  clockLeft = state.finalRound && state.finalRound.active ? 180 : CONFIG.ROUND_CLOCK;
   overtime = 0;
   toxicActive = false;
   state.battleFocusMul = 1;
   state.attackEvents = [];
   state.breakthroughUntil = Date.now() + 30000;
   state.roundLifeLost = 0;
+  state.finalRound.waveEnded = false;
+  if (state.finalRound && state.finalRound.active) {
+    const keepHp = state.units.map(function (u) { return { id: u.id, hp: u.hp }; });
+    const keepAlive = state.units.map(function (u) { return u.alive; });
+    rebuildUnits();
+    state.units.forEach(function (u) {
+      const idx = keepHp.findIndex(function (k) { return k.id === u.id; });
+      if (idx >= 0) { u.hp = Math.min(u.maxHp, keepHp[idx].hp); u.alive = keepAlive[idx]; }
+    });
+  }
   renderBattle();
   startEntranceSequence();
 }
@@ -1270,15 +1421,19 @@ function repairTick(now) {
 function healSide(list, isEnemy) {
   const healers = list.filter(function (u) { return u.alive && u.repair; });
   if (!healers.length) return;
-  const targets = list.filter(function (u) { return u.alive && u.hp < u.maxHp; });
-  if (!targets.length) return;
   healers.forEach(function (h) {
+    const targets = list.filter(function (u) { return u.alive && u !== h && u.hp < u.maxHp; });
+    if (!targets.length) return;
     let target = targets[0];
     for (let i = 1; i < targets.length; i++) {
       if (targets[i].hp / targets[i].maxHp < target.hp / target.maxHp) target = targets[i];
     }
     const heal = Math.max(1, Math.round(h.dmg * 1.25));
-    target.hp = Math.min(target.maxHp, target.hp + heal);
+    if (target.fortress) {
+      target.shield = Math.min(target.maxShield || 300000, (target.shield || 0) + heal);
+    } else {
+      target.hp = Math.min(target.maxHp, target.hp + heal);
+    }
     const el = document.getElementById(target.id);
     if (el) spawnDamagePop(el, heal, false, isEnemy, true);
   });
@@ -1287,6 +1442,24 @@ function gameTick(now, dt) {
   if (state.phase !== 'battle') return;
   clockLeft -= dt;
   if (clockLeft <= 0 && !toxicActive) { toxicActive = true; pushNews('战场即将恶化：毒雾开始蔓延', 'warn'); }
+  if (state.finalRound && state.finalRound.active && clockLeft <= 0 && !state.finalRound.waveEnded) {
+    state.finalRound.waveEnded = true;
+    state.enemies.forEach(function (e) { e.alive = false; e.hp = 0; });
+    pushNews('波次时间到（3分钟），剩余敌舰撤出战场', 'warn');
+  }
+  if (state.finalRound && state.finalRound.fortress && !state.finalRound.fortress.alive && !state.finalRound.fortressAoEDone) {
+    state.finalRound.fortressAoEDone = true;
+    state.units.forEach(function (u) {
+      if (u.alive && u.zone === 'front') { u.aoeUntil = now + 10000; u.aoeDps = 200; }
+    });
+    pushNews('特拉法加阵亡！对我方前排释放能量直射（10秒，每秒200伤害）', 'warn');
+  }
+  state.units.forEach(function (u) {
+    if (u.alive && u.aoeUntil && now < u.aoeUntil) {
+      u.hp -= (u.aoeDps || 200) * dt;
+      if (u.hp <= 0) { u.alive = false; u.hp = 0; const c = CONFIG.DEATH_COST[u.cls] || 2; state.life -= c; pushNews(u.shortName + '被能量直射击毁（我方生命 -' + c + '）', 'bad'); }
+    }
+  });
   if (toxicActive) overtime += dt;
   if (toxicActive) {
     const pct = Math.min(0.08, 0.03 + 0.0005 * overtime);
@@ -1298,6 +1471,7 @@ function gameTick(now, dt) {
   }
   repairTick(now);
   myAttack(now);
+  fortressAttack(now);
   enemyAttack(now);
   if (state.breakthroughUntil && now > state.breakthroughUntil) {
     state.breakthroughUntil = now + 5000;
@@ -1324,14 +1498,27 @@ function gameTick(now, dt) {
       state.roundKills++;
       const tp = Math.max(2, e.tier * 2);
       state.techPoints += tp;
+      if (e.fortress) {
+        state.factionHp[0] = Math.max(0, state.factionHp[0] - 500);
+        state.factionHp[1] = Math.max(0, state.factionHp[1] - 500);
+        pushNews('要塞舰特拉法加被击毁！黑色舰队生命 -500', 'good');
+      }
       const cost = CONFIG.DEATH_COST[e.cls] || 2;
       let fDmg = Math.round(cost * e.count * 1.5);
       const take0 = Math.min(state.factionHp[0], fDmg);
       state.factionHp[0] -= take0;
       fDmg -= take0;
       if (fDmg > 0) {
-        if (state.wave < CONFIG.TOTAL_ROUNDS) state.factionHp[1] = Math.max(100, state.factionHp[1] - fDmg);
-        else state.factionHp[1] = Math.max(0, state.factionHp[1] - fDmg);
+        if (state.wave < CONFIG.TOTAL_ROUNDS) {
+          const prev1 = state.factionHp[1];
+          state.factionHp[1] = Math.max(100, state.factionHp[1] - fDmg);
+          if (prev1 > 100 && state.factionHp[1] <= 100 && !state.finalRound.active && !state.finalRound.lockPrompted) {
+            state.finalRound.lockPrompted = true;
+            setTimeout(function () {
+              showConfirm('是否进入最终回合？', '敌方亚空间第二巡航舰队生命已降至 100 并被锁定。进入最终回合后敌方生命恢复至 2000，并迎来 4 个波次的最终决战（第4波含要塞舰特拉法加）。', function () { finalRoundStart(); });
+            }, 600);
+          }
+        } else state.factionHp[1] = Math.max(0, state.factionHp[1] - fDmg);
       }
       pushNews('击毁敌方编队：' + e.shortName + '（势力1生命 -' + take0 + (fDmg > 0 ? '，势力2生命 -' + fDmg : '') + '，强化点 +' + tp + '）', 'good');
     }
@@ -1411,6 +1598,16 @@ function acquireTarget(attacker, candidates) {
 }
 
 function calcDamage(dmg, dmgType, target, weapon) {
+  if (target.fortress && Date.now() < (target.lockUntil || 0)) return 0;
+  if (target.fortress) {
+    let dmg2 = dmg;
+    if (target.shield > 0) {
+      const abs = Math.min(target.shield, dmg2);
+      target.shield -= abs;
+      dmg2 -= abs;
+    }
+    return Math.max(0, dmg2);
+  }
   if (target.cls === 'fighter' || target.cls === 'corvette') {
     if (weapon !== 'air') return 0;
   }
@@ -1443,9 +1640,14 @@ function settleRound(win) {
   }
   if (state.factionHp.every(function (h) { return h <= 0; })) { endGame(true); return; }
   if (state.life <= 0) { state.life = 0; endGame(false); return; }
+  if (state.finalRound.active) {
+    finalRoundNextWave();
+    return;
+  }
   state.wave++;
   if (state.wave > CONFIG.TOTAL_ROUNDS) {
-    endGame(false);
+    if (state.finalRound.lockPrompted) finalRoundStart();
+    else endGame(false);
     return;
   }
   renderPrep();
@@ -1519,6 +1721,12 @@ function renderBattle() {
   panel.dataset.mode = 'battle';
   let html = '<div class="game-header battle-layout">';
   html += renderTopStatus();
+  const fsB = state.finalRound && state.finalRound.fortress;
+  if (fsB) {
+    html += '<div class="fortress-bar"><div class="fb-name">要塞舰 · 特拉法加' + (fsB.alive ? '' : '（已击毁）') + '</div>';
+    html += '<div class="fort-hp"><div class="fill" style="width:' + (fsB.hp / fsB.maxHp * 100) + '%"></div><span>' + Math.max(0, Math.round(fsB.hp)) + ' / ' + fsB.maxHp + '</span></div>';
+    html += '<div class="fort-sh"><div class="fill" style="width:' + (fsB.shield / fsB.maxShield * 100) + '%"></div><span>护盾 ' + Math.max(0, Math.round(fsB.shield)) + ' / ' + fsB.maxShield + '</span></div></div>';
+  }
   html += renderNewsTicker();
   html += '<div class="battle-clock" id="battleClock">' + Math.ceil(clockLeft) + '</div>';
   html += '<div class="battle-view">';
@@ -1578,10 +1786,10 @@ function renderFleetCard(u, side) {
   const color = CLS_COLOR[u.cls] || '#8fa3c8';
   const countTxt = (side === 'en' && u.count && u.count > 1) ? ' ×' + u.count : '';
   const warping = side === 'en' && u.entered === false;
-  const grpTxt = (side === 'en' && u.group !== undefined) ? '<span class="grp-tag">势力' + (u.factionIdx + 1) + '·第' + ((u.group % 2) + 1) + '组</span>' : '';
-  return '<div class="fleet-card' + (dead ? ' dead' : '') + (u.elite ? ' elite' : '') + (side === 'en' ? ' enemy' : '') + (warping ? ' warp-in' : '') + '" id="' + u.id + '" data-hp="' + Math.round(u.hp) + '">' +
+  const grpTxt = (side === 'en' && u.group !== undefined) ? '<span class="grp-tag">' + factionName(u.factionIdx) + '·第' + ((u.group % 2) + 1) + '组</span>' : '';
+  return '<div class="fleet-card' + (dead ? ' dead' : '') + (u.elite ? ' elite' : '') + (u.fortress ? ' fortress' : '') + (u.fortressHits ? ' fortress-hit' : '') + (side === 'en' ? ' enemy' : '') + (warping ? ' warp-in' : '') + '" id="' + u.id + '" data-hp="' + Math.round(u.hp) + '">' +
     '<div class="fc-head"><span class="fc-icon" style="background:' + color + '26;border-color:' + color + ';">' + icon + '</span>' +
-    '<div class="fc-id"><div class="fc-name">' + (warping ? '跃迁中…' : (u.shortName || u.name)) + '</div><div class="fc-cls" style="color:' + color + ';">' + (CLS_ZH[u.cls] || '') + countTxt + grpTxt + (u.repair ? ' <span class="fc-repair">维修</span>' : '') + '</div></div></div>' +
+    '<div class="fc-id"><div class="fc-name' + (u.fortress ? ' gold' : '') + '">' + (warping ? '跃迁中…' : (u.shortName || u.name)) + (u.fortressHits ? '<span class="fh-count">×' + u.fortressHits + '</span>' : '') + '</div><div class="fc-cls" style="color:' + color + ';">' + (CLS_ZH[u.cls] || '') + countTxt + grpTxt + (u.repair ? ' <span class="fc-repair">维修</span>' : '') + '</div></div></div>' +
     '<div class="fc-bar"><div class="fc-hp"><div class="fill" style="width:' + pct + '%"></div></div>' +
     (u.shield > 0 ? '<div class="fc-shield"><div class="fill" style="width:' + shieldPct + '%"></div></div>' : '') + '</div>' +
     '<div class="fc-hpnum">' + Math.max(0, Math.round(u.hp)) + '/' + u.maxHp + '</div>' +
