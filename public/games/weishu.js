@@ -16,9 +16,9 @@ const CONFIG = {
   ASSAULT_FACTOR: 0.06,
   DEPLOY_LIMIT: {carrier: 2, battlecruiser: 2, battleship: 2, cruiser: 5, destroyer: 5, frigate: 5, fighter: 5, corvette: 5, support: 5},
   MODES: {
-    beginner: {name: '入门协议', life: 1000, funds: [60, 3, 100], reward: 1},
-    prototype: {name: '原型协议', life: 1000, funds: [60, 3, 100], reward: 1.5},
-    core: {name: '核心协议', life: 1000, funds: [60, 3, 100], reward: 2}
+    beginner: {name: '入门协议', life: 500, funds: [60, 70, 9999], reward: 1},
+    prototype: {name: '原型协议', life: 700, funds: [50, 60, 9999], reward: 1.5},
+    core: {name: '核心协议', life: 1000, funds: [40, 50, 9999], reward: 2}
   },
   BARGE: [
     {slots: 1, equipSlots: 0, shield: 1, cost: 2},
@@ -1375,7 +1375,7 @@ function finalRoundNextWave() {
     });
     state.enemies.forEach(function (e) { e.shield += 1000; });
     const fs2 = makeFortress(scale);
-    fs2.lockUntil = Date.now() + 30000;
+    fs2.lockUntil = Date.now() + 14000;
     state.finalRound.fortress = fs2;
     state.enemies.push(fs2);
     pushNews('要塞舰特拉法加登场！HP 3000000 · 护盾 300000 · 登场锁血30秒', 'warn');
