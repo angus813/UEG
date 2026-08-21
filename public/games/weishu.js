@@ -1432,7 +1432,7 @@ function fortressAttack(now) {
 function spawnEnemyWave() {
   const lv = cityLevelOf(state.wave);
   const config = (window.CITY_DEFENSE || {})[lv] || [];
-  const scale = Math.pow(3, state.wave - 1);
+  const scale = Math.pow(1.4, state.wave - 1);
   const units = [];
   config.slice(0, 6).forEach(function (e) { for (let k = 0; k < e.count; k++) units.push(e); });
   const seg = Math.max(1, Math.ceil(units.length / 4));
