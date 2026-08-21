@@ -1965,6 +1965,19 @@ function updateBattleUI() {
   }
   const clockNum = document.getElementById('clockNum');
   if (clockNum) clockNum.textContent = toxicActive ? '+' + Math.floor(overtime) : Math.max(0, Math.ceil(clockLeft));
+  const cntEl = panel.querySelector('.fleet-panel.right .fp-cnt');
+  if (cntEl) cntEl.textContent = state.enemies.filter(function (e) { return e.alive; }).length + '/' + state.enemies.length;
+  const fsb = state.finalRound && state.finalRound.fortress;
+  if (fsb) {
+    const fh = panel.querySelector('.fort-hp .fill');
+    if (fh) fh.style.width = Math.max(0, fsb.hp / fsb.maxHp * 100) + '%';
+    const fhn = panel.querySelector('.fort-hp span');
+    if (fhn) fhn.textContent = Math.max(0, Math.round(fsb.hp)) + ' / ' + fsb.maxHp;
+    const fsh = panel.querySelector('.fort-sh .fill');
+    if (fsh) fsh.style.width = Math.max(0, fsb.shield / fsb.maxShield * 100) + '%';
+    const fsn = panel.querySelector('.fort-sh span');
+    if (fsn) fsn.textContent = '护盾 ' + Math.max(0, Math.round(fsb.shield)) + ' / ' + fsb.maxShield;
+  }
   state.units.forEach(function (u) {
     const el = document.getElementById(u.id);
     if (!el) return;
