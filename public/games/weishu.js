@@ -1461,7 +1461,11 @@ function startBattle() {
   state.hand = state.hand.filter(function (c) { return c.type !== 'spell'; });
   spells.forEach(function (c) { castSpell(c.sp); });
   rebuildUnits();
-  spawnEnemyWave();
+  if (state.finalRound && state.finalRound.active) {
+    state.enemies.forEach(function (e) { e.lastFireTime = 0; });
+  } else {
+    spawnEnemyWave();
+  }
   clockLeft = state.finalRound && state.finalRound.active ? 180 : CONFIG.ROUND_CLOCK;
   overtime = 0;
   toxicActive = false;
