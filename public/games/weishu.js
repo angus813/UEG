@@ -718,9 +718,21 @@ function updateDeployLight() {
     if (b) { b.textContent = totalCommand() + '/400'; b.className = totalCommand() > 400 ? 'over' : ''; }
   }
   const pool = buildShipPool();
-  const airUnlocked = hasCarrier() && selectedAirCount() < carrierTotal().f + carrierTotal().c;
-  body.querySelectorAll('.dp-lock-tip').forEach(function (t) {
-    t.style.display = airUnlocked ? 'none' : '';
+  const airSel = selectedAirCount();
+  const airTotal = carrierTotal();
+  const airLimit = airTotal.f + airTotal.c;
+  const airUnlocked = hasCarrier() && airSel < airLimit;
+  body.querySelectorAll('.dp-group[data-cls]').forEach(function (g2) {
+    const cls = g2.dataset.cls;
+    const cnt = selectedShipCount(cls);
+    const limit = g2.querySelector('.dp-limit');
+    if (limit) limit.textContent = cnt + ' 艘';
+    if (cls === 'fighter' || cls === 'corvette') {
+      const air = g2.querySelector('.dp-aircap');
+      if (air) air.textContent = '搭载 ' + airSel + '/' + airLimit;
+      const tip = g2.querySelector('.dp-lock-tip');
+      if (tip) tip.style.display = airUnlocked ? 'none' : '';
+    }
   });
   body.querySelectorAll('[data-plus]').forEach(function (el) {
     const s = pool.find(function (x) { return x.id === el.dataset.plus; });
