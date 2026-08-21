@@ -263,11 +263,11 @@ function selectedShipCount(cls) {
   return state.hand.filter(function (c) { return c.ship && c.ship.cls === cls; }).length;
 }
 function hasCarrier() {
-  return state.hand.some(function (c) { return c.ship && c.ship.cls === 'carrier'; });
+  return state.hand.some(function (c) { return c.ship && c.ship.carry; });
 }
 function carrierTotal() {
   return state.hand.reduce(function (a, c) {
-    if (c.ship && c.ship.cls === 'carrier' && c.ship.carry) { a.f += c.ship.carry.fighter; a.c += c.ship.carry.corvette; }
+    if (c.ship && c.ship.carry) { a.f += c.ship.carry.fighter; a.c += c.ship.carry.corvette; }
     return a;
   }, { f: 0, c: 0 });
 }
@@ -304,7 +304,7 @@ function showDeployModal() {
     }
     html += '</div>';
     if (locked && (cls === 'fighter' || cls === 'corvette')) {
-      html += '<div class="dp-lock-tip">需先选择航空母舰并配置搭载</div>';
+      html += '<div class="dp-lock-tip">需先选择搭载舰船</div>';
     }
     html += '<div class="dp-ships">';
     list.forEach(function (s) {
@@ -348,7 +348,7 @@ function showDeployModal() {
       }
       const cnt = selectedShipCount(s.cls);
       if (cnt >= CONFIG.DEPLOY_LIMIT[s.cls]) { flashTip('该舰种已达配队上限'); return; }
-      if ((s.cls === 'fighter' || s.cls === 'corvette') && !hasCarrier()) { flashTip('需先选择航空母舰'); return; }
+      if ((s.cls === 'fighter' || s.cls === 'corvette') && !hasCarrier()) { flashTip('需先选择搭载舰船'); return; }
       if ((s.cls === 'fighter' || s.cls === 'corvette') && selectedAirCount() >= carrierTotal().f + carrierTotal().c) { flashTip('航母搭载已满'); return; }
       state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
       flashTip('已加入编组：' + s.name);
@@ -607,6 +607,7 @@ function renderPrep() {
   html += renderActionBar('prep');
   html += '</div>';
   panel.innerHTML = html;
+  renderPoolSectionBind();
 }
 
 function renderBarge() {
