@@ -1298,7 +1298,7 @@ function makeFortress(scale) {
     id: 'fortress', name: '特拉法加', shortName: '特拉法加', cls: 'support', zone: 'mid', count: 1,
     maxHp: 3000000, hp: 3000000, maxShield: 300000, shield: 300000,
     armor: 50, dmgType: 'physical', weapon: 'direct', tier: 99, repair: 1,
-    fortress: true, alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0, lockUntil: 0,
+    fortress: true, alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0, lockUntil: 0, readyUntil: 0, fireUntil: 0, cooling: false, coolUntil: 0,
     fortressHits: 0, modules: [
       { weapon: 'direct', dmgType: 'physical', targets: 2, dpm: 3000 },
       { weapon: 'direct', dmgType: 'energy', targets: 2, dpm: 4000 },
@@ -1392,9 +1392,11 @@ function finalRoundNextWave() {
     state.enemies.forEach(function (e) { e.shield += 1000; });
     const fs2 = makeFortress(scale);
     fs2.lockUntil = Date.now() + 14000;
+    fs2.readyUntil = fs2.lockUntil;
+    fs2.fireUntil = fs2.lockUntil + 10000;
     state.finalRound.fortress = fs2;
     state.enemies.push(fs2);
-    pushNews('要塞舰特拉法加登场！HP 3000000 · 护盾 300000 · 登场锁血30秒', 'warn');
+    pushNews('要塞舰特拉法加登场！HP 3000000 · 护盾 300000 · 14秒索敌后输出10秒冷却5秒', 'warn');
   }
   state.finalRound.intermission = true;
   state.finalRound.timer = 20;
@@ -1420,6 +1422,19 @@ function finalRoundNextWave() {
 function fortressAttack(now) {
   const fs2 = state.finalRound && state.finalRound.fortress;
   if (!fs2 || !fs2.alive) return;
+  if (now < fs2.readyUntil) return;
+  if (fs2.cooling) {
+    if (now < fs2.coolUntil) return;
+    fs2.cooling = false;
+    fs2.fireUntil = now + 10000;
+    pushNews('要塞舰武器系统充能完毕，进入输出阶段', 'warn');
+  }
+  if (now >= fs2.fireUntil) {
+    fs2.cooling = true;
+    fs2.coolUntil = now + 5000;
+    pushNews('要塞舰武器输出结束，冷却5秒', 'warn');
+    return;
+  }
   if (now - fs2.lastFireTime < 250) return;
   fs2.lastFireTime = now;
   const myUnits = state.units.filter(function (u) { return u.alive; });
