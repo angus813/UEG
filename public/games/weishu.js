@@ -443,6 +443,7 @@ function startSimulation() {
 function startPrepRound() {
   state.phase = 'prep';
   stopBattleLoop();
+  warpTrigger('idle');
   const fog = document.getElementById('toxicFog');
   if (fog) fog.remove();
   const reward = 2 + state.wave + Math.floor(state.techPoints * 0) ;
@@ -689,9 +690,7 @@ function upgradeBarge() {
   renderPrep();
 }
 function renderDeployRight() {
-  const cmd = totalCommand();
   let html = '<div class="deploy-right">';
-  html += '<div class="deploy-cmd"><span>舰队指挥值</span><b class="' + (cmd > 400 ? 'over' : '') + '">' + cmd + '/400</b><span class="cmd-hint">舰载机不占指挥值</span></div>';
   html += '<div class="dp-right-title">我方编组（' + state.hand.length + ' 艘）</div>';
   html += renderDeployPreview();
   html += '<div class="dp-selected" id="dpSelected">';
@@ -713,6 +712,11 @@ function renderDeployRight() {
 function updateDeployLight() {
   const body = document.getElementById('deployBody');
   if (!body) return;
+  const cEl = body.querySelector('.deploy-cmd');
+  if (cEl) {
+    const b = cEl.querySelector('b');
+    if (b) { b.textContent = totalCommand() + '/400'; b.className = totalCommand() > 400 ? 'over' : ''; }
+  }
   const pool = buildShipPool();
   body.querySelectorAll('[data-plus]').forEach(function (el) {
     const s = pool.find(function (x) { return x.id === el.dataset.plus; });
@@ -1784,7 +1788,7 @@ function warpInit() {
   for (let i = 0; i < N; i++) {
     parts.push({ x: (Math.random() * 2 - 1) * 2000, y: (Math.random() * 2 - 1) * 2000, z: Math.random() * 2000 - 1000, s: 0.5 + Math.random() * 1.5, tw: Math.random() * 6.28 });
   }
-  let phase = 'idle';
+  let phase = 'off';
   let t = 0, speed = 8, flash = 0, charge = 0, shake = 0;
   let autoSeq = 0;
   const f = 640, viewZ = 2500;
@@ -1834,11 +1838,13 @@ function warpInit() {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     t += dt;
+    if (phase === 'off') { c.style.display = 'none'; return; }
+    c.style.display = 'block';
     if (autoSeq > 0) {
       autoSeq -= dt;
       if (phase === 'charge' && autoSeq <= 1.2) phase = 'warp';
       else if (phase === 'warp' && autoSeq <= 0.4) phase = 'exit';
-      else if (phase === 'exit' && autoSeq <= 0) { phase = 'idle'; flash = 0.85; }
+      else if (phase === 'exit' && autoSeq <= 0) { phase = 'off'; flash = 0.85; }
     }
     if (phase === 'warp') { speed = Math.min(130, speed + 90 * dt); shake = Math.min(8, shake + 14 * dt); }
     else if (phase === 'exit') { speed = Math.max(0, speed - 120 * dt); shake = Math.max(0, shake - 20 * dt); }
@@ -1858,7 +1864,7 @@ function warpInit() {
           entrance.idx++;
         }
         if (entrance.idx >= entrance.list.length) {
-          phase = 'idle';
+          phase = 'off';
           flash = 0.8;
           const cb = entrance.done;
           entrance.list = []; entrance.done = null;
@@ -1980,7 +1986,11 @@ function warpInit() {
   requestAnimationFrame(step);
   return {
     trigger: function (mode) {
-      if (mode === 'manual') { if (phase === 'idle') { phase = 'charge'; charge = 0; speed = 8; autoSeq = 0; } else if (phase === 'charge') { phase = 'warp'; } }
+      if (mode === 'idle') { phase = 'idle'; speed = 8; charge = 0; shake = 0; autoSeq = 0; }
+      else if (mode === 'manual') {
+        if (phase === 'off' || phase === 'idle') { phase = 'charge'; charge = 0; speed = 8; autoSeq = 2.2; }
+        else if (phase === 'charge') { phase = 'warp'; }
+      }
     },
     entrancePlay: function (list, done) {
       entrance.list = list; entrance.idx = 0; entrance.timer = 0.15; entrance.done = done;
