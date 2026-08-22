@@ -9,12 +9,13 @@ const CONFIG = {
   TOTAL_ROUNDS: 15,
   ROUND_CLOCK: 120,
   BREACH_CAP: 60,
+  // HAND_LIMIT: 手牌舰船上限已取消（对局中购买舰船不限数量），保留定义供参考
   HAND_LIMIT: 24,
   EQUIP_LIMIT: 12,
   SPELL_LIMIT: 8,
   DEATH_COST: {fighter: 1, corvette: 1, frigate: 2, destroyer: 3, cruiser: 4, support: 4, battlecruiser: 5, battleship: 6, carrier: 7},
   ASSAULT_FACTOR: 0.06,
-  // DEPLOY_LIMIT: 舰种数量上限已取消（配队不受舰种数量限制，仅受单型号服役数与指挥值约束），保留定义供参考
+  // DEPLOY_LIMIT: 舰种数量上限与指挥值上限均已取消（配队仅受单型号服役数与搭载量约束），保留定义供参考
   DEPLOY_LIMIT: {carrier: 2, battlecruiser: 2, battleship: 2, cruiser: 5, destroyer: 5, frigate: 5, fighter: 5, corvette: 5, support: 5},
   MODES: {
     beginner: {name: '入门协议', life: 500, funds: [60, 70, 9999], reward: 1},
@@ -401,8 +402,7 @@ function loadFleetConfig() {
       const mod = s.mods && s.mods.length ? (it.mod || s.mods[0]) : '';
       for (let i = 0; i < it.count; i++) state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: mod, spentTech: 0 });
     });
-    if (totalCommand() > 400) flashTip('配置已加载：' + state.hand.length + ' 艘（指挥值 ' + totalCommand() + '/400，已超限，请调整）');
-    else flashTip('配置已加载：' + state.hand.length + ' 艘');
+    flashTip('配置已加载：' + state.hand.length + ' 艘');
     showDeployModal();
   } catch (e) { flashTip('加载失败：' + e.message); }
 }
@@ -418,7 +418,7 @@ function showDeployModal() {
   const airLimitF = total.f;
   const airLimitC = total.c;
   const cmd = totalCommand();
-  let html = '<div class="deploy-cmd"><span>舰队指挥值</span><b class="' + (cmd > 400 ? 'over' : '') + '">' + cmd + '/400</b><span class="dp-cmd-hint">舰载机不占指挥值</span><span class="dp-cmd-actions"><button class="btn-action tiny" id="saveFleetBtn">保存配置</button><button class="btn-action tiny" id="loadFleetBtn">加载配置</button></span></div>';
+  let html = '<div class="deploy-cmd"><span>舰队指挥值</span><b>' + cmd + '</b><span class="dp-cmd-hint">无上限 · 舰载机不占指挥值</span><span class="dp-cmd-actions"><button class="btn-action tiny" id="saveFleetBtn">保存配置</button><button class="btn-action tiny" id="loadFleetBtn">加载配置</button></span></div>';
   html += '<div class="deploy-layout">';
   html += '<div class="deploy-left">';
   const clsOrder = ['carrier', 'battlecruiser', 'battleship', 'cruiser', 'destroyer', 'frigate', 'fighter', 'corvette', 'support'];
@@ -444,7 +444,7 @@ function showDeployModal() {
       const airUsed = s.cls === 'fighter' ? (airSelF - have) : (airSelC - have);
       const maxByAir = isAir ? Math.max(0, (s.cls === 'fighter' ? airLimitF : airLimitC) - airUsed) : 99999;
       const maxN = Math.min(s.maxShip, maxByAir);
-      const canAdd = have < maxN && !locked && cmd + (isAir ? 0 : s.command) <= 400;
+      const canAdd = have < maxN && !locked;
       html += '<div class="dp-ship' + (have ? ' on' : '') + '" data-id="' + s.id + '">';
       html += '<div class="dp-name">' + s.name + '</div>';
       html += '<div class="dp-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' 甲 ' + s.armor + ' ' + WEAPON_LABEL[s.weapon] + DMGTYPE_LABEL[s.dmgType] + ' 指挥' + s.command + '</div>';
@@ -478,8 +478,6 @@ function showDeployModal() {
       if (isAir) {
         if (!hasCarrier()) { flashTip('需先选择搭载舰船'); return; }
         if (s.cls === 'fighter' ? selectedFighterCount() >= carrierTotal().f : selectedCorvetteCount() >= carrierTotal().c) { flashTip('该机种搭载量已满'); return; }
-      } else {
-        if (totalCommand() + s.command > 400) { flashTip('指挥值不足（' + totalCommand() + '+' + s.command + '>400）'); return; }
       }
       state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: s.mods && s.mods.length ? s.mods[0] : '', spentTech: 0 });
       flashTip('已加入编组：' + s.name);
@@ -753,7 +751,7 @@ function updateDeployLight() {
   const cEl = body.querySelector('.deploy-cmd');
   if (cEl) {
     const b = cEl.querySelector('b');
-    if (b) { b.textContent = totalCommand() + '/400'; b.className = totalCommand() > 400 ? 'over' : ''; }
+    if (b) { b.textContent = totalCommand(); }
   }
   const pool = buildShipPool();
   const airSelF = selectedFighterCount();
@@ -783,7 +781,6 @@ function updateDeployLight() {
     const isAir = s.cls === 'fighter' || s.cls === 'corvette';
     let can = have < s.maxShip;
     if (isAir) can = can && hasCarrier() && (s.cls === 'fighter' ? selectedFighterCount() < carrierTotal().f : selectedCorvetteCount() < carrierTotal().c);
-    else can = can && totalCommand() + s.command <= 400;
     el.classList.toggle('off', !can);
     const num = el.parentNode.querySelector('.dp-num');
     if (num) num.textContent = have + '/' + s.maxShip;
@@ -836,7 +833,6 @@ function buyPoolItem(idx) {
   if (state.funds < price) { flashTip('资金不足'); return; }
   if (item.type === 'equip' && countHand('equip') >= CONFIG.EQUIP_LIMIT) { flashTip('装备栏已满'); return; }
   if (item.type === 'spell' && countHand('spell') >= CONFIG.SPELL_LIMIT) { flashTip('战术指令栏已满'); return; }
-  if (item.type === 'ship' && countHand('ship') >= CONFIG.HAND_LIMIT) { flashTip('手牌区舰船已满（' + CONFIG.HAND_LIMIT + '）'); return; }
   state.funds -= price;
   state.spentFunds += price;
   if (item.type === 'ship') {
@@ -892,7 +888,7 @@ function renderPoolSection() {
 
 function renderHandSection() {
   let html = '<div class="hand-section">';
-  html += '<div class="hand-head"><span>手牌区 舰船 ' + countHand('ship') + '/' + CONFIG.HAND_LIMIT + ' 装备 ' + countHand('equip') + '/' + CONFIG.EQUIP_LIMIT + ' 战术 ' + countHand('spell') + '/' + CONFIG.SPELL_LIMIT + '</span><button class="btn-action tiny" id="blueOpenBtn">本局蓝图数据库</button></div>';
+  html += '<div class="hand-head"><span>手牌区 舰船 ' + countHand('ship') + ' 装备 ' + countHand('equip') + '/' + CONFIG.EQUIP_LIMIT + ' 战术 ' + countHand('spell') + '/' + CONFIG.SPELL_LIMIT + '</span><button class="btn-action tiny" id="blueOpenBtn">本局蓝图数据库</button></div>';
   html += '<div class="hand-list">';
   if (!state.hand.length) html += '<div class="pool-empty">手牌区为空</div>';
   state.hand.forEach(function (card, i) {
@@ -2078,7 +2074,7 @@ document.addEventListener('DOMContentLoaded', function () {
       '<div class="sp-row"><span>全局加成</span><span class="v">+' + Math.round((computeEnhanceMul() - 1) * 100) + '%</span></div></div>' +
       '<div class="sp-sec"><div class="sp-sec-title">配队规则</div>' +
       '<div class="sp-row"><span>舰种数量</span><span class="v">不限（同型号受服役数上限约束）</span></div>' +
-      '<div class="sp-row"><span>指挥值</span><span class="v">总计不超过 400</span></div>' +
+      '<div class="sp-row"><span>指挥值</span><span class="v">无上限限制</span></div>' +
       '<div class="sp-row"><span>战机 / 护航艇</span><span class="v">仅选择航母后可配置，不超过搭载量</span></div></div>' +
       '<div class="sp-actions"><button class="btn-action primary-btn" id="spDeployBtn">前往舰队配置</button></div></div>');
     document.getElementById('spDeployBtn').addEventListener('click', function () {
