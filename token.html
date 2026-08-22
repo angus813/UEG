@@ -90,8 +90,13 @@
     }
 
     function getCurrentUser() {
-      const cu = localStorage.getItem('ueg_current_user');
-      return cu ? JSON.parse(cu) : null;
+      try {
+        const cu = localStorage.getItem('ueg_current_user');
+        return cu ? JSON.parse(cu) : null;
+      } catch (e) {
+        localStorage.removeItem('ueg_current_user');
+        return null;
+      }
     }
     function setCurrentUser(user) {
       if (user) localStorage.setItem('ueg_current_user', JSON.stringify(user));
@@ -142,12 +147,15 @@
 
     // 初始化：显示配置与登录状态
     (function init() {
-      const apiCfg = window.UEG_CONFIG && window.UEG_CONFIG.api;
+      const cfg = window.UEG_CONFIG || {};
+      const isLocal = cfg.mode === 'local';
+      const src = isLocal ? (cfg.api || {}) : (cfg.supabase || {});
       const info = document.getElementById('cfgInfo');
       info.innerHTML =
-        '后端地址：' + (apiCfg ? apiCfg.url : '未配置') + '<br>' +
-        'PUBLISHABLE_KEY：' + (apiCfg ? apiCfg.publishableKey : '') + '<br>' +
-        'JWKS_URL：' + (apiCfg ? apiCfg.jwksUrl : '') + '<br>' +
+        '数据源模式：' + (isLocal ? '本地 Python 后端' : 'Supabase 云端') + '<br>' +
+        '后端地址：' + (src.url || '未配置') + '<br>' +
+        'PUBLISHABLE_KEY：' + (src.publishableKey || '') + '<br>' +
+        'JWKS_URL：' + ((isLocal ? '本地模式无 JWKS' : (src.jwksUrl || '未配置'))) + '<br>' +
         'SECRET_KEY / GITHUB_TOKEN：仅存在于后端 .env';
 
       const u = getCurrentUser();

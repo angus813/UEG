@@ -3,6 +3,7 @@ const params = new URLSearchParams(window.location.search);
 const mapId = params.get('id');
 let currentMap = null;
 let shapes = [];
+let loadedShapesSnapshot = ''; // 加载时服务端 shapes 快照，用于保存前冲突比对
 
 const canvas = document.getElementById('mainCanvas');
 const ctx = canvas.getContext('2d');
@@ -27,12 +28,16 @@ let isPointerDown = false;
 
 // 坐标定位光点
 let targetMarker = null;
+let targetMarkerTimer = null;
 
 // 剪贴板
 let clipboardShape = null;
 
 // 只读模式
 let isViewMode = false;
+
+// 未保存更改标记（saveState 置 true，saveMap 成功置 false）
+let dirty = false;
 
 // ---------- 触摸缩放新增 ----------
 let lastTouchDist = 0;
@@ -62,8 +67,12 @@ function stopAnimation() {
 
 // ---------- 当前用户 ----------
 function getCurrentUser() {
-  const cu = localStorage.getItem('ueg_current_user');
-  return cu ? JSON.parse(cu) : null;
+  try {
+    const cu = localStorage.getItem('ueg_current_user');
+    return cu ? JSON.parse(cu) : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 // ---------- 撤回/回撤系统 ----------
@@ -73,6 +82,7 @@ let historyIndex = -1;
 
 function saveState() {
   if (isViewMode) return;
+  dirty = true;
   history = history.slice(0, historyIndex + 1);
   const snapshot = JSON.parse(JSON.stringify(shapes));
   history.push(snapshot);
@@ -83,6 +93,7 @@ function saveState() {
 function undo() {
   if (isViewMode || historyIndex <= 0) return;
   historyIndex--;
+  dirty = true;
   shapes = JSON.parse(JSON.stringify(history[historyIndex]));
   selectedShapeIndex = -1;
   document.getElementById('propertiesSection').style.display = 'none';
@@ -93,6 +104,7 @@ function undo() {
 function redo() {
   if (isViewMode || historyIndex >= history.length - 1) return;
   historyIndex++;
+  dirty = true;
   shapes = JSON.parse(JSON.stringify(history[historyIndex]));
   selectedShapeIndex = -1;
   document.getElementById('propertiesSection').style.display = 'none';
@@ -139,13 +151,14 @@ function getShapeBounds(shape) {
     if (y > maxY) maxY = y;
   };
 
-  if (shape.x1 !== undefined && shape.x2 !== undefined) {
+  if (type === 'freehand' && Array.isArray(shape.points) && shape.points.length) {
+    shape.points.forEach(pt => { if (pt) addPoint(pt.x, pt.y); });
+  } else if (shape.x1 !== undefined && shape.x2 !== undefined) {
     addPoint(shape.x1, shape.y1);
     addPoint(shape.x2, shape.y2);
-    if (type !== 'line' && type !== 'arrow') {
+    if (type === 'arrow') {
       const headSize = 10;
       const angle = Math.atan2(shape.y2 - shape.y1, shape.x2 - shape.x1);
-      addPoint(shape.x2, shape.y2);
       addPoint(shape.x2 - headSize * Math.cos(angle - Math.PI / 6), shape.y2 - headSize * Math.sin(angle - Math.PI / 6));
       addPoint(shape.x2 - headSize * Math.cos(angle + Math.PI / 6), shape.y2 - headSize * Math.sin(angle + Math.PI / 6));
     }
@@ -157,6 +170,18 @@ function getShapeBounds(shape) {
 }
 
 function applyBoundsToShape(shape, minX, minY, maxX, maxY) {
+  // freehand：整体平移 points 数组（不缩放点集）
+  if (shape.type === 'freehand' && Array.isArray(shape.points) && shape.points.length) {
+    const cur = getShapeBounds(shape);
+    if (Number.isFinite(cur.minX) && Number.isFinite(cur.minY)) {
+      const dx = minX - cur.minX;
+      const dy = minY - cur.minY;
+      shape.points.forEach(pt => { pt.x += dx; pt.y += dy; });
+      shape.x = minX;
+      shape.y = minY;
+    }
+    return;
+  }
   const w = maxX - minX;
   const h = maxY - minY;
   if (shape.x1 !== undefined && shape.x2 !== undefined) {
@@ -176,6 +201,23 @@ function applyBoundsToShape(shape, minX, minY, maxX, maxY) {
     shape.w = w;
     shape.h = h;
   }
+}
+
+// 用 points 重算 freehand 的 x/y/w/h 包围盒（min 为 x/y，宽高为 max-min，0 也保留）
+function updateFreehandBounds(shape) {
+  if (!shape || !Array.isArray(shape.points) || !shape.points.length) return;
+  let mnX = Infinity, mnY = Infinity, mxX = -Infinity, mxY = -Infinity;
+  shape.points.forEach(pt => {
+    if (!pt) return;
+    if (pt.x < mnX) mnX = pt.x;
+    if (pt.y < mnY) mnY = pt.y;
+    if (pt.x > mxX) mxX = pt.x;
+    if (pt.y > mxY) mxY = pt.y;
+  });
+  shape.x = mnX;
+  shape.y = mnY;
+  shape.w = mxX - mnX;
+  shape.h = mxY - mnY;
 }
 
 // ---------- 形状生成器 ----------
@@ -214,7 +256,7 @@ const ShapeGenerator = {
       case 'star': drawStar(p, cx, cy, Math.min(w,h)/2, Math.min(w,h)/4, 5); break;
       case 'cross': drawCross(p, x, y, w, h); break;
       case 'plus': drawPlus(p, cx, cy, w/2, h/2); break;
-      case 'freehand': if (shape.points) { p.moveTo(shape.points[0].x, shape.points[0].y); shape.points.forEach(pt => p.lineTo(pt.x, pt.y)); } break;
+      case 'freehand': if (shape.points && shape.points.length) { p.moveTo(shape.points[0].x, shape.points[0].y); shape.points.forEach(pt => p.lineTo(pt.x, pt.y)); } break;
       default: p.rect(x, y, w, h);
     }
     return p;
@@ -451,9 +493,9 @@ function drawGather(ctx, shape) {
 
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
-  // 使用红色调突出敌情
-  ctx.strokeStyle = '#ff3333';
-  ctx.fillStyle = '#ff3333';
+  // 使用红色调突出敌情（允许通过属性面板改色，保留默认红）
+  ctx.strokeStyle = shape.strokeColor || '#ff3333';
+  ctx.fillStyle = shape.fillColor || '#ff3333';
   ctx.lineWidth = lineWidth;
 
   const count = 3;
@@ -608,18 +650,12 @@ function drawPin(ctx, shape) {
   ctx.restore();
 }
 
-// ---------- 判断形状是否可编辑 ----------
-function isShapeEditable(shape) {
-  if (isGalaxyMode && shape.fromTemplate === true) return false;
-  return true;
-}
-
 // ---------- 判断是否可以删除 ----------
 function canDeleteShape(shape) {
   if (shape.fromTemplate === true) return false;
   const user = getCurrentUser();
   if (!user) return false;
-  if (user.isAdmin) return true;
+  if (user.is_admin === true || user.isAdmin === true) return true;
   return shape.creator === user.username;
 }
 
@@ -955,7 +991,7 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
 function createShape(type, x, y, w, h, props={}) {
   const user = getCurrentUser();
   const defaults = {
-    type, x, y, w: w||100, h: h||100, rotation:0,
+    type, x, y, w: (w === undefined ? 100 : w), h: (h === undefined ? 100 : h), rotation:0,
     fill: 'solid', fillColor: '#00c8ff', strokeColor: '#ffffff', strokeWidth: 2, opacity: 1,
     text: '文本', fontSize: 20,
     fromTemplate: false,
@@ -1044,6 +1080,9 @@ function pasteShape() {
   } else {
     newShape.x += offset;
     newShape.y += offset;
+    if (Array.isArray(newShape.points)) {
+      newShape.points.forEach(pt => { pt.x += offset; pt.y += offset; });
+    }
   }
   shapes.push(newShape);
   selectedShapeIndex = shapes.length - 1;
@@ -1061,6 +1100,13 @@ function locateToPoint(worldX, worldY) {
   offsetY = worldY - canvas.height / (2 * scale);
   clampOffset();
   targetMarker = { worldX, worldY, startTime: Date.now(), duration: 10000 };
+  // 到期主动清除并重绘（多次定位时先清理旧定时器）
+  if (targetMarkerTimer) clearTimeout(targetMarkerTimer);
+  targetMarkerTimer = setTimeout(() => {
+    targetMarker = null;
+    targetMarkerTimer = null;
+    redraw();
+  }, 10000);
   redraw();
 }
 
@@ -1077,6 +1123,34 @@ function resizeCanvas() {
   redraw();
 }
 window.addEventListener('resize', resizeCanvas);
+
+// ---------- 加载后按所有形状包围盒适配视野（无形状时默认居中） ----------
+function fitToShapes() {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  shapes.forEach(s => {
+    if (!s || typeof s.type !== 'string') return;
+    const b = getShapeBounds(s);
+    if (!Number.isFinite(b.minX) || !Number.isFinite(b.maxX) ||
+        !Number.isFinite(b.minY) || !Number.isFinite(b.maxY)) return;
+    if (b.minX < minX) minX = b.minX;
+    if (b.minY < minY) minY = b.minY;
+    if (b.maxX > maxX) maxX = b.maxX;
+    if (b.maxY > maxY) maxY = b.maxY;
+  });
+  if (!Number.isFinite(minX) || minX >= maxX || minY >= maxY) {
+    scale = Math.min(canvas.width / (WORLD_MAX - WORLD_MIN), canvas.height / (WORLD_MAX - WORLD_MIN));
+    offsetX = 5000 - canvas.width / (2 * scale);
+    offsetY = 5000 - canvas.height / (2 * scale);
+    clampOffset();
+    return;
+  }
+  const pad = 50;
+  scale = clampScale(Math.min(canvas.width / (maxX - minX + pad * 2), canvas.height / (maxY - minY + pad * 2)));
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  offsetX = cx - canvas.width / (2 * scale);
+  offsetY = cy - canvas.height / (2 * scale);
+  clampOffset();
+}
 
 // ---------- 绘制用户名+备注标签 ----------
 function drawShapeLabel(ctx, shape) {
@@ -1143,6 +1217,8 @@ function redraw() {
 
   // 绘制所有形状
   shapes.forEach((shape, index) => {
+    // 单个损坏形状不能拖垮整体渲染
+    if (!shape || typeof shape.type !== 'string') return;
     const isText = (shape.type === 'text' || shape.type === 'verticalText');
     const isCity = (shape.type === 'city');
     const isFrame = (shape.type === 'frame');
@@ -1193,7 +1269,7 @@ function redraw() {
             ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY)/2);
           grad.addColorStop(0, shape.fillColor); grad.addColorStop(1, shape.fillColor2 || '#000000');
           ctx.fillStyle = grad;
-        } else if (shape.fill === 'texture' && textureImage) ctx.fillStyle = ctx.createPattern(textureImage, 'repeat');
+        } else if (shape.fill === 'texture') ctx.fillStyle = textureImage ? ctx.createPattern(textureImage, 'repeat') : '#8a8a8a';
         if (isCity) drawCityShape(ctx, shape);
         else ctx.fill(path);
       } else if (isText && shape.fill !== 'none') {
@@ -1365,6 +1441,10 @@ canvas.addEventListener('touchstart', onPointerDown, {passive: false});
 canvas.addEventListener('touchmove', onPointerMove, {passive: false});
 canvas.addEventListener('touchend', onPointerUp);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
+// 画布外松开鼠标 / 触摸取消也统一清理状态，避免 isDrawing 等标志卡死
+window.addEventListener('mouseup', onPointerUp);
+window.addEventListener('touchend', onPointerUp);
+window.addEventListener('touchcancel', onPointerUp);
 
 // onPointerDown（支持双指检测）
 function onPointerDown(e) {
@@ -1433,7 +1513,7 @@ function onPointerDown(e) {
       longPressTimer = setTimeout(()=>{ if(isPointerDown && !dragHandle && !isMovingShape && !isDrawing) { isLongPressPan=true; isPanning=true; lastScreen={x:pos.x,y:pos.y}; canvas.style.cursor='grabbing'; } }, 300);
     }
   } else if(currentTool==='freehand') {
-    isDrawing=true; tempShape={type:'freehand',points:[{x:world.x,y:world.y}],strokeColor:document.getElementById('strokeColor').value,strokeWidth:parseInt(document.getElementById('strokeWidth').value),fill:'none', fromTemplate: false};
+    isDrawing=true; tempShape={type:'freehand',points:[{x:world.x,y:world.y}],x:world.x,y:world.y,w:0,h:0,strokeColor:document.getElementById('strokeColor').value,strokeWidth:parseInt(document.getElementById('strokeWidth').value),fill:'none', fromTemplate: false};
     shapes.push(tempShape); redraw();
   } else if(currentTool==='circle') {
     isDrawing=true; tempShape=createShape('ellipse',world.x,world.y,0,0); tempShape.circleCenter={x:world.x,y:world.y}; shapes.push(tempShape); redraw();
@@ -1529,33 +1609,55 @@ function onPointerMove(e) {
       tempShape.x2=world.x; tempShape.y2=world.y;
     } else if(tempShape.type==='freehand') {
       tempShape.points.push({x:world.x,y:world.y});
+      updateFreehandBounds(tempShape);
     } else {
-      tempShape.w=Math.max(1,world.x-tempShape.x); tempShape.h=Math.max(1,world.y-tempShape.y);
+      // 反向拖动（从右下往左上）也归一化为正宽高
+      const nw=Math.abs(world.x-tempShape.x), nh=Math.abs(world.y-tempShape.y);
+      tempShape.x=Math.min(tempShape.x,world.x); tempShape.y=Math.min(tempShape.y,world.y);
+      tempShape.w=nw; tempShape.h=nh;
     }
     redraw();
   }
 }
 
-// onPointerUp（重置双指状态）
+// onPointerUp（重置双指状态 + 统一清理，画布外松开也不卡死）
 function onPointerUp(e) {
-  e.preventDefault();
+  if (e && e.preventDefault) e.preventDefault();
 
   // 重置双指状态
   if (isTouchPinch) {
     isTouchPinch = false;
     lastTouchDist = 0;
-    return;
   }
 
   if (isViewMode) {
     isPanning = false;
+    isPointerDown = false;
     return;
   }
-  clearLongPress(); isPointerDown=false;
+  clearLongPress(); isPointerDown = false;
   if(isLongPressPan){ isLongPressPan=false; isPanning=false; canvas.style.cursor='crosshair'; return; }
   if(isPanning){ isPanning=false; return; }
-  if(dragHandle||isMovingShape||(isDrawing&&tempShape)) saveState();
+
+  // 先移除临时字段，再保存历史（避免 circleCenter 残留入库）
   if(tempShape&&tempShape.circleCenter) delete tempShape.circleCenter;
+
+  if (isDrawing && tempShape) {
+    // 丢弃未拖动产生的退化形状（w/h 为 0 或过小），不入历史
+    const degenerate = tempShape.x1 === undefined &&
+      (tempShape.w === undefined || tempShape.w === 0 || Math.abs(tempShape.w) < 2 ||
+       tempShape.h === undefined || tempShape.h === 0 || Math.abs(tempShape.h) < 2);
+    if (degenerate) {
+      const idx = shapes.indexOf(tempShape);
+      if (idx !== -1) shapes.splice(idx, 1);
+      isDrawing = false; dragHandle = null; isMovingShape = false; tempShape = null;
+      redraw();
+      return;
+    }
+    saveState();
+  } else if (dragHandle || isMovingShape) {
+    saveState();
+  }
   isDrawing=false; dragHandle=null; isMovingShape=false; tempShape=null;
 }
 
@@ -1760,6 +1862,11 @@ if (!isViewMode) {
     }
   });
 
+  // 属性面板修改（颜色/粗细/透明度/备注）在 change/blur 时写入撤销历史
+  ['fillColor', 'strokeColor', 'strokeWidth', 'opacity', 'remarkInput'].forEach(id => {
+    document.getElementById(id).addEventListener('change', saveState);
+  });
+
   // 删除形状（权限控制）
   document.getElementById('deleteShapeBtn').addEventListener('click', () => {
     if (selectedShapeIndex !== -1 && canDeleteShape(shapes[selectedShapeIndex])) {
@@ -1831,6 +1938,9 @@ if (!isViewMode) {
 // ---------- 键盘快捷键 ----------
 if (!isViewMode) {
   window.addEventListener('keydown', e => {
+    // 焦点在表单控件/可编辑元素时不处理快捷键，避免误删图形或误触发复制粘贴
+    const tag = (e.target && (e.target.tagName || '')).toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || (e.target && e.target.isContentEditable)) return;
     if (e.ctrlKey || e.metaKey) {
       if (e.key === 'c' || e.key === 'C') {
         e.preventDefault();
@@ -1863,6 +1973,35 @@ toolbar.addEventListener('click', e => {
 });
 
 // ========== Supabase 数据交互 ==========
+// 校验形状是否完好（防止 null/NaN/Infinity 等损坏数据入库或拖垮渲染）
+function isValidShape(shape) {
+  if (!shape || typeof shape.type !== 'string') return false;
+  const numFields = ['x', 'y', 'w', 'h', 'x1', 'y1', 'x2', 'y2'];
+  for (let i = 0; i < numFields.length; i++) {
+    const v = shape[numFields[i]];
+    if (v !== undefined && !Number.isFinite(v)) return false;
+  }
+  if (Array.isArray(shape.points)) {
+    for (let i = 0; i < shape.points.length; i++) {
+      const pt = shape.points[i];
+      if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return false;
+    }
+  }
+  return true;
+}
+
+// 键排序后序列化，用于跨端（GitHub 后端存取）稳定比较 shapes
+function sortKeys(obj) {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(sortKeys);
+  const out = {};
+  Object.keys(obj).sort().forEach(k => { out[k] = sortKeys(obj[k]); });
+  return out;
+}
+function canonicalShapesJson(shapesArr) {
+  return JSON.stringify((shapesArr || []).map(sortKeys));
+}
+
 async function loadMap() {
   const { data, error } = await supabase
     .from('guild_maps')
@@ -1879,7 +2018,10 @@ async function loadMap() {
   currentMap = data;
   isGalaxyMode = (data.type === 'galaxy');
   document.getElementById('mapTitle').textContent = data.name;
-  shapes = data.shapes || [];
+  // 清洗一次：过滤 null/残缺对象，避免单个损坏形状拖垮渲染
+  shapes = (data.shapes || []).filter(isValidShape);
+  loadedShapesSnapshot = canonicalShapesJson(data.shapes || []);
+  dirty = false;
   initHistory();
   redraw();
 }
@@ -1890,9 +2032,25 @@ async function saveMap() {
     return;
   }
 
+  // 保存前校验：跳过含 NaN/Infinity 等非法数值的损坏形状，避免污染存档
+  const cleanShapes = shapes.filter(isValidShape);
+
+  // 保存前重读比对：服务端已被他人修改时提示
+  const { data: fresh, error: freshError } = await supabase
+    .from('guild_maps')
+    .select('shapes')
+    .eq('id', currentMap.id)
+    .maybeSingle();
+  if (!freshError && fresh) {
+    const serverShapesStr = canonicalShapesJson(fresh.shapes || []);
+    if (serverShapesStr !== loadedShapesSnapshot) {
+      if (!confirm('地图已被他人修改，是否覆盖？')) return;
+    }
+  }
+
   const { error } = await supabase
     .from('guild_maps')
-    .update({ shapes: shapes })
+    .update({ shapes: cleanShapes })
     .eq('id', currentMap.id);
 
   if (error) {
@@ -1900,10 +2058,20 @@ async function saveMap() {
     return;
   }
 
+  loadedShapesSnapshot = canonicalShapesJson(cleanShapes);
+  dirty = false;
   alert('保存成功');
 }
 
 document.getElementById('saveBtn').addEventListener('click', saveMap);
+
+// 返回链接：有未保存更改时 confirm 提示
+const backBtn = document.getElementById('backBtn');
+if (backBtn) {
+  backBtn.addEventListener('click', e => {
+    if (dirty && !confirm('有未保存的更改，确定离开吗？')) e.preventDefault();
+  });
+}
 
 // ========== 初始化 ==========
 async function init() {
@@ -1923,10 +2091,17 @@ async function init() {
   }
 
   resizeCanvas();
+  fitToShapes();
   redraw();
   startAnimation();
 
-  window.addEventListener('beforeunload', stopAnimation);
+  window.addEventListener('beforeunload', e => {
+    stopAnimation();
+    if (dirty) {
+      e.preventDefault();
+      e.returnValue = '有未保存的更改';
+    }
+  });
 }
 
 init();

@@ -36,7 +36,7 @@
 <body>
   <div class="card">
     <h2>📥 数据导入工具</h2>
-    <div class="sub">将备份数据通过 Python 后端（管理员）写入私有仓库 ueg-data —— GitHub Token 由后端保管，前端无需也不可持有</div>
+    <div class="sub">将备份数据导入主数据源（默认 Supabase 云端）。GitHub 数据仓库 ueg-data 的同步由后端脚本独立执行 —— GitHub Token 由后端保管，前端无需也不可持有</div>
 
     <div class="lock-box">
       <span class="state" id="lockState">检测中...</span>
@@ -67,8 +67,13 @@
   <script>
     function setStatus(msg) { document.getElementById('status').textContent = msg; }
     function getCurrentUser() {
-      const cu = localStorage.getItem('ueg_current_user');
-      return cu ? JSON.parse(cu) : null;
+      try {
+        const cu = localStorage.getItem('ueg_current_user');
+        return cu ? JSON.parse(cu) : null;
+      } catch (e) {
+        localStorage.removeItem('ueg_current_user');
+        return null;
+      }
     }
     function setCurrentUser(user) {
       if (user) localStorage.setItem('ueg_current_user', JSON.stringify(user));

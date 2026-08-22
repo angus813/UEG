@@ -261,8 +261,13 @@
   <script>
     // ==================== 用户状态管理 ====================
     function getCurrentUser() {
-      const cu = localStorage.getItem('ueg_current_user');
-      return cu ? JSON.parse(cu) : null;
+      try {
+        const cu = localStorage.getItem('ueg_current_user');
+        return cu ? JSON.parse(cu) : null;
+      } catch (e) {
+        localStorage.removeItem('ueg_current_user');
+        return null;
+      }
     }
     function setCurrentUser(user) {
       if (user) localStorage.setItem('ueg_current_user', JSON.stringify(user));
@@ -298,6 +303,13 @@
       }
       const result = await DB.register(username, password);
       if (result.code === 200) {
+        // 注册返回带 session（signup 开启自动确认）时已自动登录
+        if (DB.hasToken && DB.hasToken()) {
+          setCurrentUser(result.data);
+          updateUI();
+          showError('注册成功，已自动登录', 2000);
+          return true;
+        }
         showError('注册成功，请登录', 2000);
         setTimeout(() => openModal('login'), 500);
         return true;
@@ -325,7 +337,11 @@
     function updateUI() {
       const user = getCurrentUser();
       if (user) {
-        userInfo.innerHTML = `欢迎，<strong>${user.username}</strong>`;
+        userInfo.textContent = '';
+        const strong = document.createElement('strong');
+        strong.textContent = user.username;
+        userInfo.appendChild(document.createTextNode('欢迎，'));
+        userInfo.appendChild(strong);
         btnLogout.style.display = 'inline-block';
         btnProfile.style.display = 'inline-block';
         menuCards.forEach(c => { c.style.pointerEvents = 'auto'; c.style.opacity = '1'; });
@@ -367,7 +383,7 @@
     modalConfirm.addEventListener('click', async () => {
       if (isProcessing) return;
       const username = usernameInput.value.trim();
-      const password = passwordInput.value.trim();
+      const password = passwordInput.value;
       if (!username || !password) {
         showError('用户名和密码不能为空');
         return;
@@ -444,6 +460,12 @@
 
     // ==================== 初始化 ====================
     updateUI();
+    // 异步校验会话有效性（token 过期/失效时清理登录态）
+    if (window.DB && DB.checkSession) {
+      DB.checkSession().then(function (r) {
+        if (!r.ok) { setCurrentUser(null); updateUI(); }
+      }).catch(function () {});
+    }
   </script>
 </body>
 </html>

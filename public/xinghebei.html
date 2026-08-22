@@ -460,13 +460,32 @@
     // ---------- 用户及记录（从 Supabase） ----------
     function getCurrentUser() {
       const cu = localStorage.getItem('ueg_current_user');
-      return cu ? JSON.parse(cu) : null;
+      if (!cu) return null;
+      try { return JSON.parse(cu); } catch (e) { return null; }
     }
 
-    async function loadHighestRecord() {
+    // HTML 转义（防存储型 XSS：用户名等拼接进 innerHTML 前转义）
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // 最高记录缓存：仅页面加载时查询一次（提交成绩后可用 loadHighestRecord(true) 强制刷新），
+    // 避免每次 updateUI 都触发全表查询
+    let cachedHighestRecord = null;
+
+    async function loadHighestRecord(forceRefresh = false) {
       const user = getCurrentUser();
       if (!user) {
         recordValueEl.textContent = '0';
+        return;
+      }
+      if (!forceRefresh && cachedHighestRecord !== null) {
+        recordValueEl.textContent = cachedHighestRecord;
         return;
       }
       const { data, error } = await supabase
@@ -479,31 +498,8 @@
         recordValueEl.textContent = '0';
         return;
       }
-      recordValueEl.textContent = data?.highest_record ?? 0;
-    }
-
-    // ---------- 排行榜 ----------
-    async function loadLeaderboard() {
-      const { data: users, error } = await supabase
-        .from('users')
-        .select('username, highest_record')
-        .order('highest_record', { ascending: false })
-        .limit(10);
-
-      if (error) {
-        alert('加载排行榜失败: ' + error.message);
-        return;
-      }
-
-      let msg = '🏆 排行榜\n';
-      if (!users || users.length === 0) {
-        msg += '暂无数据';
-      } else {
-        users.forEach((u, i) => {
-          msg += `${i+1}. ${u.username} - ${u.highest_record || 0}\n`;
-        });
-      }
-      alert(msg); // 简单提示，也可改为弹窗展示
+      cachedHighestRecord = data?.highest_record ?? 0;
+      recordValueEl.textContent = cachedHighestRecord;
     }
 
     // ---------- 合约交互（保持不变） ----------
@@ -604,10 +600,12 @@
       selectedCountEl.textContent = selectedArray.length;
       selectedTotalLevelEl.textContent = totalLevel;
       updateTabProgress();
-      loadHighestRecord();
     }
 
     // ---------- 分享导入 ----------
+    // 已知限制：分享码未带版本号（当前为 base64(JSON ids)）。
+    // 若后续调整合约 id 或结构，旧码可能解析到不存在的指标；
+    // 建议后续改为 { v: 1, ids: [...] } 并在 importFromCode 中校验版本。
     function generateShareCode() {
       const ids = Array.from(selectedContracts);
       return ids.length ? btoa(JSON.stringify(ids)) : null;
@@ -678,7 +676,7 @@
         let html = '<table style="width:100%; color:#d0dae4; border-collapse:collapse;">';
         html += '<tr><th style="padding:6px 4px;border-bottom:1px solid #2a3340;">#</th><th style="padding:6px 4px;border-bottom:1px solid #2a3340;">用户名</th><th style="padding:6px 4px;border-bottom:1px solid #2a3340;text-align:right;">记录</th></tr>';
         users.forEach((u, i) => {
-          html += `<tr><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;">${i+1}</td><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;">${u.username}</td><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;text-align:right;">${u.highest_record || 0}</td></tr>`;
+          html += `<tr><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;">${i+1}</td><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;">${esc(u.username)}</td><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;text-align:right;">${esc(u.highest_record) || 0}</td></tr>`;
         });
         html += '</table>';
         content.innerHTML = html;
@@ -688,18 +686,38 @@
     window.closeLeaderboard = () => document.getElementById('leaderboardModal').style.display = 'none';
 
     // ---------- 标签切换 ----------
+    // 单击与双击逻辑分离：单击延迟 250ms 后切换分类；
+    // 若在延迟窗口内发生双击，则取消本次单击（避免重复渲染/误触整类全选），再按规则处理：
+    //   双击「当前已激活」分类 → 整类全选/取消（保留原双击功能）；
+    //   双击「其他」分类 → 视为快速切换，仅切换不整类全选
+    let tabClickTimer = null;
     tabNav.addEventListener('click', (e) => {
       const tab = e.target.closest('.tab');
       if (!tab) return;
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      currentCategory = tab.dataset.category;
-      renderContracts();
+      if (tabClickTimer) clearTimeout(tabClickTimer);
+      tabClickTimer = setTimeout(() => {
+        tabClickTimer = null;
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentCategory = tab.dataset.category;
+        renderContracts();
+      }, 250);
     });
     tabNav.addEventListener('dblclick', (e) => {
       const tab = e.target.closest('.tab');
       if (!tab) return;
-      toggleFillCategory(tab.dataset.category);
+      if (tabClickTimer) { clearTimeout(tabClickTimer); tabClickTimer = null; }
+      const cat = tab.dataset.category;
+      if (cat === currentCategory) {
+        // 双击当前分类 → 整类全选/取消
+        toggleFillCategory(cat);
+      } else {
+        // 双击其他分类 → 快速切换，不整类全选
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentCategory = cat;
+        renderContracts();
+      }
     });
     resetBtn.addEventListener('click', () => { selectedContracts.clear(); lastSelectedId = null; updateUI(); });
 
@@ -708,6 +726,7 @@
       initTabs();
       renderContracts();
       updateUI();
+      loadHighestRecord(); // 页面加载时查询一次最高记录并缓存，避免每次 updateUI 全表查询
     })();
   </script>
 </body>

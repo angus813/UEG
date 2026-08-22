@@ -390,7 +390,6 @@
   <script>
     // ==================== 全局配置 ====================
     const PAGE_SIZE = 12;
-    const ADMIN_CACHE_KEY = 'ueg_admin_cache';
     const ADMIN_CACHE_TTL = 300000;
 
     let currentPage = 0;
@@ -411,11 +410,34 @@
       try { return JSON.parse(cu).username; } catch { return null; }
     }
 
+    // HTML 转义（防存储型 XSS：地图名称/创建者/ID 等拼接进 innerHTML 前必须转义）
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // 管理员缓存键：按用户名隔离（ueg_admin_cache_<username>），避免多用户共用同一缓存
+    function adminCacheKey() {
+      const username = getCurrentUsername();
+      return username ? 'ueg_admin_cache_' + username : null;
+    }
+
+    // 清除当前登录用户的管理员缓存（登出时应调用，已暴露到 window 供登出流程使用）
+    function clearAdminCache() {
+      const key = adminCacheKey();
+      if (key) localStorage.removeItem(key);
+    }
+
     // ==================== 管理员状态 ====================
     async function fetchIsAdmin() {
       const username = getCurrentUsername();
       if (!username) return false;
-      const cached = localStorage.getItem(ADMIN_CACHE_KEY);
+      const cacheKey = adminCacheKey();
+      const cached = cacheKey ? localStorage.getItem(cacheKey) : null;
       if (cached) {
         try {
           const data = JSON.parse(cached);
@@ -428,9 +450,11 @@
         .eq('username', username)
         .maybeSingle();
       const result = !error && data && data.is_admin === true;
-      localStorage.setItem(ADMIN_CACHE_KEY, JSON.stringify({ isAdmin: result, timestamp: Date.now() }));
+      if (cacheKey) localStorage.setItem(cacheKey, JSON.stringify({ isAdmin: result, timestamp: Date.now() }));
       return result;
     }
+    // 登出时清除当前用户的管理员缓存（供登出流程调用）
+    window.clearAdminCache = clearAdminCache;
 
     // ==================== 加载地图（分页） ====================
     async function loadMaps(page = 0, append = true) {
@@ -500,23 +524,23 @@
         const typeLabel = map.type === 'template' ? '模板地图' : '星系地图';
         html += `
           <div class="map-card-wrapper">
-            <a href="map/map_editor.html?mode=view&id=${map.id}" class="map-card">
+            <a href="map/map_editor.html?mode=view&id=${esc(map.id)}" class="map-card">
               <div class="map-type">${typeLabel}</div>
-              <div class="map-name">${map.name}</div>
-              ${map.protocol ? `<div class="map-protocol">协议：${map.protocol}</div>` : ''}
-              <div class="map-info">创建者：${map.creator} · ${timeStr}</div>
+              <div class="map-name">${esc(map.name)}</div>
+              ${map.protocol ? `<div class="map-protocol">协议：${esc(map.protocol)}</div>` : ''}
+              <div class="map-info">创建者：${esc(map.creator)} · ${timeStr}</div>
             </a>
         `;
         // 编辑按钮：星系地图对所有用户显示，模板地图仅管理员显示
         if (map.type === 'galaxy' || isAdmin) {
           html += `
-            <a href="map/map_editor.html?mode=edit&id=${map.id}" class="edit-map-btn" style="display:flex;" title="编辑地图">✎</a>
+            <a href="map/map_editor.html?mode=edit&id=${esc(map.id)}" class="edit-map-btn" style="display:flex;" title="编辑地图">✎</a>
           `;
         }
         // 删除按钮：仅管理员
         if (isAdmin) {
           html += `
-            <button class="delete-map-btn" style="display:block;" onclick="deleteMap('${map.id}')">✕</button>
+            <button class="delete-map-btn" style="display:block;" onclick="deleteMap('${esc(map.id)}')">✕</button>
           `;
         }
         html += `</div>`;
@@ -612,7 +636,7 @@
         templateMaps = await loadTemplateMaps();
         templateSelect.innerHTML = '<option value="">-- 不使用模板 --</option>';
         templateMaps.forEach(t => {
-          templateSelect.innerHTML += `<option value="${t.id}">${t.name}</option>`;
+          templateSelect.innerHTML += `<option value="${esc(t.id)}">${esc(t.name)}</option>`;
         });
         selectedProtocol = null;
       }

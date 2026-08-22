@@ -568,9 +568,12 @@
 
             function generateLevel(levelNumber) {
                 const gridSize = 4 + Math.min(Math.floor((levelNumber-1)/5), 4);
-                const pieceCount = 4 + Math.min(Math.floor((levelNumber-1)/2), 4);
+                let pieceCount = 4 + Math.min(Math.floor((levelNumber-1)/2), 4);
                 const colors = ['red','blue','green'];
-                for (let attempt=0; attempt<800; attempt++) {
+                // 高等级生成失败时自动降难：减少拼图块数量再整体重试（最多 2 次），仍失败才走固定回退关
+                let retryCount = 0;
+                const ATTEMPTS = 1200;
+                for (let attempt=0; attempt<ATTEMPTS; attempt++) {
                     const grid = Array.from({length: gridSize}, () => Array(gridSize).fill(null));
                     const pieces = [];
                     let success = true;
@@ -611,8 +614,16 @@
                         }
                         return { gridSize, targetPattern: grid, pieces, blockedCells };
                     }
+                    // 一次完整扫描失败：减少 1 个拼图块并重置尝试计数（attempt=-1，循环自增后从 0 重来）
+                    if (retryCount < 2) {
+                        retryCount++;
+                        pieceCount = Math.max(2, pieceCount - 1);
+                        attempt = -1;
+                        continue;
+                    }
                 }
                 
+                // 最终回退关（极少数极端情况）：固定 4×4 简化关卡
                 return {
                     gridSize: 4,
                     targetPattern: [
@@ -1061,7 +1072,12 @@
                 const { pieceId, rawDef, rotation, effectiveShape, originalAnchorRow, originalAnchorCol, previewEl, pointerId } = dragState;
                 const row = dragState.currentAnchorRow, col = dragState.currentAnchorCol;
                 const valid = dragState.isValidPlacement;
-                if (previewEl && pointerId) previewEl.releasePointerCapture(pointerId);
+                // 指针可能已被系统释放（手势被接管/取消），部分浏览器会抛 InvalidPointerIdError，
+                // 导致处理器中断、预览残留，故用 try/catch 保护
+                if (previewEl && pointerId) {
+                    try { previewEl.releasePointerCapture(pointerId); }
+                    catch (err) { /* 忽略：指针已释放 */ }
+                }
                 removeDragPreview();
                 const st = dragState;
                 dragState = null;
@@ -1103,6 +1119,7 @@
 
             function startTimer() {
                 timerStartTime = Date.now();
+                timerDisplay.textContent = '⏱️ 00:00'; // 立即重置显示，避免首个 tick 前残留上一关时间
                 hintShown = false; gameWon = false;
                 removeHintGlow(); hintBanner.classList.remove('visible'); timerDisplay.classList.remove('warning');
                 if (timerInterval) clearInterval(timerInterval);
@@ -1164,11 +1181,12 @@
 
             function nextLevel() { stopTimer(); loadLevel(currentLevelNumber + 1); startTimer(); }
 
+            // 唯一的 pointermove 监听：同时记录 lastClientX/Y（供 resize 恢复用）并更新拖拽吸附
             document.addEventListener('pointermove', e => {
-                if (dragState) {
-                    e.preventDefault();
-                    snapAndUpdate(e.clientX, e.clientY);
-                }
+                if (!dragState) return;
+                e.preventDefault();
+                dragState.lastClientX = e.clientX; dragState.lastClientY = e.clientY;
+                snapAndUpdate(e.clientX, e.clientY);
             }, { passive: false });
 
             document.addEventListener('pointerup', e => {
@@ -1212,9 +1230,7 @@
                 }, 300);
             });
 
-            document.addEventListener('pointermove', e => {
-                if (dragState) { dragState.lastClientX = e.clientX; dragState.lastClientY = e.clientY; }
-            }, { passive: true });
+            // pointermove 已合并到上方唯一的监听中（记录 lastClientX/Y + 吸附更新）
 
             function initGame() { loadLevel(currentLevelNumber); startTimer(); }
             initGame();

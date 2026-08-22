@@ -118,7 +118,7 @@
 <body>
   <div class="header">
     <div class="header-left">
-      <a href="../strategy_map.html" class="back-btn">← 返回</a>
+      <a href="../strategy_map.html" class="back-btn" id="backBtn">← 返回</a>
       <div class="map-title" id="mapTitle">加载中...</div>
     </div>
     <div>
@@ -195,8 +195,7 @@
     </div>
   </div>
 
-  <!-- 引入 Supabase 客户端 -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- 引入 Supabase 客户端兼容层（supabase-client.js 已自带本地实现，无需 CDN 依赖） -->
   <script src="../supabase-client.js"></script>
   <script src="map_editor.js"></script>
 </body>

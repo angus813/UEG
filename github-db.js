@@ -26,7 +26,8 @@
   function tokenExpired(t) {
     try {
       const p = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-      return !p.exp || p.exp * 1000 < Date.now();
+      if (!p.exp) return false; // 无 exp 的 token 视为有效（有效性交由后端校验）
+      return p.exp * 1000 < Date.now();
     } catch (e) { return true; }
   }
   function currentUsername() {
@@ -49,13 +50,17 @@
     // ---- GoTrue（Auth）----
     async gt(path, body) {
       const headers = { apikey: SB.publishableKey, 'Content-Type': 'application/json' };
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 10000) : null;
       let res;
       try {
         res = await fetch(SB.url.replace(/\/+$/, '') + path, {
-          method: 'POST', headers, body: JSON.stringify(body)
+          method: 'POST', headers, body: JSON.stringify(body), signal: ctrl ? ctrl.signal : undefined
         });
       } catch (e) {
         return { code: 500, msg: '无法连接 Supabase（' + SB.url + '）' };
+      } finally {
+        if (timer) clearTimeout(timer);
       }
       let j = null;
       try { j = await res.json(); } catch (e) { }
@@ -74,15 +79,20 @@
       const t = getToken();
       if (t) headers.Authorization = 'Bearer ' + t;
       if (opts && opts.prefer) headers.Prefer = opts.prefer;
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 15000) : null;
       let res;
       try {
         res = await fetch(SB.url.replace(/\/+$/, '') + path, {
           method: (opts && opts.method) || 'GET',
           headers,
-          body: opts && opts.body !== undefined ? JSON.stringify(opts.body) : undefined
+          body: opts && opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+          signal: ctrl ? ctrl.signal : undefined
         });
       } catch (e) {
         return { code: 500, msg: '无法连接 Supabase（' + SB.url + '）' };
+      } finally {
+        if (timer) clearTimeout(timer);
       }
       let j = null;
       try { j = await res.json(); } catch (e) { }
@@ -95,6 +105,7 @@
     async register(username, password) {
       username = (username || '').trim();
       if (!/^[\u4e00-\u9fa5A-Za-z0-9_]{2,20}$/.test(username)) return { code: 400, msg: '用户名需为2-20位中文/字母/数字/下划线' };
+      if (/^(angus|admin)$/i.test(username)) return { code: 400, msg: '该用户名不可注册' };
       if (!password || password.length < 6) return { code: 400, msg: '密码长度至少6位' };
       const r = await this.gt('/auth/v1/signup', { email: encEmail(username), password, data: { username } });
       if (r.code !== 200) {
@@ -105,10 +116,10 @@
       // 建档（RLS 允许插入自己的档案行）；signup 无 session 时留待登录后补建
       if (r.data && r.data.access_token) {
         setToken(r.data.access_token);
-        await this.rest('/rest/v1/users', { method: 'POST', body: { username, is_admin: false, highest_record: 0 } });
+        const pr = await this.rest('/rest/v1/users', { method: 'POST', body: { username, is_admin: false, highest_record: 0 } });
+        if (pr.code !== 200) return { code: 500, msg: '账号已创建，但档案初始化失败（' + pr.msg + '），请重新登录' };
       }
-      const isAdmin = username === (CFG.github && CFG.github.adminUser) || username === 'admin';
-      return { code: 200, msg: '注册成功', data: { username, is_admin: isAdmin, highest_record: 0 } };
+      return { code: 200, msg: '注册成功', data: { username, is_admin: false, highest_record: 0 } };
     },
 
     // ---- 登录 ----
@@ -127,11 +138,12 @@
       let profile = null;
       if (me.code === 200 && Array.isArray(me.data) && me.data.length) profile = me.data[0];
       if (!profile) {
-        await this.rest('/rest/v1/users', { method: 'POST', body: { username, is_admin: false, highest_record: 0 } });
+        const pr = await this.rest('/rest/v1/users', { method: 'POST', body: { username, is_admin: false, highest_record: 0 } });
+        if (pr.code !== 200) { setToken(null); return { code: 500, msg: '登录成功但档案初始化失败（' + pr.msg + '），请稍后重试' }; }
         profile = { username, is_admin: false, highest_record: 0 };
       }
-      const data = { token, username, is_admin: !!profile.is_admin, highest_record: profile.highest_record || 0 };
-      setCurrentUser({ username, is_admin: data.is_admin, highest_record: data.highest_record });
+      const data = { username, is_admin: !!profile.is_admin, highest_record: profile.highest_record || 0 };
+      setCurrentUser(data);
       return { code: 200, msg: '登录成功', data: data };
     },
 
@@ -168,14 +180,15 @@
       return { ok: true };
     },
     async updateRecord(username, record) {
-      const r = await this.rest('/rest/v1/users?select=highest_record&username=eq.' + enc(username));
-      const cur = (r.code === 200 && Array.isArray(r.data) && r.data.length) ? (r.data[0].highest_record || 0) : 0;
-      const val = Math.max(cur, parseInt(record) || 0);
-      const u = await this.rest('/rest/v1/users?username=eq.' + enc(username), {
+      const val = Math.max(0, parseInt(record) || 0);
+      if (val <= 0) return { code: 400, msg: '纪录无效' };
+      // 条件更新：仅当现有纪录低于新值时写入，杜绝读-改-写竞态回退
+      const u = await this.rest('/rest/v1/users?username=eq.' + enc(username) + '&highest_record=lt.' + val, {
         method: 'PATCH', body: { highest_record: val }, prefer: 'return=representation'
       });
-      if (u.code !== 200 || !(Array.isArray(u.data) && u.data.length)) return { code: 403, msg: '无权限修改（只能修改自己或管理员）' };
-      return { code: 200, msg: '更新成功', data: { highest_record: val } };
+      if (u.code !== 200) return { code: 403, msg: '无权限修改（只能修改自己或管理员）' };
+      const hit = Array.isArray(u.data) && u.data.length;
+      return { code: 200, msg: hit ? '更新成功' : '已有更高纪录，未覆盖', data: { highest_record: hit ? u.data[0].highest_record : val } };
     },
     async updateUser(username, patch) {
       const p = {};
@@ -192,7 +205,10 @@
       // GoTrue：登录状态下直接更新密码（服务端校验旧密码需另行 reauth，此处省略）
       const r = await this.rest('/auth/v1/user', { method: 'PUT', body: { password: newPw } });
       if (r.code !== 200) return { code: 400, msg: '密码修改失败: ' + r.msg };
-      return { code: 200, msg: '密码修改成功' };
+      // GoTrue 改密后旧 access_token 立即失效：清除本地会话，引导重新登录
+      setToken(null);
+      setCurrentUser(null);
+      return { code: 200, msg: '密码修改成功，请重新登录' };
     },
     async deleteUser(username) {
       const r = await this.rest('/rest/v1/users?username=eq.' + enc(username), { method: 'DELETE' });
@@ -275,16 +291,43 @@
       const r = await this.rest('/rest/v1/ships_data?id=eq.default', {
         method: 'PATCH', body: { data: ships || {} }, prefer: 'return=representation'
       });
-      if (r.code !== 200 || !(Array.isArray(r.data) && r.data.length)) return { ok: false, error: '需要管理员权限' };
+      if (r.code === 200 && Array.isArray(r.data) && r.data.length) return { ok: true };
+      if (r.code !== 200 && r.code !== 204) return { ok: false, error: r.msg };
+      // 默认行不存在（PATCH 未命中）→ 改为 upsert 插入
+      const ins = await this.rest('/rest/v1/ships_data', {
+        method: 'POST', body: { id: 'default', data: ships || {} }, prefer: 'return=representation'
+      });
+      if (ins.code !== 200) return { ok: false, error: ins.msg };
       return { ok: true };
     },
 
     // ---- 导入 ----
     async importShipsFromJs(jsContent) {
       try {
-        const m = String(jsContent || '').match(/window\.SHIPS_DATA\s*=\s*(\{[\s\S]*\})/);
-        if (!m) return { ok: false, msg: '未找到 window.SHIPS_DATA 定义' };
-        const ships = JSON.parse(m[1]);
+        const text = String(jsContent || '');
+        const idx = text.indexOf('window.SHIPS_DATA');
+        const eq = idx >= 0 ? text.indexOf('=', idx) : -1;
+        if (idx < 0 || eq < 0) return { ok: false, msg: '未找到 window.SHIPS_DATA 定义' };
+        const start = text.indexOf('{', eq);
+        if (start < 0) return { ok: false, msg: '未找到有效对象' };
+        // 括号配对扫描（跳过字符串字面量），提取顶层对象区间
+        let depth = 0, end = -1, inStr = false, strCh = '';
+        for (let i = start; i < text.length; i++) {
+          const ch = text[i];
+          if (inStr) { if (ch === strCh) inStr = false; continue; }
+          if (ch === '"' || ch === "'" || ch === '`') { inStr = true; strCh = ch; continue; }
+          if (ch === '{') depth++;
+          else if (ch === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+        }
+        if (end < 0) return { ok: false, msg: '对象括号未闭合' };
+        const snippet = text.slice(start, end);
+        let ships;
+        try { ships = JSON.parse(snippet); }
+        catch (e1) {
+          try { ships = new Function('return ' + snippet)(); }
+          catch (e2) { return { ok: false, msg: '解析失败: ' + e2.message }; }
+        }
+        if (!ships || typeof ships !== 'object' || Array.isArray(ships)) return { ok: false, msg: '解析结果不是舰船对象' };
         const r = await this.saveShips(ships);
         if (!r.ok) return { ok: false, msg: r.error };
         return { ok: true, count: Object.keys(ships).length };
@@ -296,9 +339,10 @@
       try {
         let lst = JSON.parse(jsonString || '[]');
         lst = Array.isArray(lst) ? lst : (lst.users || []);
+        const valid = lst.filter(function (u) { return u && u.username; }).length;
         const r = await this.saveUsers(lst);
         if (!r.ok) return { ok: false, msg: r.error };
-        return { ok: true, count: lst.length };
+        return { ok: true, count: valid };
       } catch (e) {
         return { ok: false, msg: '解析失败: ' + e.message };
       }
@@ -307,9 +351,10 @@
       try {
         let lst = JSON.parse(jsonString || '[]');
         lst = Array.isArray(lst) ? lst : (lst.guild_maps || []);
+        const valid = lst.filter(function (m) { return m && m.id; }).length;
         const r = await this.saveMaps(lst);
         if (!r.ok) return { ok: false, msg: r.error };
-        return { ok: true, count: lst.length };
+        return { ok: true, count: valid };
       } catch (e) {
         return { ok: false, msg: '解析失败: ' + e.message };
       }
@@ -349,15 +394,20 @@
     if (API.publishableKey) headers['X-Publishable-Key'] = API.publishableKey;
     const t = localGetToken();
     if (t) headers['Authorization'] = 'Bearer ' + t;
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 15000) : null;
     let res;
     try {
       res = await fetch(API.url.replace(/\/+$/, '') + path, {
         method: method || (body === undefined ? 'GET' : 'POST'),
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body)
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: ctrl ? ctrl.signal : undefined
       });
     } catch (e) {
       return { code: 500, msg: '无法连接后端（' + API.url + '），请确认 Python 服务已启动' };
+    } finally {
+      if (timer) clearTimeout(timer);
     }
     let j = null;
     try { j = await res.json(); } catch (e) { }
@@ -389,7 +439,12 @@
       return r;
     },
     async getUserProfile(username) {
-      return localApi('/api/auth/profile?username=' + encodeURIComponent(username));
+      const r = await localApi('/api/auth/profile?username=' + encodeURIComponent(username));
+      if (r.code === 200 && r.data) {
+        // 与 Supabase 模式返回结构保持一致
+        return { code: 200, data: { username: r.data.username, is_admin: !!r.data.is_admin, highest_record: r.data.highest_record || 0 } };
+      }
+      return r;
     },
     async saveUsers(users) {
       const r = await localApi('/api/users/save', { users });

@@ -264,10 +264,21 @@
 
   <script>
     // ==================== 工具函数 ====================
-    // 获取当前登录用户（从 localStorage，保持与 index.html 一致）
+    // 获取当前登录用户（从 localStorage，保持与 index.html 一致；数据损坏时返回 null 而非抛错）
     function getCurrentUser() {
       const cu = localStorage.getItem('ueg_current_user');
-      return cu ? JSON.parse(cu) : null;
+      if (!cu) return null;
+      try { return JSON.parse(cu); } catch (e) { return null; }
+    }
+
+    // HTML 转义（防存储型 XSS：用户名等拼接进 innerHTML / onclick 前转义）
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     // 判断当前用户是否为管理员（从 Supabase 实时查询）
@@ -352,16 +363,17 @@
         const isLeader = user.username === 'angus';
         const role = isLeader ? '会长' : '成员';
         const roleClass = isLeader ? 'leader-badge' : '';
+        const uName = esc(user.username);
         html += `
           <div class="member-item">
             <div class="member-info">
               <div class="member-avatar">👤</div>
               <div>
-                <span class="member-name">${user.username}</span>
+                <span class="member-name">${uName}</span>
                 <span class="member-role ${roleClass}">${role}</span>
               </div>
             </div>
-            <button class="delete-member-btn" style="display:${admin && !isLeader ? 'block' : 'none'}" onclick="deleteMember('${user.username}')">注销</button>
+            <button class="delete-member-btn" style="display:${admin && !isLeader ? 'block' : 'none'}" onclick="deleteMember('${uName}')">注销</button>
           </div>
         `;
       });

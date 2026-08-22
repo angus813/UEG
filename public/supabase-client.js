@@ -131,8 +131,9 @@
         self._eq.forEach(function (e) { eqObj[e[0]] = e[1]; });
         if (self.table === 'users' && eqObj.username) {
           return DB.updateUser(eqObj.username, self._patch).then(function (r) {
-            if (r.code === 200) return { data: [r.data], error: null };
-            return { data: null, error: { message: r.msg || '更新失败' } };
+            // github-db.js 的 DB.updateUser（SB / LOCAL 模式）返回 { ok: true, data } 或 { ok: false, error }，无 code 字段
+            if (r && (r.ok === true || r.code === 200)) return { data: r.data ? [r.data] : null, error: null };
+            return { data: null, error: { message: (r && (r.error || r.msg)) || '更新失败' } };
           });
         }
         if (self.table === 'guild_maps' && eqObj.id) {

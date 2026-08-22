@@ -47,14 +47,14 @@ const SPELL_BLUEPRINTS = [
   {id: 'emp', name: '全域干扰', cost: 4, desc: '敌方全体停火3秒'},
   {id: 'repair', name: '紧急修复', cost: 4, desc: '我方全体舰船恢复40%生命'},
   {id: 'reinforce', name: '增援编队', cost: 5, desc: '立即获得1艘随机舰船加入编组'},
-  {id: 'freeze', name: '时间冻结', cost: 4, desc: '敌方停止移动3秒'},
+  {id: 'freeze', name: '时间冻结', cost: 4, desc: '敌方全体停火3秒'},
   {id: 'shield', name: '护盾发生器', cost: 3, desc: '本回合我方防御护盾+5'},
   {id: 'corrode', name: '纳米侵蚀', cost: 5, desc: '敌方每秒损失3%生命，持续5秒'},
   {id: 'focus', name: '集火指令', cost: 3, desc: '本回合我方全体攻击力+30%'}
 ];
 
 const DEFENSE_STRATEGIES = [
-  {id: 'aegis', name: '全域防御', org: '联合防御阵列', life: 1000, unlock: 0, desc: '我方生命值提高，所有舰船攻击、装甲、生命+15%；入门协议中敌方攻击与生命-30%', effect: function () { state.life = 1000; state.maxLife = 1000; state.bonuses.dmgMul *= 1.15; state.bonuses.armorMul *= 1.15; if (state.mode === 'beginner') state.enemyDmgMul *= 0.7; }},
+  {id: 'aegis', name: '全域防御', org: '联合防御阵列', life: 1000, unlock: 0, desc: '我方生命值提高，所有舰船攻击、装甲、生命+15%；入门协议中敌方攻击与生命-30%', effect: function () { state.life = 1000; state.maxLife = 1000; state.bonuses.dmgMul *= 1.15; state.bonuses.armorMul *= 1.15; if (state.mode === 'beginner') { state.enemyDmgMul *= 0.7; state.enemyHpMul *= 0.7; } }},
   {id: 'swift', name: '精准打击', org: '雷火科技突击舰队', life: 850, unlock: 1, desc: '战斗开始后，攻击力最高的舰船获得攻击力+70%加成', effect: function () { state.life = 850; state.maxLife = 850; state.swift = true; }},
   {id: 'recycle', name: '战利品回收', org: '诺玛运输护航编队', life: 850, unlock: 1, desc: '每击倒30个敌方单位，战斗结束时奖励2-3资金', effect: function () { state.life = 850; state.maxLife = 850; state.recycle = true; }},
   {id: 'gamer', name: '军火商人', org: '比邻星自由贸易同盟', life: 800, unlock: 1, desc: '每消耗18资金，随机获得1艘不高于当前补给等级的舰船', effect: function () { state.life = 800; state.maxLife = 800; state.gacha = true; }},
@@ -87,8 +87,6 @@ let newsList = [];
 let battleTimer = null;
 let uiTimer = null;
 let clockLeft = 0;
-let overtime = 0;
-let toxicActive = false;
 let selectedHandIdx = null;
 let upgradeTriggered = {};
 const PROGRESS_KEY = 'ueg_weishu_progress';
@@ -143,10 +141,8 @@ function showModal(title, body) {
 }
 function closeModals() {
   document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
-  const fog = document.getElementById('toxicFog');
-  if (fog) fog.remove();
 }
-function showConfirm(title, body, cb) {
+function showConfirm(title, body, cb, cancelCb) {
   document.getElementById('confirmTitle').textContent = title;
   document.getElementById('confirmBody').textContent = body;
   document.getElementById('confirmModal').classList.add('active');
@@ -156,6 +152,7 @@ function showConfirm(title, body, cb) {
   };
   document.getElementById('confirmCancel').onclick = function () {
     document.getElementById('confirmModal').classList.remove('active');
+    if (cancelCb) cancelCb();
   };
 }
 function flashTip(msg) {
@@ -181,6 +178,12 @@ function computeEnhanceMul() {
     return 1 + Math.min(0.5, total * 0.001);
   } catch (e) { return 1; }
 }
+function commonPrefixLen(x, y) {
+  let i = 0;
+  const n = Math.min(x.length, y.length);
+  while (i < n && x[i] === y[i]) i++;
+  return i;
+}
 function shipEnhanceBonus(shipName) {
   try {
     const st = JSON.parse(localStorage.getItem('ueg_enhance_state') || '{}');
@@ -188,7 +191,8 @@ function shipEnhanceBonus(shipName) {
     let lv = 0;
     for (const k in st) {
       const b = k.replace(/[·\- ]/g, '');
-      if (a.includes(b) || b.includes(a)) for (const s in st[k]) for (const t in st[k][s]) lv += st[k][s][t] || 0;
+      const match = a === b || (a.length >= 4 && b.length >= 4 && commonPrefixLen(a, b) >= Math.max(4, Math.min(a.length, b.length) / 2));
+      if (match) for (const s in st[k]) for (const t in st[k][s]) lv += st[k][s][t] || 0;
     }
     return 1 + Math.min(0.4, lv * 0.004);
   } catch (e) { return 1; }
@@ -198,7 +202,7 @@ function initGame() {
   state = {
     phase: 'welcome', mode: 'beginner', strategy: null,
     factions: [], factionHp: [], factionMaxHp: [],
-    life: 1000, maxLife: 70, funds: 0, techPoints: 0,
+    life: 1000, maxLife: 1000, funds: 0, techPoints: 0, pendingHp: null, paused: false,
     wave: 1, bargeLevel: 1, upgradeDiscount: 0, shield: 1,
     finalRound: { active: false, wave: 0, intermission: false, timer: 0, fortress: null, lockPrompted: false, fortressAoEDone: false },
     pool: [], poolFrozen: false, hand: [], units: [], enemies: [],
@@ -232,7 +236,7 @@ function showModeSelect() {
       html += '<div class="mode-lock">未解锁 · ' + (k === 'prototype' ? '通关入门协议' : '通关原型协议') + '</div>';
     } else {
       html += '<div class="mode-row"><span>敌方势力生命</span><b>' + m.life + ' 点</b></div>';
-      html += '<div class="mode-row"><span>资金节奏</span><b>' + (k === 'beginner' ? '第1回合5，第2回合13，之后每回合10' : '第1回合' + m.funds[0] + '，之后每回合+1，上限' + m.funds[2]) + '</b></div>';
+      html += '<div class="mode-row"><span>资金节奏</span><b>' + (m.funds[2] >= 9999 ? '第1回合' + m.funds[0] + '，之后每回合+' + m.funds[1] + '，无上限' : '第1回合' + m.funds[0] + '，之后每回合+' + m.funds[1] + '，上限' + m.funds[2]) + '</b></div>';
       html += '<div class="mode-row"><span>回合数</span><b>固定15回合</b></div>';
     }
     html += '</div>';
@@ -296,7 +300,11 @@ function hasCarrier() {
 }
 function carrierTotal() {
   return state.hand.reduce(function (a, c) {
-    if (c.ship && c.ship.carry) { a.f += c.ship.carry.fighter; a.c += c.ship.carry.corvette; }
+    if (c.ship && c.ship.carry) {
+      const mul = modOffset(c).carry ? 1.5 : 1;
+      a.f += Math.round(c.ship.carry.fighter * mul);
+      a.c += Math.round(c.ship.carry.corvette * mul);
+    }
     return a;
   }, { f: 0, c: 0 });
 }
@@ -392,7 +400,8 @@ function loadFleetConfig() {
       const mod = s.mods && s.mods.length ? (it.mod || s.mods[0]) : '';
       for (let i = 0; i < it.count; i++) state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: mod, spentTech: 0 });
     });
-    flashTip('配置已加载：' + state.hand.length + ' 艘');
+    if (totalCommand() > 400) flashTip('配置已加载：' + state.hand.length + ' 艘（指挥值 ' + totalCommand() + '/400，已超限，请调整）');
+    else flashTip('配置已加载：' + state.hand.length + ' 艘');
     showDeployModal();
   } catch (e) { flashTip('加载失败：' + e.message); }
 }
@@ -419,7 +428,7 @@ function showDeployModal() {
     let locked = false;
     if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || (cls === 'fighter' ? airSelF >= airLimitF : airSelC >= airLimitC);
     html += '<div class="dp-group' + (locked ? ' locked' : '') + '" data-cls="' + cls + '">';
-    html += '<div class="dp-group-title">' + CLS_ZH[cls] + ' <span class="dp-limit">' + cnt + ' 艘</span>';
+    html += '<div class="dp-group-title">' + CLS_ZH[cls] + ' <span class="dp-limit">' + cnt + '/' + (CONFIG.DEPLOY_LIMIT[cls] || 5) + ' 艘</span>';
     if (cls === 'fighter' || cls === 'corvette') {
       html += ' <span class="dp-aircap">搭载 ' + (cls === 'fighter' ? airSelF + '/' + airLimitF : airSelC + '/' + airLimitC) + '</span>';
     }
@@ -434,7 +443,7 @@ function showDeployModal() {
       const airUsed = s.cls === 'fighter' ? (airSelF - have) : (airSelC - have);
       const maxByAir = isAir ? Math.max(0, (s.cls === 'fighter' ? airLimitF : airLimitC) - airUsed) : 99999;
       const maxN = Math.min(s.maxShip, maxByAir);
-      const canAdd = have < maxN && !locked && cmd + (isAir ? 0 : s.command) <= 400;
+      const canAdd = have < maxN && !locked && cnt < (CONFIG.DEPLOY_LIMIT[cls] || 99) && cmd + (isAir ? 0 : s.command) <= 400;
       html += '<div class="dp-ship' + (have ? ' on' : '') + '" data-id="' + s.id + '">';
       html += '<div class="dp-name">' + s.name + '</div>';
       html += '<div class="dp-stats">HP ' + s.hp + ' 攻 ' + s.dmg + ' 甲 ' + s.armor + ' ' + WEAPON_LABEL[s.weapon] + DMGTYPE_LABEL[s.dmgType] + ' 指挥' + s.command + '</div>';
@@ -465,6 +474,7 @@ function showDeployModal() {
       const have = countOfId(s.id);
       const isAir = s.cls === 'fighter' || s.cls === 'corvette';
       if (have >= s.maxShip) { flashTip('已达该舰船服役数上限'); return; }
+      if (selectedShipCount(s.cls) >= (CONFIG.DEPLOY_LIMIT[s.cls] || 99)) { flashTip('该舰种已达数量上限（' + (CONFIG.DEPLOY_LIMIT[s.cls] || 99) + '）'); return; }
       if (isAir) {
         if (!hasCarrier()) { flashTip('需先选择搭载舰船'); return; }
         if (s.cls === 'fighter' ? selectedFighterCount() >= carrierTotal().f : selectedCorvetteCount() >= carrierTotal().c) { flashTip('该机种搭载量已满'); return; }
@@ -514,9 +524,12 @@ function startSimulation() {
   state.bonuses = { dmgMul: 1, hpMul: 1, rateMul: 1, armorBonus: 0, armorMul: 1, rangeBonus: 0, directMul: 1, projMul: 1, airMul: 1, shieldBonus: 0, critChance: 0, energyMul: 1 };
   state.enhanceMul = computeEnhanceMul();
   state.enemyDmgMul = 1;
+  state.enemyHpMul = 1;
   state.swift = false; state.recycle = false; state.gacha = false; state.intel = false; state.spellStrategy = false;
   state.mergeCount = 3; state.mergeBonus = 0; state.craft = false;
   upgradeTriggered = {};
+  state.pendingHp = null;
+  state.paused = false;
   if (state.strategy && state.strategy.effect) state.strategy.effect();
   state.life = state.strategy ? state.strategy.life : 70;
   state.maxLife = state.life;
@@ -527,9 +540,6 @@ function startSimulation() {
 function startPrepRound() {
   state.phase = 'prep';
   stopBattleLoop();
-  const fog = document.getElementById('toxicFog');
-  if (fog) fog.remove();
-  const reward = 2 + state.wave + Math.floor(state.techPoints * 0) ;
   const tpGain = Math.round((2 + state.wave) * CONFIG.MODES[state.mode].reward);
   state.techPoints += tpGain;
   state.funds += fundsOfRound(state.wave);
@@ -543,9 +553,9 @@ function startPrepRound() {
     state.hand.push({ type: 'spell', sp: sp });
     pushNews('战术支援：获得战术指令 ' + sp.name, 'good');
   }
-  if (!state.poolFrozen) state.pool = [];
-  else { state.poolFrozen = false; state.pool.forEach(function (p) { p.frozen = false; }); }
-  generatePool();
+  state.poolRefreshed = false;
+  if (state.poolFrozen) { state.poolFrozen = false; }
+  else { state.pool = []; generatePool(); }
   rebuildUnits();
   if (CONFIG.UPGRADE_ROUNDS.indexOf(state.wave) > -1 && !upgradeTriggered[state.wave]) {
     showUpgradeOptions();
@@ -569,7 +579,7 @@ function renderTopStatus() {
   html += '<div class="mb-row"><span class="mb-label">生命</span><div class="life-bar"><div class="fill" style="width:' + Math.max(0, state.life / state.maxLife * 100) + '%"></div></div><span class="mb-val">' + Math.max(0, state.life) + '/' + state.maxLife + '</span></div>';
   html += '<div class="mb-row"><span class="mb-label">资金</span><span class="mb-val">' + state.funds + '</span></div>';
   html += '<div class="mb-row"><span class="mb-label">强化点</span><span class="mb-val">' + state.techPoints + '</span></div>';
-  html += '<div class="mb-row"><span class="mb-label">回合</span><span class="mb-val">' + state.wave + '/' + CONFIG.TOTAL_ROUNDS + '</span></div>';
+  html += '<div class="mb-row"><span class="mb-label">回合</span><span class="mb-val">' + Math.min(state.wave, CONFIG.TOTAL_ROUNDS) + '/' + CONFIG.TOTAL_ROUNDS + '</span></div>';
   html += '</div></div>';
   return html;
 }
@@ -622,11 +632,11 @@ function fundsOfRound(wave) {
   const m = CONFIG.MODES[state.mode].funds;
   return Math.min(m[2], m[0] + (wave - 1) * m[1]);
 }
-function generatePool() {
+function generatePool(plus) {
   const b = CONFIG.BARGE[state.bargeLevel - 1];
   const pool = [];
   for (let i = 0; i < b.slots; i++) {
-    const s = randomShipByLevel(0);
+    const s = randomShipByLevel(plus || 0);
     pool.push({ type: 'ship', ship: s, price: Math.min(20, Math.max(10, Math.round(s.hp / 20000))) });
   }
   for (let i = 0; i < b.equipSlots; i++) {
@@ -697,61 +707,9 @@ function refreshPool() {
   }
   if (!free && state.funds < cost) { flashTip('资金不足'); return; }
   if (!free) state.funds -= cost;
-  generatePool();
+  generatePool(free ? 1 : 0);
   pushNews('补给已重新调配', '');
   renderPrep();
-}
-function updateDeployRight() {
-  const body = document.getElementById('deployBody');
-  if (!body) return;
-  const right = body.querySelector('.deploy-right');
-  const pool = buildShipPool();
-  let html = '<div class="dp-right-title">我方编组（' + state.hand.length + ' 艘）</div>';
-  html += renderDeployPreview();
-  html += '<div class="dp-selected">';
-  if (!state.hand.length) html += '<div class="dp-empty-tip">尚未选择舰船</div>';
-  state.hand.forEach(function (card, i) {
-    html += '<div class="dp-sel-item"><span>' + card.ship.name + '</span><button class="btn-action small danger" data-remove="' + i + '">移除</button></div>';
-  });
-  html += '</div>';
-  html += '<div class="dp-actions">';
-  html += '<button class="btn-action primary-btn" id="deployConfirm">确认配队，开始模拟</button>';
-  html += '<button class="btn-action" id="deployClear">清空</button>';
-  html += '</div>';
-  right.innerHTML = html;
-  right.querySelectorAll('[data-remove]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      const i = parseInt(btn.dataset.remove, 10);
-      state.hand.splice(i, 1);
-      updateDeployRight();
-    });
-  });
-  document.getElementById('deployConfirm').addEventListener('click', function () {
-    if (!state.hand.length) { flashTip('请至少选择 1 艘舰船'); return; }
-    document.getElementById('deployModal').classList.remove('active');
-    startSimulation();
-  });
-  document.getElementById('deployClear').addEventListener('click', function () {
-    state.hand = [];
-    updateDeployRight();
-  });
-  body.querySelectorAll('.dp-group').forEach(function (g) {
-    const cls = g.dataset.cls;
-    if (!cls) return;
-    const limit = CONFIG.DEPLOY_LIMIT[cls];
-    const cnt = selectedShipCount(cls);
-    const cap = g.querySelector('.dp-limit');
-    if (cap) cap.textContent = cnt + '/' + limit;
-    let locked = false;
-    if (cls === 'fighter' || cls === 'corvette') locked = !hasCarrier() || (cls === 'fighter' ? airSelF >= airLimitF : airSelC >= airLimitC);
-    g.classList.toggle('locked', locked);
-    g.querySelectorAll('.dp-ship').forEach(function (el) {
-      const id = el.dataset.id;
-      const on = state.hand.some(function (c) { return c.ship.id === id; });
-      el.classList.toggle('on', on);
-      el.classList.toggle('off', !on && (cnt >= limit || locked));
-    });
-  });
 }
 function upgradeBarge() {
   if (state.bargeLevel >= 6) { flashTip('补给等级已满'); return; }
@@ -765,6 +723,7 @@ function upgradeBarge() {
     const s = randomShipByLevel(0);
     state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
     pushNews('军火商人：获得舰船 ' + s.name, 'good');
+    tryMergeShips();
   }
   renderPrep();
 }
@@ -807,7 +766,7 @@ function updateDeployLight() {
     const cls = g2.dataset.cls;
     const cnt = selectedShipCount(cls);
     const limit = g2.querySelector('.dp-limit');
-    if (limit) limit.textContent = cnt + ' 艘';
+    if (limit) limit.textContent = cnt + '/' + (CONFIG.DEPLOY_LIMIT[cls] || 5) + ' 艘';
     if (cls === 'fighter' || cls === 'corvette') {
       const locked = !hasCarrier() || (cls === 'fighter' ? airSelF >= airLimitF : airSelC >= airLimitC);
       g2.classList.toggle('locked', locked);
@@ -822,7 +781,7 @@ function updateDeployLight() {
     if (!s) return;
     const have = countOfId(s.id);
     const isAir = s.cls === 'fighter' || s.cls === 'corvette';
-    let can = have < s.maxShip;
+    let can = have < s.maxShip && selectedShipCount(s.cls) < (CONFIG.DEPLOY_LIMIT[s.cls] || 99);
     if (isAir) can = can && hasCarrier() && (s.cls === 'fighter' ? selectedFighterCount() < carrierTotal().f : selectedCorvetteCount() < carrierTotal().c);
     else can = can && totalCommand() + s.command <= 400;
     el.classList.toggle('off', !can);
@@ -877,11 +836,13 @@ function buyPoolItem(idx) {
   if (state.funds < price) { flashTip('资金不足'); return; }
   if (item.type === 'equip' && countHand('equip') >= CONFIG.EQUIP_LIMIT) { flashTip('装备栏已满'); return; }
   if (item.type === 'spell' && countHand('spell') >= CONFIG.SPELL_LIMIT) { flashTip('战术指令栏已满'); return; }
+  if (item.type === 'ship' && countHand('ship') >= CONFIG.HAND_LIMIT) { flashTip('手牌区舰船已满（' + CONFIG.HAND_LIMIT + '）'); return; }
   state.funds -= price;
   state.spentFunds += price;
   if (item.type === 'ship') {
     state.hand.push({ ship: item.ship, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
     pushNews('购入舰船：' + item.ship.name, 'good');
+    tryMergeShips();
   } else if (item.type === 'equip') {
     state.hand.push({ type: 'equip', eq: item.eq, lv: 1 });
     pushNews('购入装备：' + item.eq.name, 'good');
@@ -890,6 +851,7 @@ function buyPoolItem(idx) {
     state.hand.push({ type: 'spell', sp: item.sp });
     pushNews('获得战术指令：' + item.sp.name, 'good');
   }
+  state.pool.splice(idx, 1);
   if (state.gacha) checkGacha();
   renderPrep();
 }
@@ -900,6 +862,7 @@ function checkGacha() {
     state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
     state.spentFunds -= 18;
     pushNews('军火商人：获得舰船 ' + s.name, 'good');
+    tryMergeShips();
   }
 }
 
@@ -1058,9 +1021,11 @@ function selectHandCard(i) {
   showConfirm('舰船详情：' + s.name, '舰种 ' + CLS_ZH[s.cls] + '\n生命 ' + s.hp + ' 攻击 ' + s.dmg + ' 装甲 ' + s.armor + '\n武器 ' + WEAPON_LABEL[s.weapon] + '·' + DMGTYPE_LABEL[s.dmgType] + '\n强化等级：攻击' + (lv.dmg || 0) + ' 生命' + (lv.hp || 0) + ' 攻速' + (lv.rate || 0) + ' 装甲' + (lv.armor || 0) + ' 射程' + (lv.range || 0) + (card.elite ? '\n状态：精锐' : '') + (card.equips && card.equips.length ? '\n装备：' + card.equips.map(function (e) { return e.name; }).join('、') : ''), null);
 }
 
+const BATTLE_ONLY_SPELLS = { bomb: 1, emp: 1, freeze: 1, corrode: 1 };
 function useSpellFromHand(i) {
   const card = state.hand[i];
   if (!card || card.type !== 'spell') return;
+  if (BATTLE_ONLY_SPELLS[card.sp.id]) { flashTip('该战术指令仅在战斗中生效，将在战斗开始时自动使用'); return; }
   showConfirm('使用战术指令：' + card.sp.name, card.sp.desc + '\n确认使用？', function () {
     state.hand.splice(i, 1);
     castSpell(card.sp);
@@ -1084,6 +1049,7 @@ function castSpell(sp) {
     const s = randomShipByLevel(0);
     state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
     pushNews('增援编队：获得舰船 ' + s.name, 'good');
+    tryMergeShips();
   } else if (sp.id === 'freeze') {
     state.enemies.forEach(function (e) { e.frozenUntil = now + 3000; });
     pushNews('时间冻结：敌方停止移动3秒', 'good');
@@ -1224,7 +1190,7 @@ function showShipUpgrade(handIdx) {
     const cur = lv[it.k] || 0;
     const cost = cur + 1;
     html += '<div class="su-row">';
-    html += '<div class="su-info"><span class="su-name">' + it.name + '</span><span class="su-lv">Lv.' + cur + '</span><span class="su-val">' + (it.pct ? '+' + Math.round(cur * it.pct * 100) + '%' : '+' + Math.round(cur * 2)) + '</span></div>';
+    html += '<div class="su-info"><span class="su-name">' + it.name + '</span><span class="su-lv">Lv.' + cur + '</span><span class="su-val">' + (it.pct ? '+' + Math.round(cur * it.pct * 100) + '%' : (it.k === 'range' ? '+' + (cur * 0.4).toFixed(1) : '+' + Math.round(cur * 2))) + '</span></div>';
     html += '<div class="su-track"><div class="su-fill" style="width:' + Math.min(100, cur * 20) + '%"></div></div>';
     html += '<button class="btn-action tiny" data-up="' + it.k + '">升级 ' + cost + '点</button>';
     html += '</div>';
@@ -1277,7 +1243,7 @@ function rebuildUnits() {
     const maxHp = Math.round(s.hp * hpMul * state.bonuses.hpMul * waveScale);
     const hasShield = s.dmgType === 'energy' || (card.equips || []).some(function (e) { return e.id === 'shield'; });
     return {
-      cardIdx: i, id: 'my_' + i, name: s.name, shortName: s.shortName || s.name, cls: s.cls, row: s.row, repair: s.repair ? 1 : 0,
+      cardIdx: i, id: 'my_' + i, name: s.name, shortName: s.shortName || s.name, cls: s.cls, row: s.row, repair: (s.repair ? 1 : 0) || (mo.repair ? 1 : 0),
       maxHp: maxHp, hp: maxHp,
       shield: hasShield ? Math.round(maxHp * 0.2) + ((card.equips || []).filter(function (e) { return e.id === 'shield'; }).length ? 40 : 0) : 0,
       dmg: Math.round(s.dmg * dmgMul * state.bonuses.dmgMul * waveScale),
@@ -1402,7 +1368,7 @@ function finalRoundNextWave() {
   state.finalRound.intermission = true;
   state.finalRound.timer = 20;
   state.phase = 'prep';
-  state.shield = bargeShield() + state.bonuses.shieldBonus;
+  state.shield = bargeShield();
   renderPrep();
   pushNews('最终回合 · 第 ' + w + ' 波次准备中（20秒间期，可驳船补给，舰船血量不重置）', 'warn');
   if (interTimer) clearInterval(interTimer);
@@ -1475,7 +1441,7 @@ function spawnEnemyWave() {
     return {
       id: 'en_' + i, name: e.zh, shortName: e.zh, cls: e.cls,
       zone: zone, count: 1, group: grp, factionIdx: grp < 2 ? 0 : 1,
-      maxHp: Math.round(e.hp * scale), hp: Math.round(e.hp * scale),
+      maxHp: Math.round(e.hp * scale * state.enemyHpMul), hp: Math.round(e.hp * scale * state.enemyHpMul),
       dmg: Math.round(e.atk * scale), armor: Math.round(e.armor * scale), shield: Math.round(e.shield * scale),
       dmgType: e.dmgType, weapon: e.weapon, tier: e.tier, repair: e.repair ? 1 : 0,
       alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
@@ -1489,34 +1455,32 @@ function startBattle() {
   if (!state.hand.some(function (c) { return c.ship; })) { flashTip('编组中没有舰船'); return; }
   state.phase = 'battle';
   state.repairUntil = Date.now() + 2500;
-  if (!state.poolFrozen) state.pool = [];
-  else { state.poolFrozen = false; state.pool.forEach(function (p) { p.frozen = false; }); }
   const spells = state.hand.filter(function (c) { return c.type === 'spell'; });
   state.hand = state.hand.filter(function (c) { return c.type !== 'spell'; });
   spells.forEach(function (c) { castSpell(c.sp); });
   rebuildUnits();
   if (state.finalRound && state.finalRound.active) {
+    const pending = state.pendingHp || [];
+    state.pendingHp = null;
+    state.units.forEach(function (u) {
+      const k = pending.find(function (p) { return p.id === u.id; });
+      if (k) { u.hp = Math.min(u.maxHp, Math.max(0, k.hp)); u.alive = k.alive && k.hp > 0; }
+    });
     state.enemies.forEach(function (e) { e.lastFireTime = 0; });
   } else {
     spawnEnemyWave();
   }
+  if (state.swift) {
+    let top = null, max = 0;
+    state.units.forEach(function (u) { if (u.dmg > max) { max = u.dmg; top = u; } });
+    if (top) top.swiftTop = true;
+  }
   clockLeft = state.finalRound && state.finalRound.active ? 180 : CONFIG.ROUND_CLOCK;
-  overtime = 0;
-  toxicActive = false;
   state.battleFocusMul = 1;
   state.attackEvents = [];
   state.breakthroughUntil = Date.now() + 30000;
   state.roundLifeLost = 0;
   state.finalRound.waveEnded = false;
-  if (state.finalRound && state.finalRound.active) {
-    const keepHp = state.units.map(function (u) { return { id: u.id, hp: u.hp }; });
-    const keepAlive = state.units.map(function (u) { return u.alive; });
-    rebuildUnits();
-    state.units.forEach(function (u) {
-      const idx = keepHp.findIndex(function (k) { return k.id === u.id; });
-      if (idx >= 0) { u.hp = Math.min(u.maxHp, keepHp[idx].hp); u.alive = keepAlive[idx]; }
-    });
-  }
   renderBattle();
   startEntranceSequence();
 }
@@ -1583,12 +1547,20 @@ function healSide(list, isEnemy) {
 }
 function gameTick(now, dt) {
   if (state.phase !== 'battle') return;
+  if (state.paused) return;
   clockLeft -= dt;
-  if (clockLeft <= 0 && !toxicActive) { toxicActive = true; pushNews('战场即将恶化：毒雾开始蔓延', 'warn'); }
-  if (state.finalRound && state.finalRound.active && clockLeft <= 0 && !state.finalRound.waveEnded) {
+  if (clockLeft <= 0 && state.finalRound && state.finalRound.active && !state.finalRound.waveEnded) {
     state.finalRound.waveEnded = true;
     state.enemies.forEach(function (e) { e.alive = false; e.hp = 0; });
     pushNews('波次时间到（3分钟），剩余敌舰撤出战场', 'warn');
+  }
+  if (clockLeft <= 0 && !state.finalRound.active) {
+    const myLeft = state.units.some(function (u) { return u.alive; });
+    const enLeft = state.enemies.some(function (e) { return e.alive; });
+    if (!myLeft) { settleRound(false); return; }
+    if (!enLeft) { settleRound(true); return; }
+    settleRound(false, true);
+    return;
   }
   if (state.finalRound && state.finalRound.fortress && !state.finalRound.fortress.alive && !state.finalRound.fortressAoEDone) {
     state.finalRound.fortressAoEDone = true;
@@ -1603,12 +1575,6 @@ function gameTick(now, dt) {
       if (u.hp <= 0) { u.alive = false; u.hp = 0; const c = CONFIG.DEATH_COST[u.cls] || 2; state.life -= c; pushNews(u.shortName + '被能量直射击毁（我方生命 -' + c + '）', 'bad'); }
     }
   });
-  if (toxicActive) overtime += dt;
-  if (toxicActive) {
-    const pct = Math.min(0.08, 0.03 + 0.0005 * overtime);
-    state.units.forEach(function (u) { if (u.alive) u.hp -= u.maxHp * pct * dt; });
-    state.enemies.forEach(function (e) { if (e.alive) e.hp -= e.maxHp * pct * dt; });
-  }
   if (state.corrodeUntil && now < state.corrodeUntil) {
     state.enemies.forEach(function (e) { if (e.alive) e.hp -= e.maxHp * 0.03 * dt; });
   }
@@ -1657,8 +1623,9 @@ function gameTick(now, dt) {
           state.factionHp[1] = Math.max(100, state.factionHp[1] - fDmg);
           if (prev1 > 100 && state.factionHp[1] <= 100 && !state.finalRound.active && !state.finalRound.lockPrompted) {
             state.finalRound.lockPrompted = true;
+            state.paused = true;
             setTimeout(function () {
-              showConfirm('是否进入最终回合？', '敌方亚空间第二巡航舰队生命已降至 100 并被锁定。进入最终回合后敌方生命恢复至 2000，并迎来 4 个波次的最终决战（第4波含要塞舰特拉法加）。', function () { finalRoundStart(); });
+              showConfirm('是否进入最终回合？', '敌方亚空间第二巡航舰队生命已降至 100 并被锁定。进入最终回合后敌方生命恢复至 2000，并迎来 4 个波次的最终决战（第4波含要塞舰特拉法加）。', function () { state.paused = false; finalRoundStart(); }, function () { state.paused = false; });
             }, 600);
           }
         } else state.factionHp[1] = Math.max(0, state.factionHp[1] - fDmg);
@@ -1687,7 +1654,7 @@ function myAttack(now) {
     if (u.weapon === 'direct') dmg *= state.bonuses.directMul;
     if (u.weapon === 'projectile') dmg *= state.bonuses.projMul;
     if (u.weapon === 'air') dmg *= state.bonuses.airMul;
-    if (state.swift && u.dmg === getMaxMyDmg()) dmg *= 1.7;
+    if (state.swift && u.swiftTop) dmg *= 1.7;
     const isCrit = Math.random() < (state.bonuses.critChance + u.critBonus);
     if (isCrit) dmg *= 1.5;
     const dealt = calcDamage(dmg, u.dmgType, target, u.weapon);
@@ -1719,25 +1686,25 @@ function enemyAttack(now) {
   });
 }
 
-function getMaxMyDmg() {
-  return state.units.reduce(function (m, u) { return u.alive ? Math.max(m, u.dmg) : m; }, 0);
-}
-
 function acquireTarget(attacker, candidates) {
   const list = candidates.filter(function (c) { return c.alive; });
   if (!list.length) return null;
+  const fortress = list.filter(function (c) { return c.fortress && !(c.lockUntil && Date.now() < c.lockUntil); });
+  if (fortress.length) return fortress[0];
   if (attacker.weapon === 'air') {
     const air = list.filter(function (c) { return c.cls === 'fighter' || c.cls === 'corvette'; });
     return (air.length ? air : list)[0];
   }
+  const nonAir = list.filter(function (c) { return c.cls !== 'fighter' && c.cls !== 'corvette'; });
+  const pool = nonAir.length ? nonAir : list;
   if (attacker.weapon === 'projectile') {
     for (const seq of LOCK_SEQUENCE) {
-      const found = list.filter(function (c) { return c.cls === seq.cls; });
+      const found = pool.filter(function (c) { return c.cls === seq.cls; });
       if (found.length) return found[0];
     }
-    return list[0];
+    return pool[0];
   }
-  return list.sort(function (a, b) { return a.hp - b.hp; })[0];
+  return pool.sort(function (a, b) { return a.hp - b.hp; })[0];
 }
 
 function calcDamage(dmg, dmgType, target, weapon) {
@@ -1765,12 +1732,10 @@ function calcDamage(dmg, dmgType, target, weapon) {
   return Math.max(1, dmg - target.armor);
 }
 
-function settleRound(win) {
+function settleRound(win, timeout) {
   if (state.phase !== 'battle') return;
   state.phase = 'settle';
   stopBattleLoop();
-  const fog = document.getElementById('toxicFog');
-  if (fog) fog.remove();
   if (state.recycle && state.roundKills >= 30) {
     const bonus = 2 + Math.floor(Math.random() * 2);
     state.funds += bonus;
@@ -1779,11 +1744,12 @@ function settleRound(win) {
   if (win) {
     pushNews('本回合战斗胜利：敌方舰队已被全歼', 'good');
   } else {
-    pushNews('我方舰队全灭，防线告急', 'bad');
+    pushNews(timeout ? '作战时间到，剩余敌舰撤出战场' : '我方舰队全灭，防线告急', timeout ? '' : 'bad');
   }
   if (state.factionHp.every(function (h) { return h <= 0; })) { endGame(true); return; }
   if (state.life <= 0) { state.life = 0; endGame(false); return; }
   if (state.finalRound.active) {
+    state.pendingHp = state.units.map(function (u) { return { id: u.id, hp: u.hp, alive: u.alive }; });
     finalRoundNextWave();
     return;
   }
@@ -1959,14 +1925,11 @@ function renderAtkLog() {
 
 function updateBattleUI() {
   const panel = document.getElementById('leftPanel');
-  if (!panel || state.phase !== 'battle') return;
+  if (!panel || state.phase !== 'battle' || state.paused) return;
   const clockEl = document.getElementById('battleClock');
-  if (clockEl) {
-    clockEl.textContent = toxicActive ? '+' + Math.floor(overtime) : Math.max(0, Math.ceil(clockLeft));
-    clockEl.classList.toggle('warn', toxicActive);
-  }
+  if (clockEl) clockEl.textContent = Math.max(0, Math.ceil(clockLeft));
   const clockNum = document.getElementById('clockNum');
-  if (clockNum) clockNum.textContent = toxicActive ? '+' + Math.floor(overtime) : Math.max(0, Math.ceil(clockLeft));
+  if (clockNum) clockNum.textContent = Math.max(0, Math.ceil(clockLeft));
   const cntEl = panel.querySelector('.fleet-panel.right .fp-cnt');
   if (cntEl) cntEl.textContent = state.enemies.filter(function (e) { return e.alive; }).length + '/' + state.enemies.length;
   const fsb = state.finalRound && state.finalRound.fortress;
@@ -2014,18 +1977,11 @@ function updateBattleUI() {
   if (log) log.innerHTML = renderAtkLog();
   const statusEl = panel.querySelector('.top-status');
   if (statusEl) statusEl.outerHTML = renderTopStatus();
-  let fog = document.getElementById('toxicFog');
-  if (toxicActive && !fog) {
-    fog = document.createElement('div');
-    fog.id = 'toxicFog';
-    fog.className = 'toxic-fog';
-    document.body.appendChild(fog);
-  }
-  if (!toxicActive && fog) fog.remove();
 }
 
 function skipRound() {
   if (state.phase !== 'prep') { flashTip('当前无法跳过'); return; }
+  if (state.finalRound && state.finalRound.active) { flashTip('最终回合波次无法跳过'); return; }
   state.phase = 'battle';
   state.shield = 0;
   state.enemies.forEach(function (e) { e.alive = false; });
@@ -2044,8 +2000,6 @@ function endGame(victory) {
   if (state.phase === 'end') return;
   state.phase = 'end';
   stopBattleLoop();
-  const fog = document.getElementById('toxicFog');
-  if (fog) fog.remove();
   state.stats = state.stats || {};
   if (victory) {
     state.stats.wins = (state.stats.wins || 0) + 1;
@@ -2057,16 +2011,18 @@ function endGame(victory) {
   }
   state.stats.kills = (state.stats.kills || 0) + state.totalKills;
   state.stats.bestWave = Math.max(state.stats.bestWave || 0, Math.min(state.wave, CONFIG.TOTAL_ROUNDS));
+  const tp = Math.round((state.wave + state.totalKills) * 5 * CONFIG.MODES[state.mode].reward);
+  state.stats.techEarned = (state.stats.techEarned || 0) + tp;
+  state.stats.coinsEarned = (state.stats.coinsEarned || 0) + Math.round(tp * 2);
   saveProgress();
   saveStats();
   const modal = document.getElementById('resultModal');
   document.getElementById('resultTitle').textContent = victory ? '作战胜利' : '作战失败';
-  const tp = Math.round((state.wave + state.totalKills) * 5 * CONFIG.MODES[state.mode].reward);
   let html = '<div class="rs-line">回合 ' + Math.min(state.wave, CONFIG.TOTAL_ROUNDS) + '/' + CONFIG.TOTAL_ROUNDS + '</div>';
   html += '<div class="rs-line">模式 ' + CONFIG.MODES[state.mode].name + '</div>';
   html += '<div class="rs-line">击毁编队 ' + state.totalKills + '</div>';
   html += '<div class="rs-line">敌方势力生命 ' + state.factionHp.map(function (h) { return Math.max(0, h); }).join(' / ') + '</div>';
-  html += '<div class="rs-line">奖励技术点 ' + tp + ' · 比邻星币 ' + Math.round(tp * 2) + '</div>';
+  html += '<div class="rs-line">奖励技术点 ' + tp + ' · 比邻星币 ' + Math.round(tp * 2) + '（已累计入战绩）</div>';
   html += '<div class="rs-actions"><button class="btn-action primary-btn" id="againBtn">再来一局</button><button class="btn-action" id="backBtn">返回主页</button></div>';
   document.getElementById('resultContent').innerHTML = html;
   modal.classList.add('active');
@@ -2100,7 +2056,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const m = CONFIG.MODES[k];
       return '<div class="sp-sec"><div class="sp-sec-title">' + m.name + '</div>' +
         '<div class="sp-row"><span>敌方势力生命</span><span class="v">各 ' + m.life + ' 点</span></div>' +
-        '<div class="sp-row"><span>资金节奏</span><span class="v">' + (k === 'beginner' ? '第1回合5，第2回合13，之后每回合10' : '第1回合' + m.funds[0] + '，之后每回合+1，上限' + m.funds[2]) + '</span></div>' +
+        '<div class="sp-row"><span>资金节奏</span><span class="v">' + (m.funds[2] >= 9999 ? '第1回合' + m.funds[0] + '，之后每回合+' + m.funds[1] + '，无上限' : '第1回合' + m.funds[0] + '，之后每回合+' + m.funds[1] + '，上限' + m.funds[2]) + '</span></div>' +
         '<div class="sp-row"><span>回合数</span><span class="v">固定15回合</span></div></div>';
     }).join('') + '</div>');
   });
@@ -2114,7 +2070,8 @@ document.addEventListener('DOMContentLoaded', function () {
       '<div class="sp-sec"><div class="sp-sec-title">历史战绩（跨局累计）</div>' +
       '<div class="sp-row"><span>胜利 / 失败</span><span class="v">' + (st.wins || 0) + ' / ' + (st.losses || 0) + '</span></div>' +
       '<div class="sp-row"><span>累计击毁编队</span><span class="v">' + (st.kills || 0) + '</span></div>' +
-      '<div class="sp-row"><span>最高回合</span><span class="v">' + (st.bestWave || 0) + '</span></div></div>' +
+      '<div class="sp-row"><span>最高回合</span><span class="v">' + (st.bestWave || 0) + '</span></div>' +
+      '<div class="sp-row"><span>累计技术点 / 比邻星币</span><span class="v">' + (st.techEarned || 0) + ' / ' + (st.coinsEarned || 0) + '</span></div></div>' +
       '<div class="sp-sec"><div class="sp-sec-title">舰队强化联动</div>' +
       '<div class="sp-row"><span>全局加成</span><span class="v">+' + Math.round((computeEnhanceMul() - 1) * 100) + '%</span></div></div>' +
       '<div class="sp-sec"><div class="sp-sec-title">配队规则</div>' +

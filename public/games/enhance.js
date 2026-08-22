@@ -39,11 +39,25 @@
     saveWeaponChoice();
   }
   function getSelectedWeapons() {
-    
+    // 按 option 槽位过滤：同一槽位内多武器为互斥选择，只计入 getWeaponChoice 选中的那一把，
+    // 避免武器合计把互斥槽位的所有武器全部计入导致数值虚高
     const sysMap = (window.SYSTEM_STATS || {})[currentKey];
     const out = [];
     if (!sysMap) return out;
-    Object.values(sysMap).forEach(sys => { (sys.weapons || []).forEach(w => out.push(w)); });
+    Object.keys(sysMap).forEach(sysName => {
+      const sys = sysMap[sysName] || {};
+      const slots = {};
+      (sys.weapons || []).forEach(w => {
+        const o = w.option || w.name;
+        (slots[o] = slots[o] || []).push(w);
+      });
+      Object.keys(slots).forEach(option => {
+        const list = slots[option];
+        const chosen = getWeaponChoice(currentKey, sysName, option, list);
+        const picked = list.filter(w => w.name === chosen)[0] || list[0];
+        if (picked) out.push(picked);
+      });
+    });
     return out;
   }
   function flashTip(msg) {
@@ -258,7 +272,9 @@
 
 
   
-  let points = parseInt(localStorage.getItem(LS_POINTS)) || 300;
+  var storedPoints = localStorage.getItem(LS_POINTS);
+  // parseInt("0") 为 0（falsy），不能用 || 兜底，否则技术点为 0 时刷新被重置为 300
+  let points = storedPoints === null ? 300 : (parseInt(storedPoints, 10) || 0);
   let state = {};
   try { state = JSON.parse(localStorage.getItem(LS_STATE)) || {}; } catch (e) { state = {}; }
   let currentKey = null;
@@ -266,7 +282,12 @@
 
   function saveState() { localStorage.setItem(LS_STATE, JSON.stringify(state)); }
   function savePoints() { localStorage.setItem(LS_POINTS, String(points)); }
-  function getLevel(shipKey, sys, tech) { return state[shipKey]?.[sys]?.[tech] || 0; }
+  function getLevel(shipKey, sys, tech) {
+    // 避免存储的字符串值（如 "0"）污染等级：强制 parseInt 归一为数字
+    var v = state[shipKey] && state[shipKey][sys] ? state[shipKey][sys][tech] : undefined;
+    var n = parseInt(v, 10);
+    return isNaN(n) ? 0 : n;
+  }
   function setLevel(shipKey, sys, tech, lv) {
     state[shipKey] = state[shipKey] || {};
     state[shipKey][sys] = state[shipKey][sys] || {};
@@ -278,6 +299,13 @@
   function costOf(tech, level) {
     const p = tech.progress && tech.progress[level - 1];
     return (typeof p === 'number' && p > 0) ? p : (tech.points || 5);
+  }
+
+  // 升到 lv 级的总投入 = 每级 costOf 逐级累加（progress 数组可能每级价格不同）
+  function investedFor(tech, lv) {
+    var sum = 0;
+    for (var l = 1; l <= lv; l++) sum += costOf(tech, l);
+    return sum;
   }
   
   function effValue(effect, level, max) {
@@ -334,7 +362,7 @@
   
   function computeEnhancement(ship) {
     const levels = {};
-    (ship.systems || []).forEach(sys => {
+    ((ship && ship.systems) || []).forEach(sys => {
       levels[sys.name] = {};
       (sys.techs || []).forEach(t => { const lv = getLevel(currentKey, sys.name, t.name); if (lv > 0) levels[sys.name][t.name] = lv; });
     });
@@ -344,15 +372,15 @@
       Object.keys(levels).forEach(sn => Object.keys(levels[sn]).forEach(tn => {
         const s = (ship.systems || []).find(x => x.name === sn);
         const t = s && s.techs.find(x => x.name === tn);
-        if (t) invested += levels[sn][tn] * costOf(t, 1);
+        if (t) invested += investedFor(t, levels[sn][tn]);
       }));
-      return { fireMul: pr.fireMul, aaMul: pr.aaMul, siegeMul: pr.siegeMul, cdMul: pr.cdMul || 1, hpMul: pr.hpMul, physMul: pr.physMul, energyMul: pr.energyMul, cruiseMul: pr.cruiseMul, warpMul: pr.warpMul, invested: invested, hpAdd: pr.hpAdd || 0, physAdd: pr.physAdd || 0, energyAdd: pr.energyAdd || 0 };
+      return { fireMul: pr.fireMul, aaMul: pr.aaMul, siegeMul: pr.siegeMul, cdMul: pr.cdMul === undefined ? 1 : pr.cdMul, hpMul: pr.hpMul, physMul: pr.physMul, energyMul: pr.energyMul, cruiseMul: pr.cruiseMul, warpMul: pr.warpMul, invested: invested, hpAdd: pr.hpAdd || 0, physAdd: pr.physAdd || 0, energyAdd: pr.energyAdd || 0 };
     }
         const acc = { dmg: 0, aa: 0, siege: 0, cd: 0, hit: 0, crit: 0, hp: 0, phys: 0, energy: 0, cruise: 0, warp: 0, atkSpeed: 0, freq: 0, physAdd: 0, energyAdd: 0, hpAdd: 0, invested: 0 };
-    ship.systems.forEach(sys => (sys.techs || []).forEach(t => {
+    ((ship && ship.systems) || []).forEach(sys => (sys.techs || []).forEach(t => {
       const lv = getLevel(currentKey, sys.name, t.name);
       if (lv <= 0) return;
-      acc.invested += lv * costOf(t, 1);
+      acc.invested += investedFor(t, lv);
       (t.effects || []).forEach(e => {
         const raw = Number(e.value);
         if (!isFinite(raw) || raw === 0) return;
@@ -387,14 +415,19 @@
           if (/装甲|抗性|物理抵抗/.test(type)) {
             if (/能量/.test(type)) acc.energyAdd += add; else acc.physAdd += add;
           } else if (/生命|结构值/.test(type)) acc.hpAdd += add;
-          else if (/伤害/.test(type)) acc.dmg += (add / 100); 
+          else if (/伤害/.test(type)) acc.dmg += add; // 效果值为百分点（如“伤害+X%”），直接累加，勿再 /100
         }
       });
     }));
+    // 暴击/攻速（攻击间隔、持续时间缩减）/频率（每轮攻击、额外射击）强化此前只计算未使用，
+    // 现近似计入伤害倍率（线性估算；命中率 hit 与 DPM 无简单折算关系，仅保留计算）
+    const critMul = 1 + acc.crit / 100;
+    const atkSpdMul = 1 + acc.atkSpeed / 100;
+    const freqMul = 1 + acc.freq / 100;
     return {
-      fireMul: 1 + acc.dmg / 100,
-      aaMul: 1 + (acc.dmg + acc.aa) / 100,
-      siegeMul: 1 + (acc.dmg + acc.siege) / 100,
+      fireMul: (1 + acc.dmg / 100) * critMul * atkSpdMul * freqMul,
+      aaMul: (1 + (acc.dmg + acc.aa) / 100) * critMul * atkSpdMul * freqMul,
+      siegeMul: (1 + (acc.dmg + acc.siege) / 100) * critMul * atkSpdMul * freqMul,
       cdMul: 1 - acc.cd / 100,
       hpMul: 1 + acc.hp / 100, hpAdd: acc.hpAdd,
       physMul: 1 + acc.phys / 100, physAdd: acc.physAdd,
@@ -417,7 +450,7 @@
     let gain = '';
     if (hasMul && hasAdd) gain = ` <span class="gain">+${((mul - 1) * 100).toFixed(1)}% +${Math.round(add)}</span>`;
     else if (hasMul) gain = ` <span class="gain">+${((mul - 1) * 100).toFixed(1)}%</span>`;
-    else gain = ` <span class="gain">+${Math.round(add)}</span>`;
+    else gain = ` <span class="gain">${add >= 0 ? '+' : ''}${Math.round(add)}</span>`; // 负 add 避免渲染成 "+-3"
     if (!base) return `<b class="boost">${fmtFn(boosted)}</b>${gain}`;
     return `<b class="boost">${fmtFn(boosted)}</b>${gain}`;
   }
@@ -528,8 +561,9 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
   // ---------- 强化面板 ----------
   function renderPanel() {
     const ship = DATA[currentKey];
-    const enh = computeEnhancement(ship);
+    // 判空提前：computeEnhancement 会访问 ship.systems，未选舰船时先返回避免空白屏崩溃
     if (!ship) { panelEl.innerHTML = '<div class="empty">← 请选择一艘舰船开始强化</div>'; return; }
+    const enh = computeEnhancement(ship);
 
     let html = '';
     html += `<div class="ship-head">
@@ -576,6 +610,10 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
                 const selected = w.name === chosen;
                 html += `<div class="sp-item ${selected ? 'selected' : ''}">`;
                 html += `<div class="sp-head"><span class="sp-name">🔫 ${w.name}</span>`;
+                // 互斥槽位（同 option 多武器）生成切换按钮；data-pick 格式与 panelEl.onclick 委托解析一致：key|s系统|o槽位|w武器
+                if (list.length > 1) {
+                  html += `<button class="sp-pick ${selected ? 'on' : ''}" data-pick="${escapeHtml(currentKey)}|s${escapeHtml(sys.name)}|o${escapeHtml(option)}|w${escapeHtml(w.name)}" ${selected ? 'disabled' : ''}>${selected ? '✓ 已选' : '选择'}</button>`;
+                }
                                 html += `</div>`;
                 html += `<div class="sp-stats">${w.type ? `<span class="tag">${w.type}</span>` : ''}${w.weaponType ? `<span class="tag">${w.weaponType}</span>` : ''}${w.damage !== undefined ? `<span>⚔️伤害 ${Math.round(w.damage * (enh.fireMul || 1))}${enh.fireMul > 1.0001 ? ' <i class="src">+' + Math.round((enh.fireMul - 1) * 100) + '%</i>' : ''}</span>` : ''}${w.cycle !== undefined ? `<span>💫循环 ${w.cycle}</span>` : ''}${w.lockOn !== undefined ? `<span>🔒锁定 ${w.lockOn}</span>` : ''}${w.rounds !== undefined ? `<span>🔁轮数 ${w.rounds}</span>` : ''}${w.cooldown !== undefined ? `<span>⏱️冷却 ${enh.cdMul && enh.cdMul < 1 ? (Math.round(w.cooldown * enh.cdMul * 10) / 10) + 's <i class="src">-' + Math.round((1 - enh.cdMul) * 100) + '%</i>' : w.cooldown + 's'}</span>` : ''}${w.duration !== undefined ? `<span>⏳持续 ${w.duration}s</span>` : ''}</div>`;
                 w.actions.forEach(a => {
@@ -636,6 +674,7 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
         const cost = costOf(tech, cur + 1);
         if (points < cost) { flashPoints('技术点不足！'); return; }
         points -= cost;
+        savePoints(); // 升级后立即持久化，否则刷新回滚（可刷点）
         setLevel(currentKey, ship.systems[si].name, tech.name, cur + 1);
         renderPoints(); renderPanel();
       });
@@ -647,6 +686,7 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
         const cur = getLevel(currentKey, ship.systems[si].name, tech.name);
         if (cur <= 0) return;
         points += costOf(tech, cur); // 返还当前等级消耗
+        savePoints(); // 降级后立即持久化，否则刷新回滚
         setLevel(currentKey, ship.systems[si].name, tech.name, cur - 1);
         renderPoints(); renderPanel();
       });
@@ -667,7 +707,7 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
     if (tech.effects && tech.effects.length) {
       fxHtml = `<div class="fx-tags">`;
       tech.effects.forEach(e => {
-        const v = effValue(e, Math.max(lv, 1), tech.max);
+        const v = effValue(e, Math.max(lv, 0), tech.max); // 未强化（lv=0）显示 0 加成，而非按 1 级估算
         const valStr = typeof v === 'number' ? (v % 1 === 0 ? v : v.toFixed(1)) : v;
         let tag = `<span class="fx-tag">${e.type}`;
         if (e.action) tag += ` <b>${e.action} ${valStr}</b>`;
@@ -697,16 +737,21 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
   function flashPoints(msg) {
     const el = pointsEl;
     const old = el.textContent;
-    el.textContent = '⚠ ' + msg;
-    setTimeout(() => { el.textContent = old; }, 1200);
+    const flash = '⚠ ' + msg;
+    el.textContent = flash;
+    setTimeout(() => {
+      // 仅当仍显示本次提示时才恢复，避免连点时旧定时器把新提示覆盖掉
+      if (el.textContent === flash) el.textContent = old;
+    }, 1200);
   }
 
   // ---------- 技术点 ----------
-  document.getElementById('btnAddPoints').addEventListener('click', () => {
-    points += 100;
-    savePoints();
-    renderPoints();
-  });
+  // 调试按钮已移除：生产环境不应暴露“+100 技术点”入口（enhance.html 中对应按钮已注释）
+  // document.getElementById('btnAddPoints').addEventListener('click', () => {
+  //   points += 100;
+  //   savePoints();
+  //   renderPoints();
+  // });
 
   // ---------- 初始化 ----------
   renderPoints();

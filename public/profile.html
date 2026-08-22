@@ -267,7 +267,8 @@
     // 获取当前登录用户（从 localStorage）
     function getCurrentUser() {
       const cu = localStorage.getItem('ueg_current_user');
-      return cu ? JSON.parse(cu) : null;
+      if (!cu) return null;
+      try { return JSON.parse(cu); } catch (e) { return null; }
     }
 
     // 设置当前用户（存入 localStorage）
@@ -309,12 +310,11 @@
         document.getElementById('adminEntry').style.display = 'block';
       }
 
-      // 同步更新 localStorage 中的用户信息（保持会话数据最新）
+      // 同步更新 localStorage 中的用户信息（保持会话数据最新，不存密码明文）
       const updatedUser = {
         username: user.username,
         isAdmin: user.is_admin || false,
-        highestRecord: user.highest_record || 0,
-        password: currentUser.password // 保留旧密码（暂不更新，避免意外丢失）
+        highestRecord: user.highest_record || 0
       };
       setCurrentUser(updatedUser);
     }
@@ -331,8 +331,12 @@
         return false;
       }
 
-      // 更新 localStorage 中的密码（保持会话一致）
-      const updatedUser = { ...currentUser, password: newPw };
+      // 更新 localStorage 中的用户信息（保持会话一致，绝不写入密码明文）
+      const updatedUser = {
+        username: currentUser.username,
+        isAdmin: currentUser.isAdmin || false,
+        highestRecord: currentUser.highestRecord || 0
+      };
       setCurrentUser(updatedUser);
 
       return true;

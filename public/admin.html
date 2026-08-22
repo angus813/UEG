@@ -183,10 +183,21 @@
 
   <script>
     // ==================== 工具函数 ====================
-    // 获取当前登录用户（从 localStorage）
+    // 获取当前登录用户（从 localStorage；数据损坏时返回 null 而非抛错）
     function getCurrentUser() {
       const cu = localStorage.getItem('ueg_current_user');
-      return cu ? JSON.parse(cu) : null;
+      if (!cu) return null;
+      try { return JSON.parse(cu); } catch (e) { return null; }
+    }
+
+    // HTML 转义（防存储型 XSS：用户名等拼接进 innerHTML / onclick 前转义）
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     // ==================== 管理员权限校验 ====================
@@ -244,16 +255,17 @@
       let html = '';
       users.forEach(user => {
         const isAdmin = user.is_admin ? '是' : '否';
+        const uName = esc(user.username);
         html += `
           <tr>
-            <td>${user.username}</td>
+            <td>${uName}</td>
             <td>${isAdmin}</td>
             <td>
-              <input type="number" class="record-input" id="record-${user.username}" 
-                     placeholder="等级" value="${user.highest_record || 0}" min="0" step="1">
+              <input type="number" class="record-input" id="record-${uName}" 
+                     placeholder="等级" value="${esc(user.highest_record) || 0}" min="0" step="1">
             </td>
             <td>
-              <button class="btn-small" onclick="updateRecord('${user.username}')">保存</button>
+              <button class="btn-small" onclick="updateRecord('${uName}')">保存</button>
             </td>
           </tr>
         `;
@@ -306,7 +318,5 @@
 
     init();
   </script>
-</body>
-</html>
 </body>
 </html>
