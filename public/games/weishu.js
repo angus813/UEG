@@ -1267,10 +1267,10 @@ function makeFortress(scale) {
     armor: 50, dmgType: 'physical', weapon: 'direct', tier: 99, repair: 1,
     fortress: true, alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0, lockUntil: 0, readyUntil: 0, fireUntil: 0, cooling: false, coolUntil: 0,
     fortressHits: 0, modules: [
-      { weapon: 'direct', dmgType: 'physical', targets: 2, dpm: 3000 },
-      { weapon: 'direct', dmgType: 'energy', targets: 2, dpm: 4000 },
+      { weapon: 'direct', dmgType: 'physical', targets: 2, dpm: 1000 },
+      { weapon: 'direct', dmgType: 'energy', targets: 2, dpm: 1000 },
       { weapon: 'projectile', dmgType: 'physical', targets: 4, dpm: 1500 },
-      { weapon: 'air', dmgType: 'physical', targets: 6, dpm: 1000 }
+      { weapon: 'air', dmgType: 'physical', targets: 6, dpm: 300 }
     ]
   };
 }
@@ -1358,12 +1358,12 @@ function finalRoundNextWave() {
     });
     state.enemies.forEach(function (e) { e.shield += 1000; });
     const fs2 = makeFortress(scale);
-    fs2.lockUntil = Date.now() + 14000;
+    fs2.lockUntil = Date.now() + 30000;
     fs2.readyUntil = fs2.lockUntil;
     fs2.fireUntil = fs2.lockUntil + 10000;
     state.finalRound.fortress = fs2;
     state.enemies.push(fs2);
-    pushNews('要塞舰特拉法加登场！HP 3000000 · 护盾 300000 · 14秒索敌后输出10秒冷却5秒', 'warn');
+    pushNews('要塞舰特拉法加登场！HP 3000000 · 护盾 300000 · 30秒锁血后输出10秒冷却5秒', 'warn');
   }
   state.finalRound.intermission = true;
   state.finalRound.timer = 20;
@@ -1408,7 +1408,8 @@ function fortressAttack(now) {
   if (!myUnits.length) return;
   myUnits.forEach(function (u) { u.fortressHits = 0; });
   fs2.modules.forEach(function (m) {
-    const perHit = m.dpm / 60;
+    // dpm 即每秒每目标伤害；模块轮询间隔 250ms（每秒 4 轮），故每轮伤害 = dpm / 4
+    const perHit = m.dpm / 4;
     for (let k = 0; k < m.targets; k++) {
       const t = acquireTarget({ weapon: m.weapon, dmgType: m.dmgType, col: 2, range: 5 }, myUnits.filter(function (u) { return u.alive; }));
       if (!t) break;
@@ -1565,9 +1566,10 @@ function gameTick(now, dt) {
   if (state.finalRound && state.finalRound.fortress && !state.finalRound.fortress.alive && !state.finalRound.fortressAoEDone) {
     state.finalRound.fortressAoEDone = true;
     state.units.forEach(function (u) {
-      if (u.alive && u.zone === 'front') { u.aoeUntil = now + 10000; u.aoeDps = 200; }
+      // 我方前排 = 护卫/驱逐/战机/护航艇（row 0，用 clsToRow 判定）
+      if (u.alive && clsToRow(u.cls) === 0) { u.aoeUntil = now + 10000; u.aoeDps = 1000; }
     });
-    pushNews('特拉法加阵亡！对我方前排释放能量直射（10秒，每秒200伤害）', 'warn');
+    pushNews('特拉法加阵亡！对我方前排释放能量直射（10秒，每秒1000伤害）', 'warn');
   }
   state.units.forEach(function (u) {
     if (u.alive && u.aoeUntil && now < u.aoeUntil) {
