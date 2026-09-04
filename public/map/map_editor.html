@@ -4,113 +4,239 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>地图编辑器 - 星河杯</title>
+  <link rel="stylesheet" href="../rhine.css">
   <style>
+    /* ============================================================
+       莱茵生命风格重写（仅视觉，保留全部类名/id/事件绑定，不动 JS）
+       纯白+暖灰点阵纹理 · 唯一强调色 #FFD700 · 直角矩形 · 无阴影/渐变/毛玻璃
+       ============================================================ */
     * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body { height: 100vh; overflow: hidden; }
+
     body {
-      background: transparent;
-      color: #e0e8f0;
-      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
-      overflow: hidden;
-      height: 100vh;
+      background-color: var(--rhine-bg);
+      color: var(--rhine-body);
+      font-family: var(--rhine-body-font);
+      font-weight: 300;
+      letter-spacing: 0.02em;
       display: flex;
       flex-direction: column;
     }
+
+    /* ---------- 顶栏 ---------- */
     .header {
-      padding: 6px 12px;
-      background: rgba(20,25,30,0.95);
-      border-bottom: 1px solid #2a3340;
+      padding: 12px 22px;
+      background: var(--rhine-bg);
+      border-bottom: 2px solid var(--rhine-accent);
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-shrink: 0;
     }
-    .header-left { display: flex; align-items: center; gap: 8px; }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+
     .back-btn {
-      background: transparent; border: 1px solid #3a5060;
-      color: #b0c7d6; padding: 4px 10px; font-family: inherit;
-      font-size: 0.8rem; letter-spacing: 1px; cursor: pointer;
+      background: var(--rhine-bg);
+      border: 1px solid var(--rhine-ink);
+      color: var(--rhine-ink);
+      padding: 6px 14px;
+      font-family: var(--rhine-title-font);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.72rem;
+      border-radius: 0;
+      cursor: pointer;
       text-decoration: none;
+      transition: background 0.15s ease, color 0.15s ease;
     }
-    .map-title { font-size: 1.1rem; font-weight: 700; color: #fff; }
+    .back-btn:hover { background: var(--rhine-accent); border-color: var(--rhine-accent); color: var(--rhine-accent-ink); }
+
+    .map-title {
+      font-family: var(--rhine-title-font);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 1rem;
+      color: var(--rhine-ink);
+    }
+
     .btn {
-      padding: 5px 12px; border: 1px solid #3a5060;
-      background: transparent; color: #b0c7d6;
-      font-family: inherit; letter-spacing: 1px; cursor: pointer;
-      font-size: 0.8rem; margin-left: 4px;
+      padding: 6px 16px;
+      border: 1px solid var(--rhine-ink);
+      background: var(--rhine-bg);
+      color: var(--rhine-ink);
+      font-family: var(--rhine-title-font);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.72rem;
+      border-radius: 0;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
     }
-    .btn.save { border-color: #ff6a00; color: #ff6a00; }
+    .btn:hover { background: var(--rhine-accent); border-color: var(--rhine-accent); color: var(--rhine-accent-ink); }
+    .btn.save { border-color: var(--rhine-ink); color: var(--rhine-ink); }
+    .btn.save:hover { background: var(--rhine-accent); border-color: var(--rhine-accent); color: var(--rhine-accent-ink); }
+
+    /* ---------- 主区域 ---------- */
     .main-area { display: flex; flex: 1; overflow: hidden; }
-    .canvas-container { flex: 1; overflow: hidden; position: relative; background: #0d1116; cursor: crosshair; }
+
+    /* 画布容器：白底卡片，1px 深线外框替代发光阴影 */
+    .canvas-container {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      background: var(--rhine-bg);
+      cursor: crosshair;
+      border: 1px solid var(--rhine-ink);
+      box-shadow: none;
+    }
     canvas#mainCanvas { position: absolute; top: 0; left: 0; }
 
+    /* ---------- 侧边工具栏：白卡片 ---------- */
     .toolbar {
       width: 250px;
-      background: rgba(20,25,30,0.95);
-      border-left: 1px solid #2a3340;
+      background: var(--rhine-panel);
+      border-left: 1px solid var(--rhine-line-strong);
       display: flex;
       flex-direction: column;
       overflow-y: auto;
       flex-shrink: 0;
+      box-shadow: none;
     }
-    .tool-section { border-bottom: 1px solid #2a3340; }
+    .tool-section { border-bottom: 1px solid var(--rhine-line); }
     .section-title {
-      padding: 8px 10px;
-      font-size: 0.8rem;
-      letter-spacing: 1px;
-      color: #7a8b9a;
-      background: #1a222a;
+      padding: 10px 12px;
+      font-family: var(--rhine-title-font);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.76rem;
+      color: var(--rhine-ink);
+      background: var(--rhine-panel2);
+      border-left: 3px solid var(--rhine-accent);
       cursor: pointer;
       display: flex;
       justify-content: space-between;
     }
     .section-content {
-      padding: 6px;
+      padding: 10px;
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
+      gap: 6px;
       max-height: 160px;
       overflow-y: auto;
     }
     .section-content.collapsed { display: none; }
+
+    /* ---------- 绘图/工具按钮 ---------- */
     .shape-btn {
       width: 38px; height: 38px;
-      background: #1a1e24;
-      border: 1px solid #2e3b47;
+      background: var(--rhine-bg);
+      border: 1px solid var(--rhine-line-strong);
       padding: 2px;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
+      border-radius: 0;
     }
     .shape-btn canvas { width: 32px; height: 32px; }
-    .shape-btn:hover { border-color: #ff6a00; }
+    .shape-btn:hover { border-color: var(--rhine-accent); }
+
     .tool-btn {
-      background: #1a1e24;
-      border: 1px solid #2e3b47;
-      color: #b0c7d6;
-      padding: 5px 10px;
-      font-size: 0.8rem;
+      background: var(--rhine-bg);
+      border: 1px solid var(--rhine-line-strong);
+      color: var(--rhine-body);
+      padding: 6px 10px;
+      font-family: var(--rhine-title-font);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 0.7rem;
+      border-radius: 0;
       cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     }
-    .tool-btn.active { border-color: #ff6a00; color: #ff6a00; }
-    .color-picker { width: 100%; height: 28px; border: 1px solid #3a5060; background: #1a1e24; }
-    .range-input { width: 100%; margin: 2px 0; }
-    label { font-size: 0.7rem; color: #7a8b9a; display: block; margin-top: 5px; }
+    .tool-btn:hover { border-color: var(--rhine-ink); color: var(--rhine-ink); }
+    .tool-btn.active { background: var(--rhine-accent); border-color: var(--rhine-accent); color: var(--rhine-accent-ink); }
+
+    /* ---------- 属性控件：对齐莱茵（直角/细边/黄色 focus） ---------- */
+    .color-picker {
+      width: 100%; height: 28px;
+      border: 1px solid var(--rhine-line-strong);
+      background: var(--rhine-bg);
+      border-radius: 0;
+      cursor: pointer;
+      padding: 0;
+    }
+    .color-picker:focus { outline: none; border-color: var(--rhine-accent); }
+
+    .range-input {
+      width: 100%;
+      margin: 2px 0;
+      accent-color: var(--rhine-accent);
+    }
+
+    label {
+      font-family: var(--rhine-title-font);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      font-size: 0.64rem;
+      color: var(--rhine-mute);
+      display: block;
+      margin-top: 8px;
+    }
+
     .modal-input {
       width: 100%;
-      background: #1a1e24;
-      border: 1px solid #3a5060;
-      color: #fff;
+      background: var(--rhine-bg);
+      border: 1px solid var(--rhine-line-strong);
+      color: var(--rhine-ink);
       padding: 8px;
-      font-family: inherit;
+      font-family: var(--rhine-body-font);
+      font-weight: 300;
+      border-radius: 0;
     }
+    .modal-input:focus { outline: none; border-color: var(--rhine-accent); }
+
     .btn-delete-shape {
-      background: rgba(255,50,50,0.2); border: 1px solid #ff4444;
-      color: #ff6666; padding: 6px; width: 100%; margin-top: 6px;
+      background: var(--rhine-bg);
+      border: 1px solid var(--rhine-ink);
+      color: var(--rhine-ink);
+      padding: 6px;
+      width: 100%;
+      margin-top: 8px;
+      font-family: var(--rhine-title-font);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 0.7rem;
+      border-radius: 0;
+      cursor: pointer;
+      transition: background 0.15s ease, color 0.15s ease;
     }
+    .btn-delete-shape:hover { background: var(--rhine-accent); border-color: var(--rhine-accent); color: var(--rhine-accent-ink); }
+
+    /* 内联深色样式兜底：强制对齐莱茵（覆盖元素上的内联 style，不改 DOM） */
+    #fillType {
+      background: var(--rhine-bg) !important;
+      color: var(--rhine-ink) !important;
+      border: 1px solid var(--rhine-line-strong) !important;
+      font-family: var(--rhine-body-font) !important;
+      font-weight: 300 !important;
+      border-radius: 0 !important;
+      padding: 8px 12px !important;
+    }
+    #fillType:focus { outline: none; border-color: var(--rhine-accent) !important; }
+    #textureFile { color: var(--rhine-ink) !important; }
+
     @media (max-width: 768px) {
       .main-area { flex-direction: column; }
-      .toolbar { width: 100%; max-height: 200px; border-left: none; border-top: 1px solid #2a3340; }
+      .toolbar { width: 100%; max-height: 200px; border-left: none; border-top: 1px solid var(--rhine-line-strong); }
     }
   </style>
 <script src="../dyson-bg.js"></script>
@@ -119,6 +245,7 @@
   <div class="header">
     <div class="header-left">
       <a href="../strategy_map.html" class="back-btn" id="backBtn">← 返回</a>
+      <span class="rhine-mark"><span class="pm">±</span><span class="inf">∞</span></span>
       <div class="map-title" id="mapTitle">加载中...</div>
     </div>
     <div>

@@ -1,0 +1,223 @@
+/* ============================================================
+   RHINE LAB 设计系统 —— 莱茵生命风格（未来生物科技）
+   纯白 + 极浅暖灰纹理 · 柠檬黄 #FFD700 唯一强调色
+   粗体几何全大写标题 / 极细无衬线正文 · 非对称网格
+   ± 与 ∞ 组合标志 · 无阴影 / 无渐变 / 无毛玻璃 / 无圆角>4px
+   ============================================================ */
+
+:root {
+  /* 背景 */
+  --rhine-bg: #ffffff;
+  --rhine-panel: #faf8f6;          /* 极浅暖灰面板 */
+  --rhine-panel2: #f3f0ec;         /* 深一档暖灰 */
+  /* 文字 */
+  --rhine-ink: #1a1a1a;            /* 近黑 */
+  --rhine-body: #3c3a37;           /* 正文灰 */
+  --rhine-mute: #8a857e;           /* 次要灰 */
+  /* 线条 */
+  --rhine-line: #e5e1dc;           /* 极浅暖灰细线 */
+  --rhine-line-strong: #c9c4bc;
+  /* 强调色（唯一） */
+  --rhine-accent: #ffd700;
+  --rhine-accent-ink: #000000;     /* 强调色上的文字 */
+  /* 字体 */
+  --rhine-title-font: 'Novecento Wide', 'Oswald', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+  --rhine-body-font: 'Helvetica Neue', 'Helvetica', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--rhine-bg);
+  /* 极浅暖灰点阵纹理（SVG 点阵，非渐变） */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18'%3E%3Ccircle cx='1' cy='1' r='0.8' fill='%23efece7'/%3E%3C/svg%3E");
+  color: var(--rhine-body);
+  font-family: var(--rhine-body-font);
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 标题：粗体几何全大写 ---------- */
+h1, h2, h3, h4, .rhine-title, .rhine-h {
+  font-family: var(--rhine-title-font);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--rhine-ink);
+  margin: 0 0 0.4em;
+}
+h1 { font-size: 2rem; }
+h2 { font-size: 1.45rem; }
+h3 { font-size: 1.1rem; }
+.rhine-h .accent, h1 .accent, h2 .accent, h3 .accent { color: var(--rhine-accent); }
+
+/* 标题高亮下划线（柠檬黄细线） */
+.rhine-underline {
+  display: inline-block;
+  padding-bottom: 0.28em;
+  border-bottom: 2px solid var(--rhine-accent);
+}
+
+/* ---------- 标志图形：± 与 ∞ 组合 ---------- */
+.rhine-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-family: var(--rhine-title-font);
+  font-weight: 800;
+  color: var(--rhine-ink);
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+.rhine-mark .pm { color: var(--rhine-accent); }
+.rhine-mark .inf {
+  display: inline-block;
+  transform: scaleX(1.15);
+  /* ∞ 的断点：中间断开一小段 */
+  background: linear-gradient(#1a1a1a, #1a1a1a) 0 50% / 38% 2px no-repeat,
+              linear-gradient(#1a1a1a, #1a1a1a) 100% 50% / 62% 2px no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 1.05em;
+}
+
+/* ---------- 顶栏 ---------- */
+.rhine-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 28px;
+  border-bottom: 2px solid var(--rhine-accent);
+  background: var(--rhine-bg);
+}
+.rhine-header .brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.rhine-header .brand-name {
+  font-family: var(--rhine-title-font);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 1.05rem;
+  color: var(--rhine-ink);
+}
+
+/* ---------- 卡片 / 区块 ---------- */
+.rhine-card {
+  background: var(--rhine-panel);
+  border: 1px solid var(--rhine-line);
+  border-left: 3px solid var(--rhine-accent);
+  border-radius: 2px;               /* 直角矩形 */
+  padding: 22px 24px;
+}
+.rhine-card.plain { border-left: 1px solid var(--rhine-line); }
+.rhine-panel {
+  background: var(--rhine-panel);
+  border: 1px solid var(--rhine-line);
+}
+
+/* ---------- 细线分割 ---------- */
+.rhine-divider {
+  height: 1px;
+  border: 0;
+  background: var(--rhine-line-strong);
+  margin: 22px 0;
+}
+.rhine-divider.accent { background: var(--rhine-accent); height: 2px; }
+
+/* ---------- 按钮：直角矩形，白底黑字，hover 反色 ---------- */
+.rhine-btn, button.rhine-btn, .action-btn.rhine-btn {
+  font-family: var(--rhine-title-font);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
+  color: var(--rhine-ink);
+  background: var(--rhine-bg);
+  border: 1px solid var(--rhine-ink);
+  border-radius: 0;                 /* 直角 */
+  padding: 10px 22px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  box-shadow: none !important;
+}
+.rhine-btn:hover { background: var(--rhine-accent); border-color: var(--rhine-accent); color: var(--rhine-accent-ink); }
+.rhine-btn.primary { background: var(--rhine-ink); color: #fff; border-color: var(--rhine-ink); }
+.rhine-btn.primary:hover { background: var(--rhine-accent); border-color: var(--rhine-accent); color: var(--rhine-accent-ink); }
+.rhine-btn.ghost { border-color: var(--rhine-line-strong); color: var(--rhine-mute); }
+
+/* ---------- 链接 ---------- */
+a { color: var(--rhine-ink); text-decoration: none; border-bottom: 1px solid transparent; }
+a:hover { color: var(--rhine-accent); }
+
+/* ---------- 输入 ---------- */
+input, select, textarea {
+  font-family: var(--rhine-body-font);
+  font-weight: 300;
+  color: var(--rhine-ink);
+  background: var(--rhine-bg);
+  border: 1px solid var(--rhine-line-strong);
+  border-radius: 0;
+  padding: 8px 12px;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--rhine-accent);
+}
+
+/* ---------- 表格（数据表格：直线条矩形） ---------- */
+.rhine-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.rhine-table th {
+  font-family: var(--rhine-title-font);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+  color: var(--rhine-ink);
+  text-align: left;
+  border-bottom: 2px solid var(--rhine-accent);
+  padding: 10px 12px;
+}
+.rhine-table td { border-bottom: 1px solid var(--rhine-line); padding: 10px 12px; color: var(--rhine-body); }
+
+/* ---------- 状态/徽标 ---------- */
+.rhine-tag {
+  font-family: var(--rhine-title-font);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid var(--rhine-line-strong);
+  border-radius: 2px;
+  padding: 3px 8px;
+  color: var(--rhine-ink);
+}
+.rhine-tag.accent { border-color: var(--rhine-accent); color: var(--rhine-accent); }
+
+/* ---------- 强调数值 ---------- */
+.rhine-stat {
+  font-family: var(--rhine-title-font);
+  font-weight: 800;
+  color: var(--rhine-accent);
+  font-size: 1.4rem;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- 工具：去阴影/渐变/圆角 兜底 ---------- */
+.no-shadow, .rhine-card, .rhine-panel, .rhine-btn { box-shadow: none !important; text-shadow: none !important; }
+.rhine-flat { border-radius: 0 !important; box-shadow: none !important; }
+
+/* 非对称网格辅助 */
+.rhine-asym { display: grid; grid-template-columns: 7fr 5fr; gap: 28px; }
+@media (max-width: 900px) { .rhine-asym { grid-template-columns: 1fr; } }

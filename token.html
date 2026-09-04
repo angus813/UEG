@@ -4,59 +4,63 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>账号设置 - UEG小网站</title>
+  <link rel="stylesheet" href="public/rhine.css"> <!-- 莱茵生命（Rhine Lab）设计系统 -->
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: transparent; color: #e0e8f0;
-      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      background-color: #ffffff; color: #3c3a37;
+      font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
       min-height: 100vh; display: flex; align-items: center; justify-content: center;
       padding: 16px;
     }
+    /* 隐藏动态宇宙背景画布，保持莱茵纯白暖灰背景 */
+    #dyson-bg, canvas.dyson, .dyson-bg { display: none !important; }
     .card {
       width: 100%; max-width: 520px;
-      background: rgba(19,23,28,0.66); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      border: 1px solid #2a3340; box-shadow: 0 0 30px rgba(0,160,255,0.1);
-      padding: 30px 26px; position: relative; overflow: hidden;
+      background: #ffffff; border: 1px solid #e5e1dc; border-top: 3px solid #ffd700;
+      box-shadow: none; padding: 30px 26px; position: relative; overflow: hidden; border-radius: 2px;
     }
-    .card::before { content:''; position:absolute; top:0; left:0; width:50px; height:50px; border-top:2px solid #00c8ff; border-left:2px solid #00c8ff; }
-    .card::after { content:''; position:absolute; bottom:0; right:0; width:50px; height:50px; border-bottom:2px solid #00c8ff; border-right:2px solid #00c8ff; }
-    h2 { color: #fff; letter-spacing: 3px; font-size: 1.3rem; margin-bottom: 18px; text-shadow: 0 0 12px #00a3ff; }
-    label { display: block; color: #7a8b9a; font-size: 0.85rem; margin: 14px 0 5px; }
+    .card::before { content:''; position:absolute; top:0; left:0; width:40px; height:40px; border-top:2px solid #ffd700; border-left:2px solid #ffd700; }
+    .card::after { content:''; position:absolute; bottom:0; right:0; width:40px; height:40px; border-bottom:2px solid #ffd700; border-right:2px solid #ffd700; }
+    h2 { color: #1a1a1a; letter-spacing: 0.08em; font-size: 1.2rem; margin-bottom: 18px; text-shadow: none; display: flex; align-items: center; gap: 10px; text-transform: uppercase; font-weight: 800; font-family: 'Novecento Wide', 'Oswald', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif; }
+    label { display: block; color: #8a857e; font-size: 0.8rem; margin: 14px 0 5px; text-transform: uppercase; letter-spacing: 0.06em; }
     input, textarea {
-      width: 100%; background: #1a1e24; border: 1px solid #3a5060;
-      color: #fff; padding: 10px; font-family: inherit; font-size: 0.9rem;
+      width: 100%; background: #ffffff; border: 1px solid #c9c4bc;
+      color: #1a1a1a; padding: 10px; font-family: inherit; font-size: 0.9rem; border-radius: 0;
     }
+    input:focus, textarea:focus { outline: none; border-color: #ffd700; box-shadow: none; }
     textarea { height: 70px; resize: vertical; font-family: monospace; font-size: 0.75rem; }
     .row { display: flex; gap: 10px; margin-top: 18px; }
     .btn {
-      flex: 1; padding: 11px; border: none; cursor: pointer; font-weight: 700;
-      font-family: inherit; letter-spacing: 1px; transition: 0.2s; font-size: 0.9rem;
+      flex: 1; padding: 11px; border: 1px solid #1a1a1a; cursor: pointer; font-weight: 700;
+      font-family: inherit; letter-spacing: 0.05em; transition: 0.2s; font-size: 0.85rem;
+      text-transform: uppercase; background: #ffffff; color: #1a1a1a; border-radius: 0;
     }
-    .btn.primary { background: #00c8ff; color: #000; }
-    .btn.primary:hover { background: #00a3ff; box-shadow: 0 0 12px rgba(0,200,255,0.4); }
-    .btn.ghost { background: transparent; border: 1px solid #3a5060; color: #b0c7d6; }
-    .btn.ghost:hover { border-color: #00c8ff; color: #fff; }
-    .btn.danger { background: transparent; border: 1px solid #5a3a2a; color: #ff8844; }
-    .btn.danger:hover { border-color: #ff8844; }
-    .check { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #8aacbe; font-size: 0.8rem; }
+    .btn.primary { background: #1a1a1a; color: #ffffff; border-color: #1a1a1a; }
+    .btn.primary:hover { background: #ffd700; border-color: #ffd700; color: #000000; box-shadow: none; }
+    .btn.ghost { background: #ffffff; border: 1px solid #c9c4bc; color: #3c3a37; }
+    .btn.ghost:hover { border-color: #ffd700; background: #ffd700; color: #000000; }
+    .btn.danger { background: #ffffff; border: 1px solid #c9c4bc; color: #8a857e; }
+    .btn.danger:hover { border-color: #ffd700; background: #ffd700; color: #000000; }
+    .check { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #3c3a37; font-size: 0.8rem; }
     .check input { width: auto; }
     .status {
       margin-top: 16px; padding: 10px 12px; min-height: 38px;
-      background: rgba(0,200,255,0.04); border: 1px solid #1f2a33;
-      color: #ffaa44; font-size: 0.82rem; white-space: pre-wrap; line-height: 1.6;
+      background: #faf8f6; border: 1px solid #e5e1dc; border-left: 3px solid #ffd700;
+      color: #1a1a1a; font-size: 0.82rem; white-space: pre-wrap; line-height: 1.6;
     }
-    .status.ok { color: #44cc88; }
-    .status.err { color: #ff6a6a; }
-    .info { margin-top: 14px; font-size: 0.75rem; color: #5e7a8c; line-height: 1.9; word-break: break-all; }
-    .link-back { display: inline-block; margin-top: 14px; color: #00c8ff; text-decoration: none; font-size: 0.85rem; border: 1px solid #00c8ff; padding: 6px 14px; }
-    .link-back:hover { background: rgba(0,200,255,0.1); }
-    .hint { color: #7a8b9a; font-size: 0.78rem; margin-top: 6px; }
+    .status.ok { color: #1a1a1a; }
+    .status.err { color: #1a1a1a; }
+    .info { margin-top: 14px; font-size: 0.75rem; color: #8a857e; line-height: 1.9; word-break: break-all; }
+    .link-back { display: inline-block; margin-top: 14px; color: #1a1a1a; text-decoration: none; font-size: 0.85rem; border: 1px solid #1a1a1a; padding: 6px 14px; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 0; }
+    .link-back:hover { background: #ffd700; border-color: #ffd700; color: #000000; }
+    .hint { color: #8a857e; font-size: 0.78rem; margin-top: 6px; }
   </style>
 <script src="public/dyson-bg.js"></script>
 </head>
 <body>
   <div class="card">
-    <h2>🔑 账号设置</h2>
+    <h2><span class="rhine-mark"><span class="pm">±</span><span class="inf">∞</span></span>🔑 账号设置</h2>
 
     <label>用户名</label>
     <input type="text" id="userInput" placeholder="2-20 位中文/字母/数字/下划线">

@@ -4,38 +4,54 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>数据导入工具 - UEG小网站</title>
+  <link rel="stylesheet" href="public/rhine.css"> <!-- 莱茵生命（Rhine Lab）设计系统 -->
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: transparent; color: #e0e8f0;
-      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      background-color: #ffffff; color: #3c3a37;
+      font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
       padding: 30px;
     }
+    /* 隐藏动态宇宙背景画布，保持莱茵纯白暖灰背景 */
+    #dyson-bg, canvas.dyson, .dyson-bg { display: none !important; }
     .card {
       max-width: 720px; margin: 0 auto;
-      background: rgba(19,23,28,0.66); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      border: 1px solid #2a3340; padding: 30px; position: relative;
+      background: #ffffff; border: 1px solid #e5e1dc; border-top: 3px solid #ffd700;
+      padding: 30px; position: relative; border-radius: 2px; box-shadow: none;
     }
-    h2 { color: #ff6a00; letter-spacing: 2px; margin-bottom: 8px; }
-    .sub { color: #7a8b9a; font-size: 0.85rem; margin-bottom: 20px; line-height: 1.7; }
+    h2 {
+      display: inline-block; color: #1a1a1a; letter-spacing: 0.06em; margin-bottom: 8px;
+      font-weight: 800; text-transform: uppercase; padding-bottom: 5px; border-bottom: 3px solid #ffd700;
+      font-family: 'Novecento Wide', 'Oswald', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+    }
+    .sub { color: #8a857e; font-size: 0.85rem; margin-bottom: 20px; line-height: 1.7; }
     .lock-box {
-      background: #0d1116; border: 1px solid #2a4a5a; padding: 14px 16px; margin-bottom: 20px;
+      background: #faf8f6; border: 1px solid #e5e1dc; border-left: 3px solid #ffd700; padding: 14px 16px; margin-bottom: 20px;
       display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     }
-    .lock-box .state { color: #88ccff; font-size: 0.85rem; }
-    .lock-box input { background: #1a1e24; border: 1px solid #3a5060; color: #fff; padding: 8px; width: 200px; }
-    .btn { background: #00c8ff; border: none; color: #000; padding: 8px 16px; cursor: pointer; font-weight: 700; font-family: inherit; }
-    .btn.ghost { background: transparent; border: 1px solid #3a5060; color: #b0c7d6; }
-    h3 { color: #00c8ff; margin-top: 20px; margin-bottom: 8px; font-size: 0.95rem; letter-spacing: 1px; }
-    textarea { width: 100%; height: 120px; background: #1a1e24; color: #fff; border: 1px solid #3a5060; padding: 10px; font-family: monospace; font-size: 0.75rem; margin-bottom: 8px; }
-    .status { margin-top: 16px; padding: 10px; border: 1px solid #1f2a33; background: rgba(0,200,255,0.04); color: #ffaa44; white-space: pre-wrap; }
-    .link-back { display: inline-block; margin-top: 16px; color: #00c8ff; text-decoration: none; border: 1px solid #00c8ff; padding: 6px 14px; font-size: 0.85rem; }
+    .lock-box .state { color: #3c3a37; font-size: 0.85rem; }
+    .lock-box input { background: #ffffff; border: 1px solid #c9c4bc; color: #1a1a1a; padding: 8px; width: 200px; border-radius: 0; }
+    .lock-box input:focus { border-color: #ffd700; outline: none; }
+    .btn { background: #ffffff; border: 1px solid #1a1a1a; color: #1a1a1a; padding: 8px 16px; cursor: pointer; font-weight: 700; font-family: inherit; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 0; }
+    .btn:hover { background: #ffd700; border-color: #ffd700; color: #000000; }
+    .btn.ghost { background: #ffffff; border: 1px solid #c9c4bc; color: #3c3a37; }
+    .btn.ghost:hover { border-color: #ffd700; background: #ffd700; color: #000000; }
+    h3 {
+      color: #1a1a1a; margin-top: 20px; margin-bottom: 8px; font-size: 0.95rem; letter-spacing: 0.06em;
+      text-transform: uppercase; font-weight: 800;
+      font-family: 'Novecento Wide', 'Oswald', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif;
+    }
+    textarea { width: 100%; height: 120px; background: #ffffff; color: #1a1a1a; border: 1px solid #c9c4bc; padding: 10px; font-family: monospace; font-size: 0.75rem; margin-bottom: 8px; border-radius: 0; }
+    textarea:focus { border-color: #ffd700; outline: none; }
+    .status { margin-top: 16px; padding: 10px; border: 1px solid #e5e1dc; border-left: 3px solid #ffd700; background: #faf8f6; color: #1a1a1a; white-space: pre-wrap; }
+    .link-back { display: inline-block; margin-top: 16px; color: #1a1a1a; text-decoration: none; border: 1px solid #1a1a1a; padding: 6px 14px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 0; }
+    .link-back:hover { background: #ffd700; border-color: #ffd700; color: #000000; }
   </style>
 <script src="public/dyson-bg.js"></script>
 </head>
 <body>
   <div class="card">
-    <h2>📥 数据导入工具</h2>
+    <h2><span class="rhine-mark"><span class="pm">±</span><span class="inf">∞</span></span>📥 数据导入工具</h2>
     <div class="sub">将备份数据导入主数据源（默认 Supabase 云端）。GitHub 数据仓库 ueg-data 的同步由后端脚本独立执行 —— GitHub Token 由后端保管，前端无需也不可持有</div>
 
     <div class="lock-box">

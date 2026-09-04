@@ -4,12 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>公会 - UEG小网站</title>
+  <link rel="stylesheet" href="rhine.css">
   <style>
+    /* 莱茵生命风格 */
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    #dyson-bg { display: none !important; }
     body {
-      background: transparent;
-      color: #e0e8f0;
-      font-family: 'Rajdhani', 'Microsoft YaHei', sans-serif;
+      color: var(--rhine-body, #3c3a37);
       min-height: 100vh;
       display: flex;
       justify-content: center;
@@ -20,41 +21,36 @@
     .guild-container {
       width: 100%;
       max-width: 1100px;
-      background: rgba(19,23,28,0.66); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-      border: 1px solid #2a3340;
-      box-shadow: 0 0 30px rgba(0,160,255,0.1);
+      background: var(--rhine-panel, #faf8f6);
+      border: 1px solid var(--rhine-line, #e5e1dc);
+      border-left: 3px solid var(--rhine-accent, #ffd700);
+      border-radius: 2px;
       position: relative;
       overflow: hidden;
       min-height: 600px;
       display: flex;
       flex-direction: row;
+      box-shadow: none !important;
     }
-    .guild-container::before {
-      content: ''; position: absolute; top: 0; left: 0;
-      width: 60px; height: 60px;
-      border-top: 2px solid #00c8ff; border-left: 2px solid #00c8ff;
-    }
-    .guild-container::after {
-      content: ''; position: absolute; bottom: 0; right: 0;
-      width: 60px; height: 60px;
-      border-bottom: 2px solid #00c8ff; border-right: 2px solid #00c8ff;
-    }
+    .guild-container::before, .guild-container::after { content: none; }
 
     /* 左侧面板 */
     .left-panel {
       width: 50%;
       padding: 25px 20px;
-      border-right: 1px solid #2a3340;
+      border-right: 1px solid var(--rhine-line, #e5e1dc);
       display: flex;
       flex-direction: column;
       gap: 20px;
     }
     .guild-title {
+      font-family: var(--rhine-title-font, 'Oswald', 'Arial Narrow', Arial, sans-serif);
       font-size: 2rem;
-      font-weight: 700;
-      letter-spacing: 4px;
-      color: #fff;
-      text-shadow: 0 0 15px #00a3ff;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--rhine-ink, #1a1a1a);
+      text-shadow: none;
       margin-bottom: 10px;
     }
     .feature-cards {
@@ -63,51 +59,63 @@
       gap: 15px;
     }
     .feature-card {
-      background: rgba(20,26,33,0.55); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-      border: 1px solid #2e3b47;
+      background: var(--rhine-bg, #ffffff);
+      border: 1px solid var(--rhine-line, #e5e1dc);
+      border-left: 3px solid var(--rhine-accent, #ffd700);
+      border-radius: 2px;
       padding: 20px;
       cursor: pointer;
-      transition: all 0.3s;
+      transition: background .15s ease, border-color .15s ease;
       text-decoration: none;
       color: inherit;
       display: flex;
       align-items: center;
       gap: 15px;
+      box-shadow: none !important;
     }
     .feature-card:hover {
-      border-color: #00c8ff;
-      box-shadow: 0 0 20px rgba(0,200,255,0.3);
-      background: rgba(30,40,50,0.9);
+      border-color: var(--rhine-accent, #ffd700);
+      background: var(--rhine-panel2, #f3f0ec);
     }
     .feature-icon {
       font-size: 2.5rem;
-      color: #00c8ff;
+      color: var(--rhine-accent, #ffd700);
       width: 50px;
       text-align: center;
     }
     .feature-text h3 {
+      font-family: var(--rhine-title-font, 'Oswald', 'Arial Narrow', Arial, sans-serif);
       font-size: 1.4rem;
-      letter-spacing: 2px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--rhine-ink, #1a1a1a);
       margin-bottom: 5px;
     }
     .feature-text p {
       font-size: 0.8rem;
-      color: #7a8b9a;
+      color: var(--rhine-mute, #8a857e);
     }
     .back-link {
       margin-top: auto;
       text-align: center;
-      color: #00c8ff;
+      color: var(--rhine-ink, #1a1a1a);
       text-decoration: none;
-      font-size: 1rem;
-      border: 1px solid #00c8ff;
+      font-family: var(--rhine-title-font, 'Oswald', 'Arial Narrow', Arial, sans-serif);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.8rem;
+      border: 1px solid var(--rhine-ink, #1a1a1a);
+      border-radius: 0;
       padding: 8px 15px;
-      transition: 0.3s;
-      letter-spacing: 2px;
+      transition: background .15s ease, color .15s ease;
+      box-shadow: none !important;
     }
     .back-link:hover {
-      background: rgba(0,200,255,0.1);
-      box-shadow: 0 0 15px rgba(0,200,255,0.4);
+      background: var(--rhine-accent, #ffd700);
+      border-color: var(--rhine-accent, #ffd700);
+      color: var(--rhine-accent-ink, #000);
     }
 
     /* 右侧成员列表 */
@@ -116,18 +124,22 @@
       padding: 25px 20px;
       display: flex;
       flex-direction: column;
-      background: rgba(10,14,19,0.6);
+      background: var(--rhine-bg, #ffffff);
     }
     .members-title {
-      font-size: 1.5rem;
-      letter-spacing: 3px;
-      color: #ff6a00;
-      border-bottom: 1px solid #2a3340;
+      font-family: var(--rhine-title-font, 'Oswald', 'Arial Narrow', Arial, sans-serif);
+      font-size: 1.4rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--rhine-ink, #1a1a1a);
+      border-bottom: 2px solid var(--rhine-accent, #ffd700);
       padding-bottom: 12px;
       margin-bottom: 15px;
       display: flex;
       align-items: center;
       gap: 10px;
+      text-shadow: none;
     }
     .member-list {
       flex: 1;
@@ -139,11 +151,11 @@
       align-items: center;
       justify-content: space-between;
       padding: 12px 10px;
-      border-bottom: 1px solid #1f2a33;
-      transition: background 0.2s;
+      border-bottom: 1px solid var(--rhine-line, #e5e1dc);
+      transition: background .15s ease;
     }
     .member-item:hover {
-      background: rgba(255,106,0,0.05);
+      background: var(--rhine-panel2, #f3f0ec);
     }
     .member-info {
       display: flex;
@@ -153,9 +165,9 @@
     .member-avatar {
       width: 40px;
       height: 40px;
-      background: rgba(0,200,255,0.1);
-      border: 1px solid #00c8ff;
-      border-radius: 50%;
+      background: var(--rhine-panel, #faf8f6);
+      border: 1px solid var(--rhine-accent, #ffd700);
+      border-radius: 2px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -164,35 +176,41 @@
     .member-name {
       font-weight: 600;
       font-size: 1.1rem;
+      color: var(--rhine-ink, #1a1a1a);
     }
     .member-role {
       font-size: 0.8rem;
-      color: #7a8b9a;
+      color: var(--rhine-mute, #8a857e);
       margin-left: 8px;
     }
     .leader-badge {
-      color: #ffaa00;
+      color: var(--rhine-accent, #ffd700);
       font-weight: 700;
     }
     .delete-member-btn {
-      background: transparent;
-      border: 1px solid #ff4444;
-      color: #ff6666;
+      background: var(--rhine-bg, #ffffff);
+      border: 1px solid var(--rhine-ink, #1a1a1a);
+      border-radius: 0;
+      color: var(--rhine-ink, #1a1a1a);
+      font-family: var(--rhine-title-font, 'Oswald', 'Arial Narrow', Arial, sans-serif);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 0.72rem;
       padding: 4px 12px;
-      font-family: inherit;
-      font-size: 0.8rem;
       cursor: pointer;
-      transition: 0.2s;
-      letter-spacing: 1px;
+      transition: background .15s ease, color .15s ease;
       display: none; /* 默认隐藏，管理员可见 */
+      box-shadow: none !important;
     }
     .delete-member-btn:hover {
-      background: rgba(255,50,50,0.2);
-      box-shadow: 0 0 10px rgba(255,0,0,0.4);
+      background: var(--rhine-accent, #ffd700);
+      border-color: var(--rhine-accent, #ffd700);
+      color: var(--rhine-accent-ink, #000);
     }
     .no-members {
       text-align: center;
-      color: #4a5a6a;
+      color: var(--rhine-mute, #8a857e);
       margin-top: 50px;
     }
 
@@ -202,16 +220,9 @@
         flex-direction: column;
         min-height: auto;
       }
-      .left-panel, .right-panel {
-        width: 100%;
-        border-right: none;
-      }
-      .left-panel {
-        border-bottom: 1px solid #2a3340;
-      }
-      .right-panel {
-        max-height: 50vh;
-      }
+      .left-panel, .right-panel { width: 100%; border-right: none; }
+      .left-panel { border-bottom: 1px solid var(--rhine-line, #e5e1dc); }
+      .right-panel { max-height: 50vh; }
     }
   </style>
 <script src="dyson-bg.js"></script>
@@ -220,7 +231,7 @@
   <div class="guild-container">
     <!-- 左侧：公会功能 -->
     <div class="left-panel">
-      <div class="guild-title">⚔️ 公会</div>
+      <div class="guild-title"><span class="rhine-mark"><span class="pm">±</span><span class="inf">∞</span></span> 公会</div>
       <div class="feature-cards">
         <a href="strategy_map.html" class="feature-card" style="text-decoration:none; color:inherit;">
           <div class="feature-icon">🗺️</div>
@@ -250,7 +261,7 @@
     <!-- 右侧：成员列表 -->
     <div class="right-panel">
       <div class="members-title">
-        <span>👥</span> 公会成员
+        <span class="rhine-mark"><span class="pm">±</span><span class="inf">∞</span></span> 公会成员
       </div>
       <div class="member-list" id="memberList">
         <div class="no-members">加载中...</div>
