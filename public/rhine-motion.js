@@ -22,7 +22,6 @@
       boot.className = 'rl-boot';
       boot.setAttribute('aria-hidden', 'true');
       boot.innerHTML =
-        '<div class="rl-boot-mark"><span class="pm">±</span><span>∞</span></div>' +
         '<div class="rl-boot-name">RHINE LAB ARCHIVE</div>' +
         '<div class="rl-boot-bar"><i></i></div>' +
         '<div class="rl-boot-status">SYSTEM INITIALIZING<i></i></div>';
