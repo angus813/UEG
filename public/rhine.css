@@ -432,19 +432,6 @@ label { font-size: 11px; letter-spacing: 0.08em; color: var(--rl-muted); }
 }
 .rhine-underline { display: inline-block; padding-bottom: 0.22em; border-bottom: 2px solid var(--rl-accent); }
 
-/* 品牌标记 ± ∞ */
-.rhine-mark {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
-  font-family: var(--rl-font-title);
-  font-weight: 700;
-  color: var(--rl-ink);
-  letter-spacing: 0.04em;
-  user-select: none;
-}
-.rhine-mark .pm { color: var(--rl-accent); }
-.rhine-mark .inf { display: inline-block; transform: scaleX(1.12); }
 
 /* ============================ 顶部用户栏 ============================ */
 .user-bar {
