@@ -7,7 +7,6 @@
   <link rel="stylesheet" href="../rhine-fonts.css" media="print" onload="this.media='all'"> <!-- MiSans（异步） -->
   <noscript><link rel="stylesheet" href="../rhine-fonts.css"></noscript>
   <link rel="stylesheet" href="../rhine.css">
-  <link rel="stylesheet" href="../rhine-motion.css"> <!-- 动效层 -->
   <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -32,7 +31,6 @@ body {
 }
 .app::before { content:''; position:absolute; top:0; left:0; width:44px; height:44px; border-top:2px solid #9b7247; border-left:2px solid #9b7247; }
 .app::after { content:''; position:absolute; bottom:0; right:0; width:44px; height:44px; border-bottom:2px solid #9b7247; border-right:2px solid #9b7247; }
-
 
 .top-bar {
   display: flex; align-items: center; gap: 16px;
@@ -66,7 +64,6 @@ body {
 .btn.back { background: transparent; border: 1px solid #a6a49c; color: #45443c; text-decoration: none; }
 .btn.back:hover { border-color: #9b7247; color: #080a08; background: #e7e3d9; }
 
-
 .main { display: flex; min-height: 600px; }
 .ship-list {
   flex: 0 0 300px; border-right: 1px solid #bdb8ad;
@@ -93,7 +90,6 @@ body {
 .ship-item .nm { font-size: 0.88rem; color: #080a08; }
 .ship-item .model { font-size: 0.72rem; color: #77756d; }
 .ship-item .co { margin-left: auto; font-size: 0.68rem; color: #77756d; }
-
 
 .panel { flex: 1; padding: 18px 22px; min-width: 0; }
 .ship-head {
@@ -128,7 +124,6 @@ body {
 .sys-header .wn { color: #77756d; font-size: 0.7rem; margin-left: auto; }
 .sys-body { padding: 8px 14px 14px; }
 
-
 .tech-item {
   border: 1px solid #bdb8ad; background: #eae5e1;
   padding: 10px 12px; margin-top: 8px; position: relative; border-radius: 2px;
@@ -162,7 +157,6 @@ body {
 .tech-detail { color: #77756d; font-size: 0.75rem; margin-top: 4px; line-height: 1.6; }
 .tech-detail summary { cursor: pointer; color: #080a08; outline: none; }
 
-
 .fx-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .fx-tag {
   font-size: 0.72rem; padding: 2px 8px; border: 1px solid #a6a49c;
@@ -172,7 +166,6 @@ body {
 .fx-tag .w { color: #77756d; margin-left: 4px; }
 .empty { color: #77756d; text-align: center; padding: 60px 20px; font-size: 0.9rem; }
 
-
 .weapon-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .wp-tag {
   font-size: 0.7rem; padding: 2px 8px; border: 1px solid #a6a49c;
@@ -180,7 +173,6 @@ body {
 }
 
 .panel-foot { margin-top: 18px; text-align: center; color: #77756d; font-size: 0.75rem; padding-bottom: 10px; }
-
 
 .stat-panel {
   margin: 10px 0 14px; border: 1px solid #bdb8ad; border-left: 3px solid #9b7247; border-radius: 2px;
@@ -284,7 +276,6 @@ body {
 
 </style>
 <script src="../dyson-bg.js"></script>
-  <script src="../rhine-motion.js"></script>
 </head>
 <body>
   <div class="app">
