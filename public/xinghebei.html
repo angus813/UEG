@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>星河杯 - 指标选择</title>
+  <link rel="stylesheet" href="rhine-fonts.css"> <!-- MiSans webfont -->
   <link rel="stylesheet" href="rhine.css">
   <style>
     /* ============ 莱茵生命（Rhine Lab）—— 纯白暖灰 / 柠檬黄 / 直角矩形 ============ */
@@ -105,7 +106,7 @@
     .tab-progress-fill { height: 100%; background: var(--rhine-accent); width: 0%; transition: width 0.3s; }
     .tab.active, .tab:hover {
       border-color: var(--rhine-accent); color: var(--rhine-accent);
-      background: rgba(255,215,0,0.10);
+      background: rgba(155,114,71,0.10);
     }
 
     .grid-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; padding-bottom: 6px; }
@@ -127,7 +128,7 @@
     .contract-card:hover { border-color: var(--rhine-line-strong); background: var(--rhine-panel); }
     .contract-card.selected {
       border-color: var(--rhine-accent);
-      background: rgba(255,215,0,0.10);
+      background: rgba(155,114,71,0.10);
     }
 
     .card-level-badge {
@@ -161,7 +162,7 @@
       padding: 8px 4px; border-bottom: 1px solid var(--rhine-line);
     }
     .selected-item.active {
-      background: rgba(255,215,0,0.12);
+      background: rgba(155,114,71,0.12);
       border-left: 3px solid var(--rhine-accent);
     }
     .selected-info { flex: 1; }
@@ -194,7 +195,7 @@
     /* 弹窗 */
     .modal {
       display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(26,26,26,0.45); justify-content: center; align-items: center; z-index: 100;
+      background: rgba(8,10,8,0.45); justify-content: center; align-items: center; z-index: 100;
     }
     .modal-content {
       background: var(--rhine-bg); border: 1px solid var(--rhine-line);
@@ -225,7 +226,7 @@
     .copy-btn, .modal-btn.primary {
       background: var(--rhine-accent); border-color: var(--rhine-accent); color: var(--rhine-accent-ink);
     }
-    .copy-btn:hover, .modal-btn.primary:hover { background: #e6c200; border-color: #e6c200; color: var(--rhine-accent-ink); }
+    .copy-btn:hover, .modal-btn.primary:hover { background: #825f39; border-color: #825f39; color: var(--rhine-accent-ink); }
 
     /* 排行榜（JS 生成的内联样式用 !important 覆盖） */
     #leaderboardContent table { width: 100% !important; border-collapse: collapse !important; color: var(--rhine-body) !important; }
@@ -688,12 +689,12 @@
 
       const content = document.getElementById('leaderboardContent');
       if (!users || users.length === 0) {
-        content.innerHTML = '<p style="color:#7a8b9a; text-align:center;">暂无数据</p>';
+        content.innerHTML = '<p style="color:#a6b0b1; text-align:center;">暂无数据</p>';
       } else {
-        let html = '<table style="width:100%; color:#d0dae4; border-collapse:collapse;">';
-        html += '<tr><th style="padding:6px 4px;border-bottom:1px solid #2a3340;">#</th><th style="padding:6px 4px;border-bottom:1px solid #2a3340;">用户名</th><th style="padding:6px 4px;border-bottom:1px solid #2a3340;text-align:right;">记录</th></tr>';
+        let html = '<table style="width:100%; color:#e0e3dc; border-collapse:collapse;">';
+        html += '<tr><th style="padding:6px 4px;border-bottom:1px solid #11181b;">#</th><th style="padding:6px 4px;border-bottom:1px solid #11181b;">用户名</th><th style="padding:6px 4px;border-bottom:1px solid #11181b;text-align:right;">记录</th></tr>';
         users.forEach((u, i) => {
-          html += `<tr><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;">${i+1}</td><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;">${esc(u.username)}</td><td style="padding:6px 4px;border-bottom:1px solid #1f2a33;text-align:right;">${esc(u.highest_record) || 0}</td></tr>`;
+          html += `<tr><td style="padding:6px 4px;border-bottom:1px solid #1b2429;">${i+1}</td><td style="padding:6px 4px;border-bottom:1px solid #1b2429;">${esc(u.username)}</td><td style="padding:6px 4px;border-bottom:1px solid #1b2429;text-align:right;">${esc(u.highest_record) || 0}</td></tr>`;
         });
         html += '</table>';
         content.innerHTML = html;
