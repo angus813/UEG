@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>用户管理 - UEG小网站</title>
-  <link rel="stylesheet" href="rhine-fonts.css"> <!-- MiSans webfont -->
+  <link rel="stylesheet" href="rhine-fonts.css" media="print" onload="this.media='all'"> <!-- MiSans（异步加载，不阻塞首屏） -->
+  <noscript><link rel="stylesheet" href="rhine-fonts.css"></noscript> <!-- MiSans webfont -->
   <link rel="stylesheet" href="admin.css"> <!-- 基础布局（先于设计系统） -->
   <link rel="stylesheet" href="rhine.css"> <!-- Rhine Lab Archive 设计系统 -->
   <link rel="stylesheet" href="rhine-motion.css"> <!-- 动效层 -->
