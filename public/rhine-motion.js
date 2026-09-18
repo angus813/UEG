@@ -301,28 +301,36 @@
         var ind = document.createElement('div');
         ind.className = 'rl-tab-indicator';
         tabs.appendChild(ind);
+        var lastKey = '';
         function move(animate) {
           var active = tabs.querySelector('.tab.active') || tabs.querySelector('.tab');
           if (!active) { ind.style.opacity = '0'; return; }
           ind.style.opacity = '1';
           var r = active.getBoundingClientRect(), tr = tabs.getBoundingClientRect();
+          var key = Math.round(r.width) + ':' + Math.round(r.left - tr.left);
+          if (key === lastKey) return;      /* 无变化就不写样式，避免自触发 */
+          lastKey = key;
           ind.style.transition = animate === false ? 'none' : ('transform ' + M.TAB_UNDERLINE_MS + 'ms ' + M.ENTER_EASE + ', width ' + M.TAB_UNDERLINE_MS + 'ms ' + M.ENTER_EASE);
           ind.style.width = r.width + 'px';
           ind.style.transform = 'translateX(' + (r.left - tr.left) + 'px)';
-          var txt = active.querySelector('.tab-text') || active;
-          contentReveal(txt);
         }
         move(false);
         setTimeout(function () { move(true); }, 100);
-        window.addEventListener('resize', function () { move(false); });
+        window.addEventListener('resize', function () { lastKey = ''; move(false); });
+        /* 仅响应 class 变化，且回调不写 class（只写自己的 style），不会自我循环 */
         try { new MutationObserver(function () { move(true); }).observe(tabs, { subtree: true, attributes: true, attributeFilter: ['class'] }); } catch (e) {}
       });
     } catch (e) {}
   }
 
-  /* ============================ 6. 面板 / 模态：按新时序包装 ============================ */
+  /* ============================ 6. 面板 / 模态：纯 CSS 实现（无观察器） ============================ */
+  /* 说明：早期版本用 MutationObserver 监听每个 .modal 的 class/style 再回写 class，
+     在「高频重写 DOM」的页面（如游戏）上会与页面的 modals 切换互相触发，
+     造成主线程阻塞。改为纯 CSS，零副作用。 */
   function bindModals() {
+    if (document.querySelector('style[data-rl-modal-css]')) return;
     var style = document.createElement('style');
+    style.setAttribute('data-rl-modal-css', '1');
     style.textContent = [
       '.modal.open .modal-box, .modal.active .modal-box, .modal.open .modal-content, .modal.active .modal-content {',
       '  animation: rlPanelEnter 300ms cubic-bezier(0.22,1,0.36,1) both; }',
@@ -332,19 +340,6 @@
       '.rl-tab-content { animation: rlFadeIn 150ms cubic-bezier(0.22,1,0.36,1) both; }'
     ].join('\n');
     document.head.appendChild(style);
-    try {
-      document.querySelectorAll('.modal').forEach(function (m) {
-        if (m.getAttribute('data-rl-motion-bound') === '1') return;
-        m.setAttribute('data-rl-motion-bound', '1');
-        try {
-          new MutationObserver(function () {
-            var open = m.classList.contains('open') || m.classList.contains('active') ||
-              (m.style.display && m.style.display !== 'none');
-            if (open) m.classList.add('open'); else m.classList.remove('open');
-          }).observe(m, { attributes: true, attributeFilter: ['class', 'style'] });
-        } catch (e) {}
-      });
-    } catch (e) {}
   }
 
   /* ============================ 7. 状态灯 ============================ */
