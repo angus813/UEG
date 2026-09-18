@@ -37,6 +37,9 @@
 }
 
 /* ============================ boot 启动序列 ============================ */
+/* ============================ boot 启动序列（v2 · 参考 rhinelab-blog-theme） ============================ */
+/* 时序：名称坞入 720ms → 次级行 360ms 起每行 80ms 错开 → 停留 420ms → 左右移出 320ms
+   驱动：WAAPI 纯时间函数采样（帧率无关、可打断）；此处仅定义静态外观与兜底 */
 .rl-boot {
   position: fixed;
   inset: 0;
@@ -44,18 +47,21 @@
   background: var(--rl-paper, #eae5e1);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ccircle cx='1' cy='1' r='0.75' fill='%23d8d2c6'/%3E%3C/svg%3E");
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 30px;
-  transition: opacity 0.6s ease, visibility 0.6s;
-  /* 兜底：即使脚本失效，3.4s 后也自动隐去，绝不遮挡页面 */
-  animation: rlBootAutoHide 0.6s ease 3.4s forwards;
+  /* 兜底：即使脚本失效，3.6s 后也自动隐去，绝不遮挡页面 */
+  animation: rlBootAutoHide 0.5s ease 3.6s forwards;
 }
-@keyframes rlBootAutoHide {
-  to { opacity: 0; visibility: hidden; pointer-events: none; }
-}
+@keyframes rlBootAutoHide { to { opacity: 0; visibility: hidden; pointer-events: none; } }
 .rl-boot.done { opacity: 0; visibility: hidden; pointer-events: none; animation: none; }
+
+.rl-boot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  will-change: transform, opacity;
+}
 .rl-boot-name {
   font-family: var(--rl-font-title, system-ui);
   font-size: 15px;
@@ -63,8 +69,7 @@
   letter-spacing: 0.3em;
   text-transform: uppercase;
   color: var(--rl-ink, #080a08);
-  opacity: 0;
-  animation: rlFadeIn 0.7s 0.15s ease forwards;
+  opacity: 0;   /* 由 WAAPI 接管 */
 }
 .rl-boot-bar {
   position: relative;
@@ -72,6 +77,7 @@
   height: 1px;
   background: var(--rl-line-soft, #c2bdb1);
   overflow: hidden;
+  opacity: 0;
 }
 .rl-boot-bar i {
   position: absolute;
@@ -89,7 +95,6 @@
   letter-spacing: 0.16em;
   color: var(--rl-muted, #77756d);
   opacity: 0;
-  animation: rlFadeIn 0.7s 0.3s ease forwards;
 }
 .rl-boot-status i {
   width: 3px;
