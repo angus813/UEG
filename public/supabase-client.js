@@ -1,8 +1,11 @@
 // ============================================================
-//  supabase-client.js —— 旧 Supabase 方案兼容层（已废弃，仅保留调用兼容）
-//  项目已迁移至「纯前端 + 自建 Python 后端（读写私有 GitHub 仓库）」架构，
-//  本文件把页面遗留的 supabase.from(...) 链式调用
-//  透明映射到 github-db.js（DB → Python 后端 → GitHub 私有仓库）。
+//  supabase-client.js —— 数据访问兼容层（不决定后端，仅统一 API 形状）
+//  作用：把页面里遗留的 supabase.from(...) 链式调用
+//        透明映射到 window.DB（由 config.js + github-db.js 提供）。
+//  当前数据源由 config.js 的 mode 决定：
+//        'supabase'（默认，当前生效）→ 直连 Supabase 项目 ruwjkbscaotnyhmduviz
+//        'local'                     → 本地 Python 后端 127.0.0.1:8000（备选）
+//  数据读写实现在 github-db.js（内含 SB_IMPL 与 LOCAL_IMPL 两套后端）。
 //  自动加载站点根目录下的 config.js 与 github-db.js。
 //  支持接口：
 //    from('users'|'guild_maps').select(cols).eq(k,v).order(k,{ascending}).limit(n).maybeSingle()/single()
