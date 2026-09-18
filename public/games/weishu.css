@@ -44,14 +44,6 @@ body {
 }
 
 /* ---------- 顶部主标题区：标志 + 粗体全大写 ---------- */
-.welcome .rhine-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4em;
-  font-size: 2.4rem;
-  margin-bottom: 14px;
-}
 .welcome h2 {
   font-family: var(--rhine-title-font, 'Oswald', 'Helvetica Neue', Arial, sans-serif);
   font-weight: 800;
@@ -68,20 +60,6 @@ body {
   font-size: 0.72rem;
   color: var(--rhine-mute);
   margin-bottom: 26px;
-}
-/* ±∞ 品牌标志（注入到 JS 渲染的欢迎区，不改 JS）：
-   JS 会把 weishu.html 里的静态欢迎区覆盖掉，因此这里用 ::before 注入标志；
-   :has() 兜底——若静态 .rhine-mark 仍存在（JS 未执行），则不重复注入。 */
-.welcome:not(:has(> .rhine-mark))::before {
-  content: "±∞";
-  display: block;
-  font-family: var(--rhine-title-font, 'Oswald', 'Helvetica Neue', Arial, sans-serif);
-  font-weight: 800;
-  font-size: 2.1rem;
-  letter-spacing: 0.06em;
-  line-height: 1;
-  color: var(--rhine-accent);
-  margin-bottom: 12px;
 }
 
 /* ---------- 左侧面板（欢迎/作战主面板） ---------- */
