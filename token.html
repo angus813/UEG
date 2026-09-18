@@ -4,58 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>账号设置 - UEG小网站</title>
+  <link rel="stylesheet" href="public/rhine-fonts.css"> <!-- MiSans webfont -->
   <link rel="stylesheet" href="public/rhine.css"> <!-- 莱茵生命（Rhine Lab）设计系统 -->
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background-color: #ffffff; color: #3c3a37;
-      font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      padding: 16px;
-    }
-    /* 隐藏动态宇宙背景画布，保持莱茵纯白暖灰背景 */
-    #dyson-bg, canvas.dyson, .dyson-bg { display: none !important; }
-    .card {
-      width: 100%; max-width: 520px;
-      background: #ffffff; border: 1px solid #e5e1dc; border-top: 3px solid #ffd700;
-      box-shadow: none; padding: 30px 26px; position: relative; overflow: hidden; border-radius: 2px;
-    }
-    .card::before { content:''; position:absolute; top:0; left:0; width:40px; height:40px; border-top:2px solid #ffd700; border-left:2px solid #ffd700; }
-    .card::after { content:''; position:absolute; bottom:0; right:0; width:40px; height:40px; border-bottom:2px solid #ffd700; border-right:2px solid #ffd700; }
-    h2 { color: #1a1a1a; letter-spacing: 0.08em; font-size: 1.2rem; margin-bottom: 18px; text-shadow: none; display: flex; align-items: center; gap: 10px; text-transform: uppercase; font-weight: 800; font-family: 'Novecento Wide', 'Oswald', 'Arial Narrow', 'Helvetica Neue', Arial, sans-serif; }
-    label { display: block; color: #8a857e; font-size: 0.8rem; margin: 14px 0 5px; text-transform: uppercase; letter-spacing: 0.06em; }
-    input, textarea {
-      width: 100%; background: #ffffff; border: 1px solid #c9c4bc;
-      color: #1a1a1a; padding: 10px; font-family: inherit; font-size: 0.9rem; border-radius: 0;
-    }
-    input:focus, textarea:focus { outline: none; border-color: #ffd700; box-shadow: none; }
-    textarea { height: 70px; resize: vertical; font-family: monospace; font-size: 0.75rem; }
-    .row { display: flex; gap: 10px; margin-top: 18px; }
-    .btn {
-      flex: 1; padding: 11px; border: 1px solid #1a1a1a; cursor: pointer; font-weight: 700;
-      font-family: inherit; letter-spacing: 0.05em; transition: 0.2s; font-size: 0.85rem;
-      text-transform: uppercase; background: #ffffff; color: #1a1a1a; border-radius: 0;
-    }
-    .btn.primary { background: #1a1a1a; color: #ffffff; border-color: #1a1a1a; }
-    .btn.primary:hover { background: #ffd700; border-color: #ffd700; color: #000000; box-shadow: none; }
-    .btn.ghost { background: #ffffff; border: 1px solid #c9c4bc; color: #3c3a37; }
-    .btn.ghost:hover { border-color: #ffd700; background: #ffd700; color: #000000; }
-    .btn.danger { background: #ffffff; border: 1px solid #c9c4bc; color: #8a857e; }
-    .btn.danger:hover { border-color: #ffd700; background: #ffd700; color: #000000; }
-    .check { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #3c3a37; font-size: 0.8rem; }
-    .check input { width: auto; }
-    .status {
-      margin-top: 16px; padding: 10px 12px; min-height: 38px;
-      background: #faf8f6; border: 1px solid #e5e1dc; border-left: 3px solid #ffd700;
-      color: #1a1a1a; font-size: 0.82rem; white-space: pre-wrap; line-height: 1.6;
-    }
-    .status.ok { color: #1a1a1a; }
-    .status.err { color: #1a1a1a; }
-    .info { margin-top: 14px; font-size: 0.75rem; color: #8a857e; line-height: 1.9; word-break: break-all; }
-    .link-back { display: inline-block; margin-top: 14px; color: #1a1a1a; text-decoration: none; font-size: 0.85rem; border: 1px solid #1a1a1a; padding: 6px 14px; text-transform: uppercase; letter-spacing: 0.05em; border-radius: 0; }
-    .link-back:hover { background: #ffd700; border-color: #ffd700; color: #000000; }
-    .hint { color: #8a857e; font-size: 0.78rem; margin-top: 6px; }
-  </style>
+  <!-- 视觉统一由 rhine.css 设计系统提供 -->
 <script src="public/dyson-bg.js"></script>
 </head>
 <body>
