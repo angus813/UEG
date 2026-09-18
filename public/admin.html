@@ -4,49 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>用户管理 - UEG小网站</title>
-  <link rel="stylesheet" href="rhine.css">
-  <link rel="stylesheet" href="admin.css">
-  <style>
-    /* 莱茵生命风格：页面级布局微调（视觉，不涉及 JS/DOM 结构） */
-    body {
-      min-height: 100vh;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      margin: 0;
-    }
-    .admin-container {
-      width: 900px;
-      max-width: 95%;
-      padding: 30px 20px;
-      margin: 20px auto;
-    }
-    .admin-title {
-      font-size: 2rem;
-    }
-    .error-message {
-      text-align: center;
-      padding: 50px;
-      font-size: 1.2rem;
-    }
-    .loading-message {
-      text-align: center;
-      padding: 30px;
-      font-size: 1.1rem;
-    }
-    @media (max-width: 600px) {
-      .admin-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
-      }
-      .admin-title { font-size: 1.5rem; }
-      .admin-table { font-size: 0.8rem; }
-      .admin-table th, .admin-table td { padding: 8px 4px; }
-      .btn-small { padding: 3px 6px; font-size: 0.7rem; }
-      .record-input { width: 50px; font-size: 0.75rem; }
-    }
-  </style>
+  <link rel="stylesheet" href="rhine-fonts.css"> <!-- MiSans webfont -->
+  <link rel="stylesheet" href="admin.css"> <!-- 基础布局（先于设计系统） -->
+  <link rel="stylesheet" href="rhine.css"> <!-- Rhine Lab Archive 设计系统 -->
+  <!-- 视觉统一由 rhine.css 设计系统提供 -->
 <script src="dyson-bg.js"></script>
 </head>
 <body>
@@ -154,7 +115,7 @@
       }
 
       if (!users || users.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#4a5a6a;">暂无用户</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#536166;">暂无用户</td></tr>';
         return;
       }
 
