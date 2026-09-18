@@ -106,17 +106,30 @@ function sbReady() { return !!(window.DB && window.UEG_CONFIG && window.UEG_CONF
 function sbUser() { try { const u = JSON.parse(localStorage.getItem('ueg_current_user') || 'null'); return u && u.username ? u.username : ''; } catch (e) { return ''; } }
 function sbGet(path) { if (!sbReady()) return Promise.resolve({ code: 500 }); return window.DB.rest(path, { method: 'GET' }); }
 function sbWrite(path, method, body) { if (!sbReady()) return Promise.resolve({ code: 500 }); const o = { method: method, body: body }; if (method === 'PATCH' || method === 'POST') o.prefer = 'return=representation'; return window.DB.rest(path, o); }
+/* 云存档写入：POST + on_conflict=username 的 upsert。
+   原实现用 PATCH 只能更新「已存在」的行，新用户永远写不进去（静默失败）；
+   改为 upsert 后首次写入也会自动建行。依赖 weishu_data 表（见 supabase_setup.sql）。 */
+function sbUpsertWeishu(patch) {
+  const u = sbUser();
+  if (!u || !sbReady()) return Promise.resolve({ code: 500 });
+  const row = Object.assign({ username: u, updated_at: new Date().toISOString() }, patch);
+  return window.DB.rest('/rest/v1/weishu_data?on_conflict=username', {
+    method: 'POST',
+    prefer: 'resolution=merge-duplicates,return=representation',
+    body: row
+  });
+}
 function sbSyncFleet() {
   const u = sbUser(); if (!u) return;
   const byId = {};
   state.hand.forEach(function (c) { if (!c.ship) return; if (!byId[c.ship.id]) byId[c.ship.id] = { id: c.ship.id, count: 0, mod: c.mod || '' }; byId[c.ship.id].count++; });
   const list = [];
   for (const k in byId) list.push(byId[k]);
-  sbWrite('/rest/v1/weishu_data?username=eq.' + encodeURIComponent(u), 'PATCH', { fleet_json: JSON.stringify(list), updated_at: new Date().toISOString() }).catch(function () {});
+  sbUpsertWeishu({ fleet_json: JSON.stringify(list) }).catch(function () {});
 }
 function sbSyncStats() {
   const u = sbUser(); if (!u) return;
-  sbWrite('/rest/v1/weishu_data?username=eq.' + encodeURIComponent(u), 'PATCH', { stats_json: JSON.stringify(state.stats || {}), updated_at: new Date().toISOString() }).catch(function () {});
+  sbUpsertWeishu({ stats_json: JSON.stringify(state.stats || {}) }).catch(function () {});
 }
 function sbPull() {
   const u = sbUser(); if (!u) return;
