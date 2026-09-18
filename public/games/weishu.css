@@ -1,29 +1,29 @@
 /* ============================================================
    卫戍协议 —— 莱茵生命（Rhine Lab）风格改造
-   纯白 + 暖灰点阵 · 柠檬黄 #FFD700 唯一强调 · 直角矩形
+   纯白 + 暖灰点阵 · 柠檬黄 #9b7247 唯一强调 · 直角矩形
    无阴影 / 无渐变 / 无毛玻璃 / 圆角 ≤ 4px
    继承 ../rhine.css 设计系统；仅覆盖游戏内容，不改任何 JS。
    ============================================================ */
 :root {
   /* 复用 rhine.css 语义变量，便于本页内统一引用 */
-  --rhine-bg: #ffffff;
-  --rhine-panel: #faf8f6;
-  --rhine-panel2: #f3f0ec;
-  --rhine-ink: #1a1a1a;
-  --rhine-body: #3c3a37;
-  --rhine-mute: #8a857e;
-  --rhine-line: #e5e1dc;
-  --rhine-line-strong: #c9c4bc;
-  --rhine-accent: #ffd700;
-  --rhine-accent-ink: #000000;
+  --rhine-bg: #eae5e1;
+  --rhine-panel: #edebe4;
+  --rhine-panel2: #e7e3d9;
+  --rhine-ink: #080a08;
+  --rhine-body: #45443c;
+  --rhine-mute: #77756d;
+  --rhine-line: #bdb8ad;
+  --rhine-line-strong: #a6a49c;
+  --rhine-accent: #9b7247;
+  --rhine-accent-ink: #eae5e1;
   /* 暖灰点阵纹理（同 rhine.css） */
-  --rhine-dot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18'%3E%3Ccircle cx='1' cy='1' r='0.8' fill='%23efece7'/%3E%3C/svg%3E");
+  --rhine-dot: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ccircle cx='1' cy='1' r='0.75' fill='%23d8d2c6'/%3E%3C/svg%3E");
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  font-family: 'Helvetica Neue', 'Helvetica', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: var(--rl-font-body);
   /* 背景交给 rhine.css（纯白 + 暖灰点阵）；此处不再声明深色太空背景 */
   color: var(--rhine-body);
   min-height: 100vh;
@@ -131,7 +131,7 @@ body {
 .action-btn.primary {
   background: var(--rhine-ink);
   border-color: var(--rhine-ink);
-  color: #fff;
+  color: #eae5e1;
   font-weight: 700;
   font-size: 0.92rem;
   padding: 15px 10px;
@@ -331,9 +331,9 @@ body {
   max-height: 64px;
   overflow: hidden;
 }
-.nt-item.good { color: #4a8a5c; }     /* 语义色保留，去发光 */
-.nt-item.bad { color: #b5524a; }
-.nt-item.warn { color: #9a7a2e; }
+.nt-item.good { color: #62805a; }     /* 语义色保留，去发光 */
+.nt-item.bad { color: #a8503f; }
+.nt-item.warn { color: #9b7247; }
 
 /* ---------- 货舱/编组面板 ---------- */
 .barge-panel {
@@ -432,15 +432,15 @@ body {
 .btn-action.primary-btn {
   background: var(--rhine-ink);
   border-color: var(--rhine-ink);
-  color: #fff;
+  color: #eae5e1;
   font-weight: 700;
   font-size: 0.82rem;
 }
 .btn-action.primary-btn:hover { background: var(--rhine-accent); border-color: var(--rhine-accent); color: var(--rhine-accent-ink); }
 .btn-action.tiny { font-size: 0.66rem; padding: 4px 8px; }
 .btn-action.small { font-size: 0.7rem; padding: 5px 10px; }
-.btn-action.danger { background: var(--rhine-bg); border-color: #b5524a; color: #b5524a; }
-.btn-action.danger:hover { background: #b5524a; border-color: #b5524a; color: #fff; }
+.btn-action.danger { background: var(--rhine-bg); border-color: #a8503f; color: #a8503f; }
+.btn-action.danger:hover { background: #a8503f; border-color: #a8503f; color: #eae5e1; }
 
 .action-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .ab-note { color: var(--rhine-mute); font-size: 0.8rem; }
@@ -511,7 +511,7 @@ body {
   vertical-align: 1px;
 }
 .ft-tag.my { background: var(--rhine-accent); color: var(--rhine-accent-ink); }   /* 我方：柠檬黄 */
-.ft-tag.en { background: var(--rhine-ink); color: #fff; }                          /* 敌方：深灰 */
+.ft-tag.en { background: var(--rhine-ink); color: #eae5e1; }                          /* 敌方：深灰 */
 
 /* ---------- 战斗界面 ---------- */
 .battle-layout { position: relative; }
@@ -561,10 +561,10 @@ body {
 }
 .bc-line { margin: 2px 0; color: var(--rhine-body); }
 .bc-line.atk-my { color: var(--rhine-accent); }        /* 我方行动：柠檬黄 */
-.bc-line.atk-en { color: #b5524a; }                    /* 敌方行动：哑红（内容语义） */
+.bc-line.atk-en { color: #a8503f; }                    /* 敌方行动：哑红（内容语义） */
 .bc-line .atk-arrow { color: var(--rhine-mute); margin: 0 3px; }
 .bc-line .atk-dmg { color: var(--rhine-accent); font-weight: 700; }
-.bc-line .atk-dmg.crit { color: #b5524a; }
+.bc-line .atk-dmg.crit { color: #a8503f; }
 .bc-hint { font-size: 0.72rem; color: var(--rhine-mute); text-align: center; }
 
 .battle-clock {
@@ -620,7 +620,7 @@ body {
 .fc-mini { font-size: 0.62rem; color: var(--rhine-mute); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 敌方舰卡：暖灰底 + 深灰色块标记 */
 .fleet-card.enemy { background: var(--rhine-panel2); border-color: var(--rhine-line-strong); border-left-color: var(--rhine-ink); }
-.fleet-card.enemy .fc-hp .fill { background: #b5524a; }
+.fleet-card.enemy .fc-hp .fill { background: #a8503f; }
 .fleet-card.elite { border-color: var(--rhine-accent); box-shadow: none; }          /* 去发光 */
 .fleet-card.elite::before {
   content: '精';
@@ -642,7 +642,7 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 0.76rem;
-  color: #b5524a;
+  color: #a8503f;
   background: rgba(250, 248, 246, 0.88);
   border-radius: 2px;
 }
@@ -659,8 +659,8 @@ body {
   animation: dmgPopUp 0.9s ease-out forwards;
   white-space: nowrap;
 }
-.dmg-pop.crit { color: #b5524a; font-size: 1.05rem; }
-.dmg-pop.from-enemy { color: #b5524a; }
+.dmg-pop.crit { color: #a8503f; font-size: 1.05rem; }
+.dmg-pop.from-enemy { color: #a8503f; }
 @keyframes dmgPopUp {
   0% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
   70% { opacity: 1; }
@@ -675,8 +675,8 @@ body {
 .dp-group.locked { opacity: 0.55; }
 .dp-group-title { font-size: 0.82rem; color: var(--rhine-ink); font-weight: 700; font-family: var(--rhine-title-font, 'Oswald', 'Helvetica Neue', Arial, sans-serif); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px; }
 .dp-limit { color: var(--rhine-accent); font-size: 0.74rem; }
-.dp-aircap { color: #4a8a5c; font-size: 0.68rem; }
-.dp-lock-tip { font-size: 0.68rem; color: #b5524a; margin-bottom: 4px; }
+.dp-aircap { color: #62805a; font-size: 0.68rem; }
+.dp-lock-tip { font-size: 0.68rem; color: #a8503f; margin-bottom: 4px; }
 .dp-ships { display: flex; flex-wrap: wrap; gap: 6px; }
 .dp-ship {
   background: var(--rhine-bg);
@@ -694,7 +694,7 @@ body {
 .dp-ship.off { opacity: 0.4; cursor: not-allowed; }
 .dp-name { font-size: 0.76rem; color: var(--rhine-ink); }
 .dp-stats { font-size: 0.64rem; color: var(--rhine-mute); margin-top: 2px; }
-.dp-carry { font-size: 0.62rem; color: #4a8a5c; margin-top: 2px; }
+.dp-carry { font-size: 0.62rem; color: #62805a; margin-top: 2px; }
 .dp-right-title { font-size: 0.82rem; color: var(--rhine-ink); font-weight: 700; font-family: var(--rhine-title-font, 'Oswald', 'Helvetica Neue', Arial, sans-serif); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
 .dp-empty-tip { font-size: 0.72rem; color: var(--rhine-mute); padding: 8px; }
 .dp-selected { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
@@ -846,13 +846,13 @@ body {
 }
 
 /* ---------- 维修标记 ---------- */
-.fc-repair { font-size: 0.62rem; color: #4a8a5c; border: 1px solid #4a8a5c; border-radius: 2px; padding: 0 3px; margin-left: 4px; background: transparent; }
-.dmg-pop.heal { color: #4a8a5c; text-shadow: none; }
+.fc-repair { font-size: 0.62rem; color: #62805a; border: 1px solid #62805a; border-radius: 2px; padding: 0 3px; margin-left: 4px; background: transparent; }
+.dmg-pop.heal { color: #62805a; text-shadow: none; }
 
 /* ---------- 部署指令条 ---------- */
 .deploy-cmd { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--rhine-panel); border: 1px solid var(--rhine-line); border-left: 3px solid var(--rhine-accent); border-radius: 2px; margin-bottom: 8px; font-size: 14px; }
 .deploy-cmd b { color: var(--rhine-accent); font-size: 16px; }
-.deploy-cmd b.over { color: #b5524a; }
+.deploy-cmd b.over { color: #a8503f; }
 .dp-cmd-hint { color: var(--rhine-mute); font-size: 12px; }
 .dp-qty { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
 .dp-minus, .dp-plus { width: 24px; height: 24px; border: 1px solid var(--rhine-line-strong); background: var(--rhine-bg); color: var(--rhine-ink); border-radius: 2px; cursor: pointer; font-size: 14px; line-height: 1; }
@@ -876,7 +876,7 @@ body {
 @keyframes warpPulse { from { opacity: .12; } to { opacity: .5; } }
 
 /* ---------- 部署锁标记 ---------- */
-.dp-lock-badge { display: inline-block; margin: 2px 0 0; padding: 1px 8px; font-size: 11px; color: #b5524a; border: 1px solid #b5524a; border-radius: 2px; background: transparent; }
+.dp-lock-badge { display: inline-block; margin: 2px 0 0; padding: 1px 8px; font-size: 11px; color: #a8503f; border: 1px solid #a8503f; border-radius: 2px; background: transparent; }
 .dp-ship.off .dp-lock-badge { color: var(--rhine-mute); border-color: var(--rhine-line-strong); background: transparent; }
 
 /* ---------- 要塞（深色内容保留少量色调，去发光/渐变） ---------- */
@@ -885,19 +885,19 @@ body {
 .fort-hp, .fort-sh { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: .68rem; color: var(--rhine-body); }
 .fort-hp .fill, .fort-sh .fill { height: 8px; border-radius: 0; transition: width .2s; }
 .fort-hp { background: var(--rhine-panel2); border: 1px solid var(--rhine-line); border-radius: 0; overflow: hidden; }
-.fort-hp .fill { background: #b5524a; }
+.fort-hp .fill { background: #a8503f; }
 .fort-sh { background: var(--rhine-panel2); border: 1px solid var(--rhine-line); border-radius: 0; overflow: hidden; }
 .fort-sh .fill { background: var(--rhine-accent); }
 .fort-hp span, .fort-sh span { white-space: nowrap; min-width: 110px; }
 .fleet-card.fortress { border-color: var(--rhine-accent); background: var(--rhine-panel2); box-shadow: none; }
 .fleet-card.fortress .fc-name { color: var(--rhine-accent); text-shadow: none; }
-.fleet-card.fortress-hit { border-color: #b5524a; box-shadow: none; }
-.fh-count { background: #b5524a; color: #fff; border-radius: 2px; padding: 0 6px; font-size: .6rem; margin-left: 4px; font-weight: 700; }
+.fleet-card.fortress-hit { border-color: #a8503f; box-shadow: none; }
+.fh-count { background: #a8503f; color: #eae5e1; border-radius: 2px; padding: 0 6px; font-size: .6rem; margin-left: 4px; font-weight: 700; }
 
 /* ---------- 终局横幅：柠檬黄大横幅 ---------- */
 .final-banner { background: var(--rhine-accent); border: 1px solid var(--rhine-accent); color: var(--rhine-accent-ink); font-weight: 700; text-align: center; padding: 8px; margin: 6px 12px; border-radius: 2px; font-size: .85rem; letter-spacing: 1px; text-shadow: none; }
 
 /* ---------- 蓝图操作 ---------- */
 .blue-actions { display: flex; gap: 8px; margin: 6px 0; padding: 0 4px; }
-.blue-actions .btn-action { flex: 1; background: var(--rhine-ink); border-color: var(--rhine-ink); color: #fff; font-weight: 700; }
+.blue-actions .btn-action { flex: 1; background: var(--rhine-ink); border-color: var(--rhine-ink); color: #eae5e1; font-weight: 700; }
 .blue-actions .btn-action:hover { background: var(--rhine-accent); border-color: var(--rhine-accent); color: var(--rhine-accent-ink); }
