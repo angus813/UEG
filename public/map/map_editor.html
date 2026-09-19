@@ -299,21 +299,39 @@
     .toolbar button:hover, .toolbar .tool-btn:hover { background: #9b7247; border-color: #9b7247; color: #04060d; }
     .canvas-container { border-color: rgba(120, 140, 175, 0.30); }
   </style>
-
-<script src="../dyson-bg.js"></script>
   <script>
     /* 动态宇宙背景开关（默认关闭，保证低端设备流畅） */
     function initUniverseToggle() {
       var btn = document.getElementById('btnUniverse');
       if (!btn) return;
-      var on = false;
+      var on = false, loading = false;
       btn.addEventListener('click', function () {
-        var c = document.getElementById('dyson-bg');
-        if (!c) return;
-        on = !on;
-        c.classList.toggle('dyson-on', on);
-        btn.classList.toggle('active', on);
-        btn.textContent = on ? '✦ 动态宇宙（开）' : '✦ 动态宇宙';
+        /* 关闭：只切 class，脚本留着也不影响（画布隐藏后不再可见） */
+        if (on) {
+          on = false;
+          var c0 = document.getElementById('dyson-bg');
+          if (c0) c0.classList.remove('dyson-on');
+          btn.classList.remove('active');
+          btn.textContent = '✦ 动态宇宙';
+          return;
+        }
+        /* 开启：首次点击才动态加载 dyson-bg.js（默认不加载，零开销） */
+        var enable = function () {
+          var c = document.getElementById('dyson-bg');
+          if (c) c.classList.add('dyson-on');
+          on = true;
+          btn.classList.add('active');
+          btn.textContent = '✦ 动态宇宙（开）';
+        };
+        if (document.getElementById('dyson-bg')) { enable(); return; }
+        if (loading) return;
+        loading = true;
+        btn.textContent = '✦ 加载中…';
+        var s = document.createElement('script');
+        s.src = '../dyson-bg.js';
+        s.onload = function () { loading = false; setTimeout(enable, 60); };
+        s.onerror = function () { loading = false; btn.textContent = '✦ 动态宇宙（加载失败）'; };
+        document.head.appendChild(s);
       });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initUniverseToggle);
