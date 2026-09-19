@@ -345,6 +345,19 @@ const ShapeGenerator = {
       case 'flowData': drawParallelogram(p, x, y, w, h); break;
       case 'flowTerminator': drawFlowTerminatorPath(p, x, y, w, h); break;
       case 'flowDocument': drawFlowDocumentPath(p, x, y, w, h); break;
+      case 'arc': {
+        // 空心弧：外弧 + 内弧反向闭合（此前 getPath 无此分支，画布上会退化成矩形）
+        const outerR = Math.min(w, h) / 2;
+        const innerR = Math.max(1, outerR * 0.72);
+        const a0 = shape.startAngle !== undefined ? shape.startAngle : 0;
+        const a1 = shape.endAngle !== undefined ? shape.endAngle : Math.PI;
+        p.moveTo(cx + innerR * Math.cos(a0), cy + innerR * Math.sin(a0));
+        p.arc(cx, cy, outerR, a0, a1, false);
+        p.lineTo(cx + innerR * Math.cos(a1), cy + innerR * Math.sin(a1));
+        p.arc(cx, cy, innerR, a1, a0, true);
+        p.closePath();
+        break;
+      }
       case 'freehand': if (shape.points && shape.points.length) { p.moveTo(shape.points[0].x, shape.points[0].y); shape.points.forEach(pt => p.lineTo(pt.x, pt.y)); } break;
       default: p.rect(x, y, w, h);
     }
