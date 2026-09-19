@@ -879,3 +879,23 @@ body {
 .blue-actions { display: flex; gap: 8px; margin: 6px 0; padding: 0 4px; }
 .blue-actions .btn-action { flex: 1; background: var(--rhine-ink); border-color: var(--rhine-ink); color: #eae5e1; font-weight: 700; }
 .blue-actions .btn-action:hover { background: var(--rhine-accent); border-color: var(--rhine-accent); color: var(--rhine-accent-ink); }
+
+/* ---------- 装备装配（舰船卡上的装备槽 / 装配选择器） ---------- */
+.hc-eq { display: flex; flex-wrap: wrap; gap: 3px; margin: 4px 0; }
+.hc-eq-tag {
+  font-size: 0.6rem; padding: 1px 5px; border: 1px solid var(--rhine-accent);
+  color: var(--rhine-accent); cursor: pointer; border-radius: 2px; white-space: nowrap;
+}
+.hc-eq-tag:hover { background: var(--rhine-accent); color: var(--rhine-accent-ink); }
+.equip-pick { padding: 2px 0; }
+.ep-title { font-size: 0.9rem; font-weight: 700; color: var(--rhine-ink); margin-bottom: 6px; }
+.ep-tip { font-size: 0.72rem; color: var(--rhine-mute); margin-bottom: 10px; line-height: 1.65; }
+.ep-list { display: flex; flex-direction: column; gap: 6px; max-height: 50vh; overflow-y: auto; }
+.ep-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 1px solid var(--rhine-line); cursor: pointer; transition: border-color .15s, background .15s;
+}
+.ep-item:hover { border-color: var(--rhine-accent); background: var(--rhine-panel2); }
+.ep-name { font-weight: 700; color: var(--rhine-ink); }
+.ep-cls { font-size: 0.72rem; color: var(--rhine-mute); }
+.ep-has { margin-left: auto; font-size: 0.7rem; color: var(--rhine-accent); }
