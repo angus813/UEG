@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="rhine.css"> <!-- Rhine Lab Archive 设计系统 -->
   <link rel="stylesheet" href="rhine-motion.css"> <!-- 动效层 -->
   <!-- 视觉统一由 rhine.css 设计系统提供 -->
-<script src="dyson-bg.js"></script>
   <script src="rhine-motion.js"></script>
 </head>
 <body>
@@ -128,14 +127,10 @@
         return false;
       }
 
-      // 更新 localStorage 中的用户信息（保持会话一致，绝不写入密码明文）
-      const updatedUser = {
-        username: currentUser.username,
-        isAdmin: currentUser.isAdmin || false,
-        highestRecord: currentUser.highestRecord || 0
-      };
-      setCurrentUser(updatedUser);
-
+      // 改密后 GoTrue 旧 access_token 立即失效，DB.changePassword 内部已清除会话。
+      // 此处绝不能再写回用户对象，否则会出现「有用户信息但无 token」的半登录状态，
+      // 后续所有请求 401。统一清除，引导重新登录。
+      setCurrentUser(null);
       return true;
     }
 
@@ -185,11 +180,10 @@
 
       const success = await changePassword(oldPw, newPw);
       if (success) {
-        alert('密码修改成功！');
-        document.getElementById('pwForm').style.display = 'none';
-        document.getElementById('oldPassword').value = '';
-        document.getElementById('newPassword').value = '';
-        document.getElementById('confirmPassword').value = '';
+        alert('密码修改成功！出于安全考虑，请使用新密码重新登录。');
+        try { localStorage.removeItem('ueg_current_user'); localStorage.removeItem('ueg_token'); } catch (e) {}
+        location.href = '../index.html';
+        return;
       }
     });
 
