@@ -49,7 +49,7 @@ const SPELL_BLUEPRINTS = [
   {id: 'emp', name: '全域干扰', cost: 4, desc: '敌方全体停火3秒'},
   {id: 'repair', name: '紧急修复', cost: 4, desc: '我方全体舰船恢复40%生命'},
   {id: 'reinforce', name: '增援编队', cost: 5, desc: '立即获得1艘随机舰船加入编组'},
-  {id: 'freeze', name: '时间冻结', cost: 4, desc: '敌方全体停火3秒'},
+  {id: 'freeze', name: '时间冻结', cost: 5, desc: '敌方全体停火5秒（冻结时长更长）'},
   {id: 'shield', name: '护盾发生器', cost: 3, desc: '本回合我方防御护盾+5'},
   {id: 'corrode', name: '纳米侵蚀', cost: 5, desc: '敌方每秒损失3%生命，持续5秒'},
   {id: 'focus', name: '集火指令', cost: 3, desc: '本回合我方全体攻击力+30%'}
@@ -735,7 +735,7 @@ function upgradeBarge() {
   pushNews('补给驳船升级至 Lv.' + state.bargeLevel, 'good');
   if (state.gacha) {
     const s = randomShipByLevel(0);
-    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
+    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: (s.mods && s.mods.length) ? s.mods[0] : '' });
     pushNews('军火商人：获得舰船 ' + s.name, 'good');
     tryMergeShips();
   }
@@ -853,7 +853,7 @@ function buyPoolItem(idx) {
   state.funds -= price;
   state.spentFunds += price;
   if (item.type === 'ship') {
-    state.hand.push({ ship: item.ship, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
+    state.hand.push({ ship: item.ship, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: (item.ship.mods && item.ship.mods.length) ? item.ship.mods[0] : '' });
     pushNews('购入舰船：' + item.ship.name, 'good');
     tryMergeShips();
   } else if (item.type === 'equip') {
@@ -872,7 +872,7 @@ function buyPoolItem(idx) {
 function checkGacha() {
   if (state.spentFunds >= 18) {
     const s = randomShipByLevel(0);
-    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
+    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: (s.mods && s.mods.length) ? s.mods[0] : '' });
     state.spentFunds -= 18;
     pushNews('军火商人：获得舰船 ' + s.name, 'good');
     tryMergeShips();
@@ -916,12 +916,20 @@ function renderHandSection() {
       html += '<div class="hc-cls">' + CLS_ZH[s.cls] + '</div>';
       if (card.elite) html += '<div class="hc-tag">精锐</div>';
       if (card.lv && Object.keys(card.lv).length) html += '<div class="hc-lv">强化' + Object.keys(card.lv).length + '</div>';
+      if (card.equips && card.equips.length) {
+        html += '<div class="hc-eq">';
+        card.equips.forEach(function (eq, k) {
+          html += '<span class="hc-eq-tag" data-uneq="' + i + '" data-slot="' + k + '" title="点击卸下">' + eq.name + (eq.lv > 1 ? ' Lv.' + eq.lv : '') + '</span>';
+        });
+        html += '</div>';
+      }
       html += '<button class="btn-action tiny danger" data-sell="' + i + '">出售 1</button>';
       html += '</div>';
     } else if (card.type === 'equip') {
       html += '<div class="hand-card equip" data-idx="' + i + '">';
       html += '<div class="hc-name">' + card.eq.name + ' Lv.' + card.lv + '</div>';
-      html += '<div class="hc-cls">装备</div>';
+      html += '<div class="hc-cls">装备 · ' + (card.eq.desc || '') + '</div>';
+      html += '<button class="btn-action tiny" data-equip="' + i + '">装配到舰船</button>';
       html += '<button class="btn-action tiny danger" data-sell="' + i + '">销毁</button>';
       html += '</div>';
     } else {
@@ -1014,6 +1022,18 @@ function renderPoolSectionBind() {
       useSpellFromHand(parseInt(btn.dataset.use, 10));
     });
   });
+  document.querySelectorAll('[data-equip]').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openEquipPicker(parseInt(btn.dataset.equip, 10));
+    });
+  });
+  document.querySelectorAll('[data-uneq]').forEach(function (tag) {
+    tag.addEventListener('click', function (e) {
+      e.stopPropagation();
+      detachEquip(parseInt(tag.dataset.uneq, 10), parseInt(tag.dataset.slot, 10));
+    });
+  });
   const bb = document.getElementById('blueOpenBtn');
   if (bb) bb.addEventListener('click', function () { state.blueOpenedIn = 'prep'; showBlueModal(); });
   const sb = document.getElementById('startBattleBtn');
@@ -1060,11 +1080,11 @@ function castSpell(sp) {
     pushNews('紧急修复：我方全体恢复40%生命', 'good');
   } else if (sp.id === 'reinforce') {
     const s = randomShipByLevel(0);
-    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0 });
+    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: (s.mods && s.mods.length) ? s.mods[0] : '' });
     pushNews('增援编队：获得舰船 ' + s.name, 'good');
     tryMergeShips();
   } else if (sp.id === 'freeze') {
-    state.enemies.forEach(function (e) { e.frozenUntil = now + 3000; });
+    state.enemies.forEach(function (e) { e.frozenUntil = now + 5000; });
     pushNews('时间冻结：敌方停止移动3秒', 'good');
   } else if (sp.id === 'shield') {
     state.shield += 5;
@@ -1098,7 +1118,7 @@ function tryMergeShips() {
       });
       const idx = state.hand.indexOf(base);
       if (idx > -1) state.hand.splice(idx, 1);
-      state.hand.push({ ship: base.ship, elite: true, equips: [], lv: base.lv || {}, kills: 0, lastFireTime: 0 });
+      state.hand.push({ ship: base.ship, elite: true, equips: [], lv: base.lv || {}, kills: 0, lastFireTime: 0, mod: base.mod || ((base.ship.mods && base.ship.mods.length) ? base.ship.mods[0] : '') });
       state.permits++;
       if (state.mergeBonus) state.funds += state.mergeBonus;
       equips.forEach(function (eq) { state.hand.push({ type: 'equip', eq: eq, lv: eq.lv || 1 }); });
@@ -1107,6 +1127,51 @@ function tryMergeShips() {
   }
 }
 
+/* ============ 装备装配（补全此前缺失的交互：equips 只被读取、从未被写入） ============ */
+function openEquipPicker(eqIdx) {
+  const eqCard = state.hand[eqIdx];
+  if (!eqCard || eqCard.type !== 'equip') return;
+  const targets = [];
+  state.hand.forEach(function (cd, i) { if (cd.ship) targets.push(i); });
+  if (!targets.length) { flashTip('手牌区没有可装配的舰船'); return; }
+  let html = '<div class="equip-pick">';
+  html += '<div class="ep-title">将「' + eqCard.eq.name + '」装配到哪艘舰船？</div>';
+  html += '<div class="ep-tip">装备生效于战斗中（攻/防/速/程/护盾/能量/暴击）；合成或精锐化时会自动退回手牌。</div>';
+  html += '<div class="ep-list">';
+  targets.forEach(function (i) {
+    const s = state.hand[i].ship;
+    const eqs = state.hand[i].equips || [];
+    html += '<div class="ep-item" data-target="' + i + '">';
+    html += '<span class="ep-name">' + (s.shortName || s.name) + '</span>';
+    html += '<span class="ep-cls">' + CLS_ZH[s.cls] + ' · ' + ['前排', '中排', '后排'][s.row] + '</span>';
+    html += '<span class="ep-has">' + (eqs.length ? '已装 ' + eqs.length + ' 件' : '空') + '</span>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+  showModal('装配装备', html);
+  document.querySelectorAll('.ep-item').forEach(function (el) {
+    el.addEventListener('click', function () { attachEquip(eqIdx, parseInt(el.dataset.target, 10)); });
+  });
+}
+function attachEquip(eqIdx, shipIdx) {
+  const eqCard = state.hand[eqIdx], shipCard = state.hand[shipIdx];
+  if (!eqCard || eqCard.type !== 'equip' || !shipCard || !shipCard.ship) return;
+  shipCard.equips = shipCard.equips || [];
+  shipCard.equips.push({ id: eqCard.eq.id, name: eqCard.eq.name, desc: eqCard.eq.desc || '', lv: eqCard.lv || 1 });
+  state.hand.splice(eqIdx, 1);
+  pushNews('装备装配：' + (shipCard.ship.shortName || shipCard.ship.name) + ' ← ' + eqCard.eq.name, 'good');
+  closeModals();
+  renderPrep();
+}
+function detachEquip(shipIdx, slot) {
+  const shipCard = state.hand[shipIdx];
+  if (!shipCard || !shipCard.ship || !shipCard.equips || !shipCard.equips[slot]) return;
+  if (countHand('equip') >= CONFIG.EQUIP_LIMIT) { flashTip('装备栏已满，无法卸下'); return; }
+  const eq = shipCard.equips.splice(slot, 1)[0];
+  state.hand.push({ type: 'equip', eq: Object.assign({}, eq), lv: eq.lv || 1 });
+  pushNews('卸下装备：' + eq.name + ' 回到手牌', '');
+  renderPrep();
+}
 function tryMergeEquips() {
   const groups = {};
   state.hand.forEach(function (card, i) {
@@ -2129,6 +2194,8 @@ document.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('.modal').forEach(function (m) {
     m.addEventListener('click', function (e) {
       if (e.target === m) {
+        // 回合强化必须三选一：点遮罩不关闭（否则会跳过强化且不刷新界面，流程卡住）
+        if (m.id === 'upgradeModal') return;
         m.classList.remove('active');
         if (m.id === 'blueModal' && state && state.blueOpenedIn === 'settle') {
           state.blueOpenedIn = null;
