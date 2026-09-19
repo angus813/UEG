@@ -154,7 +154,33 @@ function clampScale(newScale) {
 }
 
 // ---------- 包围盒 ----------
+/* ============ 标记类图形：屏幕固定像素（Pin 行为） ============
+   这些图标始终以固定屏幕像素绘制（不随地图缩放变大变小）。
+   为让「选中框 / 手柄 / 命中检测」与图标严格重合，其包围盒也必须按
+   屏幕尺寸换算成世界范围（世界半径 = 屏幕像素 / scale）。
+   注意：defenseLine 是「防线」，长度 w 有地理含义（应随地图缩放），故不在此列。 */
+const MARKER_SCREEN_PX = { target: 'r', gather: 'r', mine: 'half', caution: 'half', focus: 'half', pin: 'half' };
+function markerScreenHalf(type, shape) {
+  const k = Math.min(shape.w || 100, shape.h || 100) / 100;
+  switch (type) {
+    case 'target': return 46 * k;                      // 与 drawTarget 的 r 一致（半径）
+    case 'gather': return 20 * Math.max(0.1, k);       // 与 drawGather 的 radius 一致
+    case 'mine': return 15;                            // pixelSize 30 的一半
+    case 'caution': case 'focus': return 20;           // pixelOuter
+    case 'pin': return 15;                             // pixelSize
+    default: return null;
+  }
+}
+
 function getShapeBounds(shape) {
+  // 标记类：屏幕尺寸固定 → 世界半径随 scale 反比变化，保证屏幕上大小恒定
+  const mh = markerScreenHalf(shape.type, shape);
+  if (mh !== null) {
+    const cx = (shape.x || 0) + (shape.w || 0) / 2;
+    const cy = (shape.y || 0) + (shape.h || 0) / 2;
+    const half = mh / scale;
+    return { minX: cx - half, minY: cy - half, maxX: cx + half, maxY: cy + half };
+  }
   const { type } = shape;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   const addPoint = (x, y) => {
@@ -183,6 +209,16 @@ function getShapeBounds(shape) {
 }
 
 function applyBoundsToShape(shape, minX, minY, maxX, maxY) {
+  // 标记类（Pin 行为）：尺寸由屏幕像素决定、不可通过拖拽改变，
+  // 因此这里只平移中心点，绝不把屏幕尺寸写回 w/h（否则会污染数据）。
+  if (markerScreenHalf(shape.type, shape) !== null) {
+    const cur = getShapeBounds(shape);
+    const curCx = (cur.minX + cur.maxX) / 2, curCy = (cur.minY + cur.maxY) / 2;
+    const newCx = (minX + maxX) / 2, newCy = (minY + maxY) / 2;
+    shape.x = (shape.x || 0) + (newCx - curCx);
+    shape.y = (shape.y || 0) + (newCy - curCy);
+    return;
+  }
   // freehand：整体平移 points 数组（不缩放点集）
   if (shape.type === 'freehand' && Array.isArray(shape.points) && shape.points.length) {
     const cur = getShapeBounds(shape);
@@ -425,10 +461,9 @@ function drawDefenseLine(ctx, shape) {
   const cy = y + h/2;
   // 尺寸统一按图形框的世界尺寸换算（此前的 x/scale 会让图形不随地图缩放，
   // 与选中框/包围盒脱节，表现为缩放时忽大忽小）
-  const k = Math.min(w, h) / 100;
-  const lineWidth = Math.max(0.5, (shape.strokeWidth || 2) * k);
-  const blockW = 10 * k;
-  const blockH = 12 * k;
+  const lineWidth = Math.max(2, (shape.strokeWidth || 2) / scale);
+  const blockW = Math.max(4, 10 / scale);
+  const blockH = Math.max(4, 12 / scale);
   const count = 8;
   const step = w / (count - 1);
   ctx.save();
@@ -442,8 +477,8 @@ function drawDefenseLine(ctx, shape) {
   for (let i = 0; i < count; i++) {
     const px = x + i * step;
     ctx.fillStyle = strokeColor || '#ffffff';
-    ctx.fillRect(px - blockW/2, cy - blockH/2 - 2 * k, blockW, blockH/2);
-    ctx.fillRect(px - blockW/4, cy - blockH/2 - 5 * k, blockW/2, 3 * k);
+    ctx.fillRect(px - blockW/2, cy - blockH/2 - 2 / scale, blockW, blockH/2);
+    ctx.fillRect(px - blockW/4, cy - blockH/2 - 5 / scale, blockW/2, 3 / scale);
   }
   ctx.restore();
 }
@@ -452,11 +487,13 @@ function drawDefenseLine(ctx, shape) {
 function drawTarget(ctx, shape) {
   const { x, y, w, h, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const r = Math.min(w, h) / 2 - 4;
+  const r = 46 * k / scale;   // 固定屏幕像素（默认 46px），拉大图形框可按比例放大
+  // 目标：整体为固定屏幕像素的图标；r 此前用世界单位 min(w,h)/2-4，
+  // 与三角/圆点（屏幕像素）基准不一致，缩放时比例漂移。现统一。
   const k = Math.min(w, h) / 100;
-  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * k);
-  const triSize = 10 * k;
-  const dotSize = 4 * k;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  const triSize = Math.max(4, 10 / scale);
+  const dotSize = Math.max(2, 4 / scale);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.strokeStyle = strokeColor || '#ffffff';
@@ -503,10 +540,10 @@ function drawGather(ctx, shape) {
   const cx = x + w/2, cy = y + h/2;
 
   const sizeFactor = Math.max(0.1, Math.min(w, h) / 100);
-  const radius = 20 * sizeFactor;
-  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * sizeFactor);
-  const headSize = Math.max(0.5, 6 * sizeFactor);
-  const dotSize = Math.max(0.4, 4 * sizeFactor);
+  const radius = 20 * sizeFactor / scale;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) * sizeFactor / scale);
+  const headSize = Math.max(3, 6 * sizeFactor / scale);
+  const dotSize = Math.max(2, 4 * sizeFactor / scale);
 
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
@@ -556,9 +593,8 @@ function drawGather(ctx, shape) {
 function drawMine(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const k = Math.min(w, h) / 100;
-  const pixelSize = 30 * k;
-  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * k);
+  const pixelSize = 30 / scale;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.strokeStyle = strokeColor || '#ffffff';
@@ -589,10 +625,9 @@ function drawMine(ctx, shape) {
 function drawCaution(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const k = Math.min(w, h) / 100;
-  const pixelOuter = 20 * k;
+  const pixelOuter = 20 / scale;
   const pixelInner = pixelOuter * 0.7;
-  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * k);
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.fillStyle = fillColor || '#ff4444';
@@ -620,10 +655,9 @@ function drawCaution(ctx, shape) {
 function drawFocus(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const k = Math.min(w, h) / 100;
-  const pixelOuter = 20 * k;
+  const pixelOuter = 20 / scale;
   const pixelInner = pixelOuter * 0.7;
-  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * k);
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.fillStyle = fillColor || '#ffaa00';
@@ -653,9 +687,8 @@ function drawFocus(ctx, shape) {
 function drawPin(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const k = Math.min(w, h) / 100;
-  const pixelSize = 15 * k;
-  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * k);
+  const pixelSize = 15 / scale;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.fillStyle = fillColor || '#66dd88';
