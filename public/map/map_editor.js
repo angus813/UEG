@@ -423,9 +423,12 @@ function isShapeEditable(shape) {
 function drawDefenseLine(ctx, shape) {
   const { x, y, w, h, strokeColor, opacity } = shape;
   const cy = y + h/2;
-  const lineWidth = Math.max(2, (shape.strokeWidth || 2) / scale);
-  const blockW = Math.max(4, 10 / scale);
-  const blockH = Math.max(4, 12 / scale);
+  // 尺寸统一按图形框的世界尺寸换算（此前的 x/scale 会让图形不随地图缩放，
+  // 与选中框/包围盒脱节，表现为缩放时忽大忽小）
+  const k = Math.min(w, h) / 100;
+  const lineWidth = Math.max(0.5, (shape.strokeWidth || 2) * k);
+  const blockW = 10 * k;
+  const blockH = 12 * k;
   const count = 8;
   const step = w / (count - 1);
   ctx.save();
@@ -439,8 +442,8 @@ function drawDefenseLine(ctx, shape) {
   for (let i = 0; i < count; i++) {
     const px = x + i * step;
     ctx.fillStyle = strokeColor || '#ffffff';
-    ctx.fillRect(px - blockW/2, cy - blockH/2 - 2/scale, blockW, blockH/2);
-    ctx.fillRect(px - blockW/4, cy - blockH/2 - 5/scale, blockW/2, 3/scale);
+    ctx.fillRect(px - blockW/2, cy - blockH/2 - 2 * k, blockW, blockH/2);
+    ctx.fillRect(px - blockW/4, cy - blockH/2 - 5 * k, blockW/2, 3 * k);
   }
   ctx.restore();
 }
@@ -450,9 +453,10 @@ function drawTarget(ctx, shape) {
   const { x, y, w, h, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
   const r = Math.min(w, h) / 2 - 4;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
-  const triSize = Math.max(4, 10 / scale);
-  const dotSize = Math.max(2, 4 / scale);
+  const k = Math.min(w, h) / 100;
+  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * k);
+  const triSize = 10 * k;
+  const dotSize = 4 * k;
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.strokeStyle = strokeColor || '#ffffff';
@@ -499,10 +503,10 @@ function drawGather(ctx, shape) {
   const cx = x + w/2, cy = y + h/2;
 
   const sizeFactor = Math.max(0.1, Math.min(w, h) / 100);
-  const radius = 20 * sizeFactor / scale;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) * sizeFactor / scale);
-  const headSize = Math.max(3, 6 * sizeFactor / scale);
-  const dotSize = Math.max(2, 4 * sizeFactor / scale);
+  const radius = 20 * sizeFactor;
+  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * sizeFactor);
+  const headSize = Math.max(0.5, 6 * sizeFactor);
+  const dotSize = Math.max(0.4, 4 * sizeFactor);
 
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
@@ -552,8 +556,9 @@ function drawGather(ctx, shape) {
 function drawMine(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const pixelSize = 30 / scale;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  const k = Math.min(w, h) / 100;
+  const pixelSize = 30 * k;
+  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * k);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.strokeStyle = strokeColor || '#ffffff';
@@ -584,9 +589,10 @@ function drawMine(ctx, shape) {
 function drawCaution(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const pixelOuter = 20 / scale;
+  const k = Math.min(w, h) / 100;
+  const pixelOuter = 20 * k;
   const pixelInner = pixelOuter * 0.7;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * k);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.fillStyle = fillColor || '#ff4444';
@@ -614,9 +620,10 @@ function drawCaution(ctx, shape) {
 function drawFocus(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const pixelOuter = 20 / scale;
+  const k = Math.min(w, h) / 100;
+  const pixelOuter = 20 * k;
   const pixelInner = pixelOuter * 0.7;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * k);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.fillStyle = fillColor || '#ffaa00';
@@ -646,8 +653,9 @@ function drawFocus(ctx, shape) {
 function drawPin(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const pixelSize = 15 / scale;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  const k = Math.min(w, h) / 100;
+  const pixelSize = 15 * k;
+  const lineWidth = Math.max(0.4, (shape.strokeWidth || 2) * k);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.fillStyle = fillColor || '#66dd88';
