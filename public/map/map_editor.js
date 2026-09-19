@@ -65,6 +65,19 @@ function stopAnimation() {
   }
 }
 
+/* 仅当画布上存在需要旋转的「敌情」(gather) 标记时才需要持续重绘；
+   此前无条件常驻 20FPS，即使没有敌情也在空转重绘。 */
+function needsAnimation() {
+  return Array.isArray(shapes) && shapes.some(function (s) { return s && s.type === 'gather'; });
+}
+function syncAnimation() {
+  if (needsAnimation() && !document.hidden) startAnimation();
+  else stopAnimation();
+}
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) stopAnimation(); else syncAnimation();
+});
+
 // ---------- 当前用户 ----------
 function getCurrentUser() {
   try {
@@ -1184,6 +1197,7 @@ function drawShapeLabel(ctx, shape) {
 
 // ---------- 主渲染函数 ----------
 function redraw() {
+  syncAnimation();   // 按需启停「敌情」旋转动画（避免无谓的 20FPS 空转）
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.save();
   ctx.translate(0, canvas.height);
@@ -2093,7 +2107,7 @@ async function init() {
   resizeCanvas();
   fitToShapes();
   redraw();
-  startAnimation();
+  syncAnimation();
 
   window.addEventListener('beforeunload', e => {
     stopAnimation();
