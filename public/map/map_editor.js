@@ -2478,10 +2478,16 @@ async function init() {
     document.getElementById('saveBtn').style.display = 'none';
   }
 
-  await loadMap();
-
+  // 先建工具栏与画布：它们不依赖地图数据。
+  // loadMap 失败（网络/鉴权/表结构问题）时不能中断后续初始化，
+  // 否则编辑器会停在空白状态、工具栏也出不来。
   if (!isViewMode) {
     createShapeButtons();
+  }
+  try {
+    await loadMap();
+  } catch (e) {
+    console.warn('[map_editor] 地图数据加载失败，降级为空白画布：', e && e.message);
   }
 
   resizeCanvas();
