@@ -250,6 +250,50 @@
     }
 
     /* ============================================================
+       本页深色宇宙主题：重定义全局设计令牌（仅本页生效）
+       说明：地图编辑器以深空为底，必须把「纸色/墨色」成套翻转，
+       否则 .section-title / .shape-btn 等仍用浅底深字，与深色工具栏撞车看不见。
+       ============================================================ */
+    :root {
+      --rhine-bg: #0a1020;
+      --rl-paper: #0a1020;
+      --rhine-panel: #101a2e;
+      --rl-panel: #101a2e;
+      --rhine-panel2: #17233d;
+      --rl-field: #17233d;
+      --rhine-ink: #e8eef7;
+      --rl-ink: #e8eef7;
+      --rhine-body: #c3cddb;
+      --rhine-mute: #93a4c0;
+      --rl-muted: #93a4c0;
+      --rhine-line: #22304c;
+      --rl-line: #22304c;
+      --rhine-line-strong: #33456b;
+      --rl-line-soft: #1b2740;
+      --rhine-accent-ink: #04060d;
+    }
+    /* 深色下需要单独处理的区域 */
+    .canvas-container { background-color: rgba(4, 6, 13, 0.42) !important; }
+    .toolbar .section-title { background: rgba(23, 35, 61, 0.9); color: #dbe2ee; }
+    .toolbar .shape-btn { background: rgba(18, 24, 38, 0.85); border-color: rgba(120, 140, 175, 0.30); }
+    .toolbar .shape-btn:hover { background: rgba(155, 114, 71, 0.40); border-color: #9b7247; }
+    .toolbar .tool-btn:hover { color: #e8eef7; }
+    .toolbar .tool-btn.active { color: #04060d; }
+    .toolbar #fillType { background: rgba(18, 24, 38, 0.9) !important; color: #e8eef7 !important; border: 1px solid rgba(120, 140, 175, 0.35) !important; }
+    .toolbar #textureFile { color: #c3cddb !important; }
+    .toolbar .btn-delete-shape { background: rgba(120, 40, 40, 0.35); border-color: rgba(200, 90, 90, 0.55); color: #ffb8b8; }
+    .toolbar .btn-delete-shape:hover { background: #9c4a3a; border-color: #9c4a3a; color: #fff; }
+    .header .btn, .header .btn.save, .header #btnUniverse {
+      background: rgba(18, 24, 38, 0.85); border-color: rgba(120, 140, 175, 0.40); color: #cfd6e0;
+    }
+    .header .btn:hover, .header .btn.save:hover, .header #btnUniverse:hover,
+    .header #btnUniverse.active { background: #9b7247; border-color: #9b7247; color: #04060d; }
+    /* 弹窗/属性面板在深色主题下的对比 */
+    .modal-box { background: #101a2e !important; border-color: #22304c !important; color: #c3cddb; }
+    .modal-box h3 { color: #e8eef7; }
+    .modal-input { background: #0a1020 !important; color: #e8eef7 !important; border-color: #33456b !important; }
+
+    /* ============================================================
        宇宙背景：本页启用 dyson-bg.js 的动态宇宙（全站默认隐藏）
        戴森球 + 冷色星云 + 星空 + 粒子，约 63s 自转
        页面内容置于其上；地图画布半透明以透出背景
