@@ -202,7 +202,11 @@
     },
     async changePassword(username, oldPw, newPw) {
       if (!newPw || newPw.length < 6) return { code: 400, msg: '密码长度至少6位' };
-      // GoTrue：登录状态下直接更新密码（服务端校验旧密码需另行 reauth，此处省略）
+      if (!oldPw) return { code: 400, msg: '请输入当前密码' };
+      // 先用旧密码做一次登录校验（GoTrue 的 PUT /auth/v1/user 本身不校验旧密码，
+      // 不校验等于任何拿到有效 token 的人都能直接改密）。校验通过才继续。
+      const v = await this.gt('/auth/v1/token?grant_type=password', { email: encEmail(username), password: oldPw });
+      if (v.code !== 200) return { code: 400, msg: '当前密码不正确' };
       const r = await this.rest('/auth/v1/user', { method: 'PUT', body: { password: newPw } });
       if (r.code !== 200) return { code: 400, msg: '密码修改失败: ' + r.msg };
       // GoTrue 改密后旧 access_token 立即失效：清除本地会话，引导重新登录
