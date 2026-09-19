@@ -27,7 +27,9 @@
       cur += '/' + parts[i];
       dirs.push(cur);
     }
-    return dirs.reverse().map(function (d) {
+    // 先浅后深（根目录优先）：深目录优先会产生一串 404 噪音，
+    // 而 config.js / github-db.js 都在站点根目录。
+    return dirs.map(function (d) {
       return (d + '/' + file).replace(/\/+/g, '/');
     });
   }
