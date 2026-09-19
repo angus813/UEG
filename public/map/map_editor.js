@@ -162,12 +162,13 @@ function clampScale(newScale) {
 const MARKER_SCREEN_PX = { target: 'r', gather: 'r', mine: 'half', caution: 'half', focus: 'half', pin: 'half' };
 function markerScreenHalf(type, shape) {
   const k = Math.min(shape.w || 100, shape.h || 100) / 100;
+  const sz = Math.max(0.1, shape.iconSize || 1);   // 「图标大小」属性
   switch (type) {
-    case 'target': return 46 * k;                      // 与 drawTarget 的 r 一致（半径）
-    case 'gather': return 20 * Math.max(0.1, k);       // 与 drawGather 的 radius 一致
-    case 'mine': return 15;                            // pixelSize 30 的一半
-    case 'caution': case 'focus': return 20;           // pixelOuter
-    case 'pin': return 15;                             // pixelSize
+    case 'target': return 46 * k * sz;
+    case 'gather': return 20 * Math.max(0.1, k) * sz;
+    case 'mine': return 15 * sz;
+    case 'caution': case 'focus': return 20 * sz;
+    case 'pin': return 15 * sz;
     default: return null;
   }
 }
@@ -217,6 +218,13 @@ function applyBoundsToShape(shape, minX, minY, maxX, maxY) {
     const newCx = (minX + maxX) / 2, newCy = (minY + maxY) / 2;
     shape.x = (shape.x || 0) + (newCx - curCx);
     shape.y = (shape.y || 0) + (newCy - curCy);
+    // 拖拽边角 → 按比例调整「图标大小」（不写 w/h，保持尺寸语义清晰）
+    const curHalf = Math.max(1e-6, (cur.maxX - cur.minX) / 2);
+    const newHalf = Math.max((maxX - minX) / 2, (maxY - minY) / 2);
+    const factor = newHalf / curHalf;
+    if (isFinite(factor) && factor > 0) {
+      shape.iconSize = Math.max(0.2, Math.min(6, (shape.iconSize || 1) * factor));
+    }
     return;
   }
   // freehand：整体平移 points 数组（不缩放点集）
@@ -305,6 +313,38 @@ const ShapeGenerator = {
       case 'star': drawStar(p, cx, cy, Math.min(w,h)/2, Math.min(w,h)/4, 5); break;
       case 'cross': drawCross(p, x, y, w, h); break;
       case 'plus': drawPlus(p, cx, cy, w/2, h/2); break;
+      case 'octagon': drawOctagonPath(p, cx, cy, Math.min(w, h) / 2); break;
+      case 'star6': drawStarNPath(p, cx, cy, Math.min(w, h) / 2, Math.min(w, h) / 4.6, 6); break;
+      case 'star8': drawStarNPath(p, cx, cy, Math.min(w, h) / 2, Math.min(w, h) / 4.2, 8); break;
+      case 'star12': drawStarNPath(p, cx, cy, Math.min(w, h) / 2, Math.min(w, h) / 3.6, 12); break;
+      case 'heart': drawHeartPath(p, x, y, w, h); break;
+      case 'moon': drawMoonPath(p, x, y, w, h); break;
+      case 'lightning': drawLightningPath(p, x, y, w, h); break;
+      case 'sun': drawSunPath(p, cx, cy, Math.min(w, h) / 2); break;
+      case 'cloud': drawCloudPath(p, x, y, w, h); break;
+      case 'smiley': drawSmileyPath(p, cx, cy, Math.min(w, h) / 2); break;
+      case 'cylinder': drawCylinderPath(p, x, y, w, h); break;
+      case 'cube': drawCubePath(p, x, y, w, h); break;
+      case 'donut': drawDonutPath(p, cx, cy, Math.min(w, h) / 2, Math.min(w, h) / 4); break;
+      case 'chevron': drawChevronPath(p, x, y, w, h); break;
+      case 'arrowR': case 'arrowL': case 'arrowU': case 'arrowD': case 'arrowLR': case 'arrowUD': case 'arrow4':
+        drawBlockArrowPath(p, x, y, w, h, { arrowR: 'R', arrowL: 'L', arrowU: 'U', arrowD: 'D', arrowLR: 'LR', arrowUD: 'UD', arrow4: '4' }[type]); break;
+      case 'arrowBent': drawBentArrowPath(p, x, y, w, h); break;
+      case 'minus': drawMinusPath(p, x, y, w, h); break;
+      case 'multiply': drawMultiplyPath(p, x, y, w, h); break;
+      case 'divide': drawDividePath(p, x, y, w, h); break;
+      case 'equal': drawEqualPath(p, x, y, w, h); break;
+      case 'explosion': drawExplosionPath(p, cx, cy, Math.min(w, h) / 2); break;
+      case 'banner': drawBannerPath(p, x, y, w, h); break;
+      case 'calloutRect': drawCalloutPath(p, x, y, w, h, 'rect'); break;
+      case 'calloutRound': drawCalloutPath(p, x, y, w, h, 'round'); break;
+      case 'calloutEllipse': drawCalloutPath(p, x, y, w, h, 'ellipse'); break;
+      case 'calloutCloud': drawCalloutPath(p, x, y, w, h, 'cloud'); break;
+      case 'flowProcess': p.rect(x, y, w, h); break;
+      case 'flowDecision': drawDiamond(p, x, y, w, h); break;
+      case 'flowData': drawParallelogram(p, x, y, w, h); break;
+      case 'flowTerminator': drawFlowTerminatorPath(p, x, y, w, h); break;
+      case 'flowDocument': drawFlowDocumentPath(p, x, y, w, h); break;
       case 'freehand': if (shape.points && shape.points.length) { p.moveTo(shape.points[0].x, shape.points[0].y); shape.points.forEach(pt => p.lineTo(pt.x, pt.y)); } break;
       default: p.rect(x, y, w, h);
     }
@@ -313,6 +353,229 @@ const ShapeGenerator = {
 };
 
 // ---------- 辅助绘图函数 ----------
+/* 公式形状：用旋转矩形/path 构造，避免依赖描边宽度 */
+function drawMultiplyPath(p, x, y, w, h) {
+  const t = Math.min(w, h) * 0.18, cx = x + w / 2, cy = y + h / 2;
+  const mk = function (ang) {
+    const d = Math.sqrt(w * w + h * h) / 2;
+    const dx = Math.cos(ang) * d, dy = Math.sin(ang) * d;
+    const nx = -Math.sin(ang) * t / 2, ny = Math.cos(ang) * t / 2;
+    return [[cx - dx + nx, cy - dy + ny], [cx + dx + nx, cy + dy + ny], [cx + dx - nx, cy + dy - ny], [cx - dx - nx, cy - dy - ny]];
+  };
+  [Math.atan2(h, w), -Math.atan2(h, w)].forEach(function (ang) {
+    const b = mk(ang);
+    p.moveTo(b[0][0], b[0][1]);
+    for (let i = 1; i < b.length; i++) p.lineTo(b[i][0], b[i][1]);
+    p.closePath();
+  });
+}
+function drawMinusPath(p, x, y, w, h) {
+  const t = Math.min(w, h) * 0.18;
+  p.rect(x, y + h / 2 - t / 2, w, t);
+}
+function drawEqualPath(p, x, y, w, h) {
+  const t = Math.min(w, h) * 0.14, gap = t * 1.6;
+  p.rect(x, y + h / 2 - gap / 2 - t, w, t);
+  p.rect(x, y + h / 2 + gap / 2, w, t);
+}
+function drawDividePath(p, x, y, w, h) {
+  const r = Math.min(w, h) * 0.11, t = Math.min(w, h) * 0.14;
+  p.rect(x, y + h / 2 - t / 2, w, t);
+  p.moveTo(x + w / 2 + r, y + h * 0.18); p.arc(x + w / 2, y + h * 0.18, r, 0, Math.PI * 2);
+  p.moveTo(x + w / 2 + r, y + h * 0.82); p.arc(x + w / 2, y + h * 0.82, r, 0, Math.PI * 2);
+}
+
+// ===================== WPS 风格扩充形状（路径生成） =====================
+// 全部为 Path2D 子路径，供 ShapeGenerator.getPath() 与工具栏图标共用
+function drawOctagonPath(p, cx, cy, r) { drawRegularPolygon(p, cx, cy, r, 8); }
+function drawStarNPath(p, cx, cy, outerR, innerR, points) {
+  let ang = -Math.PI / 2;
+  const step = Math.PI / points;
+  p.moveTo(cx + outerR * Math.cos(ang), cy + outerR * Math.sin(ang));
+  for (let i = 1; i < points * 2; i++) {
+    const rr = (i % 2) ? innerR : outerR;
+    ang += step;
+    p.lineTo(cx + rr * Math.cos(ang), cy + rr * Math.sin(ang));
+  }
+  p.closePath();
+}
+function drawHeartPath(p, x, y, w, h) {
+  const cx = x + w / 2;
+  p.moveTo(cx, y + h * 0.98);
+  p.bezierCurveTo(x - w * 0.22, y + h * 0.52, x + w * 0.12, y - h * 0.12, cx, y + h * 0.3);
+  p.bezierCurveTo(x + w * 0.88, y - h * 0.12, x + w * 1.22, y + h * 0.52, cx, y + h * 0.98);
+  p.closePath();
+}
+function drawMoonPath(p, x, y, w, h) {
+  p.moveTo(x + w * 0.92, y + h * 0.04);
+  p.bezierCurveTo(x + w * 0.06, y + h * 0.16, x + w * 0.06, y + h * 0.84, x + w * 0.92, y + h * 0.96);
+  p.bezierCurveTo(x + w * 0.46, y + h * 0.78, x + w * 0.46, y + h * 0.22, x + w * 0.92, y + h * 0.04);
+  p.closePath();
+}
+function drawLightningPath(p, x, y, w, h) {
+  p.moveTo(x + w * 0.56, y);
+  p.lineTo(x + w * 0.14, y + h * 0.56);
+  p.lineTo(x + w * 0.44, y + h * 0.56);
+  p.lineTo(x + w * 0.32, y + h);
+  p.lineTo(x + w * 0.88, y + h * 0.4);
+  p.lineTo(x + w * 0.56, y + h * 0.4);
+  p.lineTo(x + w * 0.82, y);
+  p.closePath();
+}
+function drawSunPath(p, cx, cy, r) {
+  const inner = r * 0.62;
+  for (let i = 0; i < 8; i++) {
+    const a0 = i * Math.PI / 4 - Math.PI / 16, a1 = i * Math.PI / 4 + Math.PI / 16;
+    if (i === 0) p.moveTo(cx + r * Math.cos(a0), cy + r * Math.sin(a0));
+    else p.lineTo(cx + r * Math.cos(a0), cy + r * Math.sin(a0));
+    p.lineTo(cx + inner * Math.cos(a1), cy + inner * Math.sin(a1));
+  }
+  p.closePath();
+}
+function drawCloudPath(p, x, y, w, h) {
+  const cy = y + h * 0.55;
+  p.moveTo(x + w * 0.2, cy + h * 0.28);
+  p.bezierCurveTo(x - w * 0.06, cy + h * 0.28, x - w * 0.02, cy - h * 0.22, x + w * 0.22, cy - h * 0.16);
+  p.bezierCurveTo(x + w * 0.24, cy - h * 0.5, x + w * 0.62, cy - h * 0.5, x + w * 0.62, cy - h * 0.16);
+  p.bezierCurveTo(x + w * 0.98, cy - h * 0.24, x + w * 1.04, cy + h * 0.28, x + w * 0.8, cy + h * 0.28);
+  p.closePath();
+}
+function drawSmileyPath(p, cx, cy, r) {
+  p.moveTo(cx + r, cy);
+  p.arc(cx, cy, r, 0, Math.PI * 2);
+  const er = r * 0.13;
+  p.moveTo(cx - r * 0.34 + er, cy - r * 0.28);
+  p.arc(cx - r * 0.34, cy - r * 0.28, er, 0, Math.PI * 2);
+  p.moveTo(cx + r * 0.34 + er, cy - r * 0.28);
+  p.arc(cx + r * 0.34, cy - r * 0.28, er, 0, Math.PI * 2);
+  p.moveTo(cx - r * 0.5, cy + r * 0.22);
+  p.quadraticCurveTo(cx, cy + r * 0.78, cx + r * 0.5, cy + r * 0.22);
+}
+function drawCylinderPath(p, x, y, w, h) {
+  const ry = Math.min(h * 0.16, w * 0.24);
+  p.moveTo(x, y + ry);
+  p.ellipse(x + w / 2, y + ry, w / 2, ry, 0, Math.PI, 0, true);
+  p.lineTo(x + w, y + h - ry);
+  p.ellipse(x + w / 2, y + h - ry, w / 2, ry, 0, 0, Math.PI, false);
+  p.closePath();
+}
+function drawCubePath(p, x, y, w, h) {
+  const dx = w * 0.26, dy = h * 0.26;
+  p.moveTo(x, y + dy); p.lineTo(x + w - dx, y + dy); p.lineTo(x + w, y); p.lineTo(x + dx, y); p.closePath();
+  p.moveTo(x, y + dy); p.lineTo(x, y + h); p.lineTo(x + w - dx, y + h); p.lineTo(x + w - dx, y + dy); p.closePath();
+  p.moveTo(x + w - dx, y + dy); p.lineTo(x + w, y); p.lineTo(x + w, y + h - dy); p.lineTo(x + w - dx, y + h); p.closePath();
+}
+function drawDonutPath(p, cx, cy, outerR, innerR) {
+  p.moveTo(cx + outerR, cy);
+  p.arc(cx, cy, outerR, 0, Math.PI * 2);
+  p.moveTo(cx + innerR, cy);
+  p.arc(cx, cy, innerR, 0, Math.PI * 2, true);
+}
+function drawChevronPath(p, x, y, w, h) {
+  const k = w * 0.25;
+  p.moveTo(x, y); p.lineTo(x + w - k, y); p.lineTo(x + w, y + h / 2);
+  p.lineTo(x + w - k, y + h); p.lineTo(x, y + h); p.lineTo(x + k, y + h / 2); p.closePath();
+}
+function drawBlockArrowPath(p, x, y, w, h, dir) {
+  const t = 0.42, cy = y + h / 2, cx = x + w / 2;
+  if (dir === 'R' || dir === 'L') {
+    const hw = w * 0.42, bh = h * t / 2;
+    const x0 = dir === 'R' ? x : x + w, s = dir === 'R' ? 1 : -1;
+    p.moveTo(x0, cy - bh);
+    p.lineTo(x0 + s * (w - hw), cy - bh); p.lineTo(x0 + s * (w - hw), y);
+    p.lineTo(x0 + s * w, cy); p.lineTo(x0 + s * (w - hw), y + h);
+    p.lineTo(x0 + s * (w - hw), cy + bh); p.lineTo(x0, cy + bh);
+    p.closePath();
+  } else if (dir === 'U' || dir === 'D') {
+    const hh = h * 0.42, bw = w * t / 2;
+    const y0 = dir === 'D' ? y : y + h, s = dir === 'D' ? 1 : -1;
+    p.moveTo(cx - bw, y0);
+    p.lineTo(cx - bw, y0 + s * (h - hh)); p.lineTo(x, y0 + s * (h - hh));
+    p.lineTo(cx, y0 + s * h); p.lineTo(x + w, y0 + s * (h - hh));
+    p.lineTo(cx + bw, y0 + s * (h - hh)); p.lineTo(cx + bw, y0);
+    p.closePath();
+  } else if (dir === 'LR') {
+    const aw = w * 0.3, bh = h * t / 2;
+    p.moveTo(x, cy); p.lineTo(x + aw, y); p.lineTo(x + aw, cy - bh);
+    p.lineTo(x + w - aw, cy - bh); p.lineTo(x + w - aw, y); p.lineTo(x + w, cy);
+    p.lineTo(x + w - aw, y + h); p.lineTo(x + w - aw, cy + bh);
+    p.lineTo(x + aw, cy + bh); p.lineTo(x + aw, y + h); p.closePath();
+  } else if (dir === 'UD') {
+    const ah = h * 0.3, bw = w * t / 2;
+    p.moveTo(cx, y); p.lineTo(x + w, y + ah); p.lineTo(cx + bw, y + ah);
+    p.lineTo(cx + bw, y + h - ah); p.lineTo(x + w, y + h - ah); p.lineTo(cx, y + h);
+    p.lineTo(x, y + h - ah); p.lineTo(cx - bw, y + h - ah);
+    p.lineTo(cx - bw, y + ah); p.lineTo(x, y + ah); p.closePath();
+  } else {
+    const aw = w * 0.3, ah = h * 0.3, bw = w * t / 2, bh = h * t / 2;
+    p.moveTo(cx - bw, y + ah); p.lineTo(cx - aw, y + ah); p.lineTo(cx - aw, y);
+    p.lineTo(cx, y + ah * 0.35); p.lineTo(cx + aw, y); p.lineTo(cx + aw, y + ah);
+    p.lineTo(cx + bw, y + ah); p.lineTo(cx + bw, cy - bh); p.lineTo(x + w - aw, cy - bh);
+    p.lineTo(x + w - aw, cy - ah); p.lineTo(x + w, cy - ah); p.lineTo(x + w - aw * 0.35, cy);
+    p.lineTo(x + w, cy + ah); p.lineTo(x + w - aw, cy + ah); p.lineTo(x + w - aw, cy + bh);
+    p.lineTo(cx + bw, cy + bh); p.lineTo(cx + bw, y + h - ah); p.lineTo(cx + aw, y + h - ah);
+    p.lineTo(cx + aw, y + h); p.lineTo(cx, y + h - ah * 0.35); p.lineTo(cx - aw, y + h);
+    p.lineTo(cx - aw, y + h - ah); p.lineTo(cx - bw, y + h - ah); p.closePath();
+  }
+}
+function drawBentArrowPath(p, x, y, w, h) {
+  const t = Math.min(w, h) * 0.24;
+  const r = Math.min(w, h) * 0.46;
+  const cx = x + r, cy = y + h - r;
+  p.moveTo(x, y + h);
+  p.lineTo(x, y + cy);
+  p.arc(cx, cy, r, Math.PI, Math.PI * 1.5, false);
+  p.lineTo(cx + r + t * 1.5, y);
+  p.lineTo(cx + r + t * 1.5, y + t * 1.5);
+  p.lineTo(cx + r, y + t * 1.5);
+  p.lineTo(cx + r, y + t * 2.5);
+  p.arc(cx, cy, r - t * 2.5, Math.PI * 1.5, Math.PI, true);
+  p.lineTo(x + t * 2.5, y + h - t * 2.5);
+  p.lineTo(x + t * 2.5, y + h);
+  p.closePath();
+}
+function drawExplosionPath(p, cx, cy, r) {
+  const n = 12, inner = r * 0.62;
+  for (let i = 0; i < n * 2; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / n;
+    const rr = (i % 2) ? inner : r;
+    if (i === 0) p.moveTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a));
+    else p.lineTo(cx + rr * Math.cos(a), cy + rr * Math.sin(a));
+  }
+  p.closePath();
+}
+function drawBannerPath(p, x, y, w, h) {
+  const k = h * 0.22;
+  p.moveTo(x, y); p.lineTo(x + w, y); p.lineTo(x + w, y + h - k);
+  p.lineTo(x + w * 0.75, y + h - k * 1.6); p.lineTo(x + w * 0.5, y + h - k);
+  p.lineTo(x + w * 0.25, y + h - k * 1.6); p.lineTo(x, y + h - k); p.closePath();
+}
+function drawCalloutPath(p, x, y, w, h, kind) {
+  const bh = h * 0.78;
+  if (kind === 'ellipse') { p.moveTo(x + w, y + bh / 2); p.ellipse(x + w / 2, y + bh / 2, w / 2, bh / 2, 0, 0, Math.PI * 2); }
+  else if (kind === 'cloud') drawCloudPath(p, x, y, w, bh);
+  else if (kind === 'round') drawRoundRect(p, x, y, w, bh, Math.min(w, bh) * 0.18);
+  else p.rect(x, y, w, bh);
+  p.moveTo(x + w * 0.26, y + bh);
+  p.lineTo(x + w * 0.34, y + h);
+  p.lineTo(x + w * 0.46, y + bh);
+  p.closePath();
+}
+function drawFlowDocumentPath(p, x, y, w, h) {
+  const wave = h * 0.16;
+  p.moveTo(x, y); p.lineTo(x + w, y); p.lineTo(x + w, y + h - wave);
+  p.quadraticCurveTo(x + w * 0.75, y + h - wave * 2.1, x + w * 0.5, y + h - wave);
+  p.quadraticCurveTo(x + w * 0.25, y + h + wave * 0.1, x, y + h - wave);
+  p.closePath();
+}
+function drawFlowTerminatorPath(p, x, y, w, h) {
+  p.moveTo(x + h / 2, y);
+  p.arc(x + h / 2, y + h / 2, h / 2, -Math.PI / 2, Math.PI / 2, false);
+  p.lineTo(x + w - h / 2, y + h);
+  p.arc(x + w - h / 2, y + h / 2, h / 2, Math.PI / 2, -Math.PI / 2, false);
+  p.closePath();
+}
+
 function drawArrowHead(p, x1, y1, x2, y2, withHead) {
   p.moveTo(x1, y1); p.lineTo(x2, y2);
   if (!withHead) return;
@@ -461,9 +724,10 @@ function drawDefenseLine(ctx, shape) {
   const cy = y + h/2;
   // 尺寸统一按图形框的世界尺寸换算（此前的 x/scale 会让图形不随地图缩放，
   // 与选中框/包围盒脱节，表现为缩放时忽大忽小）
-  const lineWidth = Math.max(2, (shape.strokeWidth || 2) / scale);
-  const blockW = Math.max(4, 10 / scale);
-  const blockH = Math.max(4, 12 / scale);
+  const sz = Math.max(0.1, shape.iconSize || 1);
+  const lineWidth = Math.max(2, (shape.strokeWidth || 2) * sz / scale);
+  const blockW = Math.max(4, 10 * sz / scale);
+  const blockH = Math.max(4, 12 * sz / scale);
   const count = 8;
   const step = w / (count - 1);
   ctx.save();
@@ -487,13 +751,13 @@ function drawDefenseLine(ctx, shape) {
 function drawTarget(ctx, shape) {
   const { x, y, w, h, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const r = 46 * k / scale;   // 固定屏幕像素（默认 46px），拉大图形框可按比例放大
-  // 目标：整体为固定屏幕像素的图标；r 此前用世界单位 min(w,h)/2-4，
-  // 与三角/圆点（屏幕像素）基准不一致，缩放时比例漂移。现统一。
+  // 目标：整体为固定屏幕像素的图标（随「图标大小」缩放）
   const k = Math.min(w, h) / 100;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
-  const triSize = Math.max(4, 10 / scale);
-  const dotSize = Math.max(2, 4 / scale);
+  const sz = Math.max(0.1, shape.iconSize || 1);
+  const r = 46 * k * sz / scale;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) * sz / scale);
+  const triSize = Math.max(4, 10 * sz / scale);
+  const dotSize = Math.max(2, 4 * sz / scale);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.strokeStyle = strokeColor || '#ffffff';
@@ -540,10 +804,11 @@ function drawGather(ctx, shape) {
   const cx = x + w/2, cy = y + h/2;
 
   const sizeFactor = Math.max(0.1, Math.min(w, h) / 100);
-  const radius = 20 * sizeFactor / scale;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) * sizeFactor / scale);
-  const headSize = Math.max(3, 6 * sizeFactor / scale);
-  const dotSize = Math.max(2, 4 * sizeFactor / scale);
+  const sz = Math.max(0.1, shape.iconSize || 1);
+  const radius = 20 * sizeFactor * sz / scale;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) * sizeFactor * sz / scale);
+  const headSize = Math.max(3, 6 * sizeFactor * sz / scale);
+  const dotSize = Math.max(2, 4 * sizeFactor * sz / scale);
 
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
@@ -593,8 +858,9 @@ function drawGather(ctx, shape) {
 function drawMine(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const pixelSize = 30 / scale;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  const sz = Math.max(0.1, shape.iconSize || 1);
+  const pixelSize = 30 * sz / scale;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) * sz / scale);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.strokeStyle = strokeColor || '#ffffff';
@@ -625,9 +891,10 @@ function drawMine(ctx, shape) {
 function drawCaution(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const pixelOuter = 20 / scale;
+  const sz = Math.max(0.1, shape.iconSize || 1);
+  const pixelOuter = 20 * sz / scale;
   const pixelInner = pixelOuter * 0.7;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) * sz / scale);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.fillStyle = fillColor || '#ff4444';
@@ -655,9 +922,10 @@ function drawCaution(ctx, shape) {
 function drawFocus(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const pixelOuter = 20 / scale;
+  const sz = Math.max(0.1, shape.iconSize || 1);
+  const pixelOuter = 20 * sz / scale;
   const pixelInner = pixelOuter * 0.7;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) * sz / scale);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.fillStyle = fillColor || '#ffaa00';
@@ -687,8 +955,9 @@ function drawFocus(ctx, shape) {
 function drawPin(ctx, shape) {
   const { x, y, w, h, fillColor, strokeColor, opacity } = shape;
   const cx = x + w/2, cy = y + h/2;
-  const pixelSize = 15 / scale;
-  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) / scale);
+  const sz = Math.max(0.1, shape.iconSize || 1);
+  const pixelSize = 15 * sz / scale;
+  const lineWidth = Math.max(1.5, (shape.strokeWidth || 2) * sz / scale);
   ctx.save();
   ctx.globalAlpha = opacity !== undefined ? opacity : 1;
   ctx.fillStyle = fillColor || '#66dd88';
@@ -716,17 +985,43 @@ function canDeleteShape(shape) {
 // ---------- 形状预设（根据地图类型动态生成） ----------
 function getShapePresets() {
   const base = [
-    { category: '矩形', shapes: [{ type: 'rect', name: '矩形' }, { type: 'roundRect', name: '圆角矩形' }] },
-    { category: '基本形状', shapes: [
-      { type: 'ellipse', name: '椭圆' }, { type: 'triangle', name: '等腰三角' }, { type: 'rightTriangle', name: '直角三角' },
-      { type: 'diamond', name: '菱形' }, { type: 'parallelogram', name: '平行四边形' }, { type: 'trapezoid', name: '梯形' },
-      { type: 'pentagon', name: '正五边形' }, { type: 'hexagon', name: '六边形' }, { type: 'star', name: '星形' },
-      { type: 'cross', name: '十字形' }, { type: 'plus', name: '加号' },
-      { type: 'arc', name: '空心弧' },
-      { type: 'text', name: '文本框' }
+    { category: '线条', shapes: [
+      { type: 'line', name: '直线' }, { type: 'arrow', name: '箭头' }
     ]},
-    { category: '箭头', shapes: [
-      { type: 'arrow', name: '箭头' }
+    { category: '矩形', shapes: [
+      { type: 'rect', name: '矩形' }, { type: 'roundRect', name: '圆角矩形' }
+    ]},
+    { category: '基本形状', shapes: [
+      { type: 'ellipse', name: '椭圆' }, { type: 'triangle', name: '等腰三角形' }, { type: 'rightTriangle', name: '直角三角形' },
+      { type: 'diamond', name: '菱形' }, { type: 'parallelogram', name: '平行四边形' }, { type: 'trapezoid', name: '梯形' },
+      { type: 'pentagon', name: '正五边形' }, { type: 'hexagon', name: '六边形' }, { type: 'octagon', name: '八边形' },
+      { type: 'cross', name: '十字形' }, { type: 'chevron', name: 'V 形' },
+      { type: 'cylinder', name: '圆柱形' }, { type: 'cube', name: '立方体' }, { type: 'donut', name: '圆环' },
+      { type: 'heart', name: '心形' }, { type: 'cloud', name: '云形' }, { type: 'smiley', name: '笑脸' },
+      { type: 'moon', name: '月牙' }, { type: 'lightning', name: '闪电' }, { type: 'sun', name: '太阳' },
+      { type: 'arc', name: '空心弧' }, { type: 'text', name: '文本框' }
+    ]},
+    { category: '箭头总汇', shapes: [
+      { type: 'arrowR', name: '右箭头' }, { type: 'arrowL', name: '左箭头' },
+      { type: 'arrowU', name: '上箭头' }, { type: 'arrowD', name: '下箭头' },
+      { type: 'arrowLR', name: '左右箭头' }, { type: 'arrowUD', name: '上下箭头' },
+      { type: 'arrow4', name: '四向箭头' }, { type: 'arrowBent', name: '弯曲箭头' }
+    ]},
+    { category: '公式形状', shapes: [
+      { type: 'plus', name: '加号' }, { type: 'minus', name: '减号' }, { type: 'multiply', name: '乘号' },
+      { type: 'divide', name: '除号' }, { type: 'equal', name: '等号' }
+    ]},
+    { category: '星与旗帜', shapes: [
+      { type: 'star', name: '五角星' }, { type: 'star6', name: '六角星' }, { type: 'star8', name: '八角星' },
+      { type: 'star12', name: '十二角星' }, { type: 'explosion', name: '爆炸形' }, { type: 'banner', name: '旗帜' }
+    ]},
+    { category: '标注', shapes: [
+      { type: 'calloutRect', name: '矩形标注' }, { type: 'calloutRound', name: '圆角标注' },
+      { type: 'calloutEllipse', name: '椭圆标注' }, { type: 'calloutCloud', name: '云形标注' }
+    ]},
+    { category: '流程图', shapes: [
+      { type: 'flowProcess', name: '过程' }, { type: 'flowDecision', name: '决策' }, { type: 'flowData', name: '数据' },
+      { type: 'flowTerminator', name: '终止符' }, { type: 'flowDocument', name: '文档' }
     ]}
   ];
   if (isGalaxyMode) {
@@ -775,7 +1070,9 @@ function createShapeButtons() {
       btn.addEventListener('click', () => {
         const center = toWorld(canvas.width/2, canvas.height/2);
         let newShape;
-        if (s.type === 'arrow') {
+        if (s.type === 'line') {
+          newShape = createShape('line', 0, 0, 0, 0, { x1: center.x - 60, y1: center.y, x2: center.x + 60, y2: center.y, strokeColor: '#ffffff', strokeWidth: 2 });
+        } else if (s.type === 'arrow') {
           newShape = createShape('arrow', 0, 0, 0, 0, { x1: center.x-50, y1: center.y-50, x2: center.x+50, y2: center.y+50 });
         } else if (s.type === 'text') {
           newShape = createShape('text', center.x-80, center.y-25, 160, 50, {
@@ -800,6 +1097,24 @@ function createShapeButtons() {
 
 // ---------- 绘制工具栏图标（固定32x32，无需调整） ----------
 function drawShapeIcon(ictx, type, x, y, w, h) {
+  /* 通用形状统一走 ShapeGenerator 生成路径 —— 新增形状只需实现一次路径，
+     图标、画布绘制、命中检测三处自动一致 */
+  const PATH_ICON_TYPES = ['rect','roundRect','ellipse','triangle','rightTriangle','diamond','parallelogram',
+    'trapezoid','pentagon','hexagon','octagon','star','star6','star8','star12','cross','plus','minus',
+    'multiply','divide','equal','heart','moon','lightning','sun','cloud','smiley','cylinder','cube','donut',
+    'chevron','arrowR','arrowL','arrowU','arrowD','arrowLR','arrowUD','arrow4','arrowBent','explosion','banner',
+    'calloutRect','calloutRound','calloutEllipse','calloutCloud',
+    'flowProcess','flowDecision','flowData','flowTerminator','flowDocument'];
+  if (PATH_ICON_TYPES.indexOf(type) >= 0) {
+    try {
+      const path = ShapeGenerator.getPath({ type, x, y, w, h, customProps: {} });
+      ictx.save();
+      ictx.fillStyle = '#00c8ff'; ictx.strokeStyle = '#ffffff'; ictx.lineWidth = 1.2;
+      ictx.fill(path); ictx.stroke(path);
+      ictx.restore();
+      return;
+    } catch (e) { /* 回退到下方专用绘制 */ }
+  }
   const shape = { type, x, y, w, h };
   if (type === 'arrow') {
     shape.x1 = x; shape.y1 = y; shape.x2 = x+w; shape.y2 = y+h;
@@ -1840,6 +2155,14 @@ function loadShapeProperties(shape) {
   document.getElementById('strokeColor').value = shape.strokeColor || '#ffffff';
   document.getElementById('strokeWidth').value = shape.strokeWidth || 2;
   document.getElementById('opacity').value = shape.opacity !== undefined ? shape.opacity : 1;
+  // 「图标大小」：仅标记类有效（屏幕固定像素的图标）
+  const iconWrap = document.getElementById('iconSizeWrap');
+  const isMarkerShape = markerScreenHalf(shape.type, shape) !== null;
+  if (iconWrap) iconWrap.style.display = isMarkerShape ? 'block' : 'none';
+  const iconEl = document.getElementById('iconSize');
+  if (iconEl) iconEl.value = shape.iconSize || 1;
+  const iconVal = document.getElementById('iconSizeVal');
+  if (iconVal) iconVal.textContent = (shape.iconSize || 1).toFixed(2) + '×';
   const textProps = document.getElementById('textProps');
   if (shape.type === 'text' || shape.type === 'verticalText') {
     textProps.style.display = 'block';
@@ -1855,13 +2178,29 @@ function loadShapeProperties(shape) {
     remarkInput.disabled = !editable;
   }
 
-  const inputs = ['fillColor', 'fillType', 'strokeColor', 'strokeWidth', 'opacity', 'textContent', 'fontSize'];
+  const inputs = ['fillColor', 'fillType', 'strokeColor', 'strokeWidth', 'opacity', 'textContent', 'fontSize', 'iconSize'];
   inputs.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.disabled = !editable;
   });
   document.getElementById('deleteShapeBtn').style.display = editable ? 'block' : 'none';
 }
+
+// ---------- 「图标大小」滑块 ----------
+(function () {
+  const el = document.getElementById('iconSize');
+  if (!el) return;
+  const apply = function () {
+    const s = shapes[selectedShapeIndex];
+    if (!s) return;
+    s.iconSize = Math.max(0.2, Math.min(6, parseFloat(el.value) || 1));
+    const v = document.getElementById('iconSizeVal');
+    if (v) v.textContent = s.iconSize.toFixed(2) + '×';
+    saveState(); redraw();
+  };
+  el.addEventListener('input', apply);
+  el.addEventListener('change', apply);
+})();
 
 // ---------- 滚轮缩放 ----------
 container.addEventListener('wheel', e => {
