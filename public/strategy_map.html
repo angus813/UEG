@@ -370,7 +370,6 @@
       .map-card { padding: 15px; }
     }
   </style>
-<script src="dyson-bg.js"></script>
   <script src="rhine-motion.js"></script>
 </head>
 <body>
@@ -629,7 +628,9 @@
         .select('id, name, type, protocol, creator, created_at');
       if (error) { alert('创建失败: ' + error.message); return false; }
       if (data && data.length > 0) {
-        allMaps.unshift(data[0]);
+        // createMap 返回的 row 不含 created_at（服务端默认值），乐观插入时补齐，
+      // 否则 renderMaps 里 new Date(undefined) → 显示 NaN-NaN-NaN
+      allMaps.unshift(Object.assign({ created_at: new Date().toISOString() }, data[0]));
         renderMaps(allMaps);
       }
       return true;
