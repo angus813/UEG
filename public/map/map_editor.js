@@ -466,6 +466,7 @@ function drawCubePath(p, x, y, w, h) {
   p.moveTo(x + w - dx, y + dy); p.lineTo(x + w, y); p.lineTo(x + w, y + h - dy); p.lineTo(x + w - dx, y + h); p.closePath();
 }
 function drawDonutPath(p, cx, cy, outerR, innerR) {
+  innerR = Math.max(0.5, Math.min(innerR, outerR - 0.5));
   p.moveTo(cx + outerR, cy);
   p.arc(cx, cy, outerR, 0, Math.PI * 2);
   p.moveTo(cx + innerR, cy);
@@ -519,8 +520,10 @@ function drawBlockArrowPath(p, x, y, w, h, dir) {
   }
 }
 function drawBentArrowPath(p, x, y, w, h) {
+  // 注意：Path2D.arc 对负半径会抛 IndexSizeError（图标 24px 时尤其容易触发），
+  // 因此所有半径都必须夹紧为正值。
   const t = Math.min(w, h) * 0.24;
-  const r = Math.min(w, h) * 0.46;
+  const r = Math.max(t * 2.6, Math.min(w, h) * 0.46);
   const cx = x + r, cy = y + h - r;
   p.moveTo(x, y + h);
   p.lineTo(x, y + cy);
@@ -529,7 +532,7 @@ function drawBentArrowPath(p, x, y, w, h) {
   p.lineTo(cx + r + t * 1.5, y + t * 1.5);
   p.lineTo(cx + r, y + t * 1.5);
   p.lineTo(cx + r, y + t * 2.5);
-  p.arc(cx, cy, r - t * 2.5, Math.PI * 1.5, Math.PI, true);
+  p.arc(cx, cy, Math.max(0.5, r - t * 2.5), Math.PI * 1.5, Math.PI, true);
   p.lineTo(x + t * 2.5, y + h - t * 2.5);
   p.lineTo(x + t * 2.5, y + h);
   p.closePath();
@@ -1065,7 +1068,9 @@ function createShapeButtons() {
       const iconCanvas = document.createElement('canvas'); iconCanvas.width=32; iconCanvas.height=32;
       const ictx = iconCanvas.getContext('2d');
       ictx.fillStyle = '#00c8ff'; ictx.strokeStyle = '#ffffff'; ictx.lineWidth = 1.5;
-      drawShapeIcon(ictx, s.type, 4,4,24,24);
+      // 单个形状图标绘制失败（如路径半径异常）不能中断整条工具栏
+      try { drawShapeIcon(ictx, s.type, 4,4,24,24); }
+      catch (err) { console.warn('[map_editor] 图标绘制失败：' + s.type, err && err.message); }
       btn.appendChild(iconCanvas);
       btn.addEventListener('click', () => {
         const center = toWorld(canvas.width/2, canvas.height/2);
