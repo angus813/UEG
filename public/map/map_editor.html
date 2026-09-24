@@ -422,14 +422,14 @@
           <label>填充颜色</label>
           <input type="color" class="color-picker" id="fillColor" value="#00c8ff">
           <label>填充类型</label>
-          <select id="fillType" style="background:#1a1e24; color:#fff; border:1px solid #3a5060; padding:4px;">
+          <select id="fillType" style="background:var(--rl-field); color:var(--rl-ink); border:1px solid var(--rl-line); padding:4px;">
             <option value="solid">纯色</option>
             <option value="linear">线性渐变</option>
             <option value="radial">径向渐变</option>
             <option value="texture">纹理</option>
           </select>
           <div id="textureUpload" style="display:none;">
-            <input type="file" id="textureFile" accept="image/*" style="color:#fff; width:100%;">
+            <input type="file" id="textureFile" accept="image/*" style="color:var(--rl-ink); width:100%;">
           </div>
           <label>轮廓颜色</label>
           <input type="color" class="color-picker" id="strokeColor" value="#ffffff">
