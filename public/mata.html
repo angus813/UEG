@@ -71,7 +71,7 @@
         <p>手机或电脑都能传。多选、拖拽都行，支持 jpg / png / webp。</p>
         <div class="drop-zone" id="dropZone">
           <div>点这里选择截图，或把图片拖进来</div>
-          <div class="mata-note" id="zoneHint">未登录也可以传，但会计到你的账号上（请先登录）</div>
+          <div class="mata-note" id="zoneHint">上传需要先登录：回主菜单点右上角「🔑 账号设置」登录后再传，截图才记在你名下。</div>
           <input type="file" id="fileInput" accept="image/*" multiple capture="environment" style="display:none">
         </div>
         <div class="preview" id="preview"></div>
@@ -107,7 +107,19 @@
       try { return new Date(t).toLocaleString('zh-CN', { hour12: false }); } catch (e) { return t; }
     }
     function currentUser() {
-      try { return JSON.parse(localStorage.getItem('ueg_current_user') || 'null'); } catch (e) { return null; }
+      var u = null;
+      try { u = JSON.parse(localStorage.getItem('ueg_current_user') || 'null'); } catch (e) {}
+      var t = null;
+      try { t = localStorage.getItem('ueg_token'); } catch (e) {}
+      if (u && u.username && t) return u;
+      if (!t) return null;
+      try {
+        var b = t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        while (b.length % 4) b += '=';
+        var p = JSON.parse(decodeURIComponent(escape(atob(b))));
+        var nm = (p.user_metadata && p.user_metadata.username) || String(p.email || '').split('@')[0];
+        return nm ? { username: nm } : null;
+      } catch (e) { return null; }
     }
 
     // ---------- 上传区 ----------
@@ -137,6 +149,7 @@
         files.push(f);
       }
       renderPreview();
+    refreshLoginState();
     }
 
     function renderPreview() {
@@ -147,7 +160,7 @@
         img.title = f.name;
         pv.appendChild(img);
       });
-      btn.disabled = files.length === 0;
+      btn.disabled = files.length === 0 || !currentUser();
       btn.textContent = files.length ? ('上传到素材库（' + files.length + ' 张）') : '上传到素材库';
     }
 
@@ -161,26 +174,49 @@
       if (!u) { setStatus('请先登录后再上传（右上角账号设置）', false); return; }
       if (!files.length) return;
       btn.disabled = true;
-      var okCount = 0, failCount = 0;
+      var okCount = 0, failCount = 0, firstErr = '';
       for (var i = 0; i < files.length; i++) {
         var f = files[i];
         setStatus('上传中 ' + (i + 1) + '/' + files.length + ' …');
         var ext = (f.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
         var path = u.username + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
         var up = await DB.upload('mata-shots', path, f, f.type);
-        if (up.code !== 200) { failCount++; continue; }
+        if (up.code !== 200) {
+          failCount++;
+          if (!firstErr) firstErr = up.msg || ('存储上传失败 HTTP ' + up.code);
+          continue;
+        }
         var ins = await DB.rest('/rest/v1/mata_shots', {
           method: 'POST',
           body: { uploader: u.username, storage_path: path, file_name: f.name, file_size: f.size },
           prefer: 'return=minimal'
         });
-        if (ins.code === 200 || ins.code === 201) okCount++; else failCount++;
+        if (ins.code === 200 || ins.code === 201) okCount++;
+        else {
+          failCount++;
+          if (!firstErr) firstErr = ins.msg || ('写入记录失败 HTTP ' + ins.code);
+        }
       }
       files = []; renderPreview();
-      setStatus('完成：成功 ' + okCount + ' 张' + (failCount ? '，失败 ' + failCount + ' 张' : '') +
+      setStatus('完成：成功 ' + okCount + ' 张' +
+                (failCount ? '，失败 ' + failCount + ' 张（' + (firstErr || '未知原因') + '）' : '') +
                 '。进入待标注池，审核采纳后计入排行榜。', failCount === 0);
+      refreshLoginState();
       loadBoard();
     });
+
+    // 登录态直接摆在提示行上，别再让人猜
+    function refreshLoginState() {
+      var hint = document.getElementById('zoneHint');
+      var u = currentUser();
+      if (u && u.username) {
+        hint.textContent = '当前登录：' + u.username + '（截图会记在你名下）';
+        btn.disabled = !files.length;
+      } else {
+        hint.textContent = '未登录：回主菜单点右上角「🔑 账号设置」登录后才能上传。';
+        btn.disabled = true;
+      }
+    }
 
     // ---------- 排行榜 ----------
     async function loadBoard() {

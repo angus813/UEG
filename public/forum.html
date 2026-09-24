@@ -97,7 +97,19 @@
       } catch (e) { return ''; }
     }
     function currentUser() {
-      try { return JSON.parse(localStorage.getItem('ueg_current_user') || 'null'); } catch (e) { return null; }
+      var u = null;
+      try { u = JSON.parse(localStorage.getItem('ueg_current_user') || 'null'); } catch (e) {}
+      var t = null;
+      try { t = localStorage.getItem('ueg_token'); } catch (e) {}
+      if (u && u.username && t) return u;
+      if (!t) return null;
+      try {
+        var b = t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        while (b.length % 4) b += '=';
+        var p = JSON.parse(decodeURIComponent(escape(atob(b))));
+        var nm = (p.user_metadata && p.user_metadata.username) || String(p.email || '').split('@')[0];
+        return nm ? { username: nm } : null;
+      } catch (e) { return null; }
     }
     function tip(msg, bad) {
       var el = document.getElementById('chatTip');
