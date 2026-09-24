@@ -97,6 +97,16 @@ create policy forum_delete_own on public.forum_messages
   for delete to authenticated
   using (author = public.current_username() or public.current_user_is_admin());
 
+-- 聊天消息撤回（软撤回）：只打 recalled_at 标记，正文/媒体引用清空，界面留「该消息已撤回」占位。
+-- 想彻底抹掉就用上面的 forum_delete_own（DELETE）；软撤回是为了不破坏别人看过的上下文。
+alter table public.forum_messages add column if not exists recalled_at timestamptz;
+
+drop policy if exists forum_recall_own on public.forum_messages;
+create policy forum_recall_own on public.forum_messages
+  for update to authenticated
+  using (author = public.current_username() or public.current_user_is_admin())
+  with check (author = public.current_username() or public.current_user_is_admin());
+
 -- ---------- 4. 公共记忆 / 知识库（MATA 端） ----------
 -- owner 存「用户名」（MATA 侧 supa.py 的 username，不带 @ueg.local）
 create table if not exists public.mata_memory (

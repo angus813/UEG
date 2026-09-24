@@ -43,6 +43,10 @@
     .emoji-bar span { cursor: pointer; font-size: 20px; padding: 2px 4px; border-radius: 6px; }
     .emoji-bar span:hover { background: var(--rl-accent-soft); }
     .tips { font-size: 12px; opacity: .6; padding: 6px 2px 0; }
+    .msg .recall { margin-left: 6px; padding: 0 5px; border: 1px solid var(--rl-line-soft); border-radius: 4px;
+      background: transparent; color: var(--rl-muted); font-size: 11px; line-height: 16px; cursor: pointer; }
+    @media (hover: hover) { .msg .recall { opacity: 0; } .msg:hover .recall { opacity: 1; } }
+    .bubble .recalled { opacity: .55; font-style: italic; }
   </style>
 </head>
 <body>
@@ -80,7 +84,8 @@
   <script>
     var EMOS = ['😀','😄','😁','😆','😉','😊','😍','🤩','😎','🤔','😏','😢','😭','😡','👍','👎','👏','🙏','💪','🎉','🔥','✨','❤️','💔','🚀','🛰️','⚔️','🛡️','🧭','📦','🎯','💎','⭐','🌟','⚡','🫡'];
     var EMO_CACHE = {};
-    var me = null, myColor = '#3a7afe', lastId = 0, timer = null;
+    var me = null, myColor = '#3a7afe', lastId = 0, timer = null, polls = 0, canRecall = true;
+    var MSG_INDEX = {};   // id → 消息行（撤回后就地重渲染，不整页重载）
 
     function esc(s) {
       return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -133,12 +138,15 @@
 
     function msgHtml(m) {
       var mine = me && m.author === me.username;
+      var recalled = !!m.recalled_at;
       var avaHtml = '<div class="ava">👤</div>';
       var cached = EMO_CACHE[m.author];
       if (cached && cached.avatar) avaHtml = '<div class="ava"><img src="' + esc(cached.avatar) + '" alt=""></div>';
 
       var inner = '';
-      if (m.kind === 'image') {
+      if (recalled) {
+        inner = '<span class="recalled">该消息已撤回</span>';
+      } else if (m.kind === 'image') {
         inner = '<img src="' + esc(mediaUrl('image', m.media_path)) + '" loading="lazy" alt="图片">';
       } else if (m.kind === 'video') {
         inner = '<video src="' + esc(mediaUrl('video', m.media_path)) + '" controls preload="metadata"></video>';
@@ -146,15 +154,17 @@
         inner = esc(m.body || '');
       }
       var colorStyle = '';
-      if (mine) {
+      if (mine && !recalled) {
         var color = myColor || '#3a7afe';
         colorStyle = 'background:' + color + ';color:' + readableInk(color) + ';';
       }
+      var recallBtn = (mine && !recalled && canRecall)
+        ? ' <button class="recall" data-recall="' + m.id + '" title="撤回这条消息">撤回</button>' : '';
       return '' +
-        '<div class="msg ' + (mine ? 'mine' : '') + '" data-id="' + m.id + '">' +
+        '<div class="msg' + (mine ? ' mine' : '') + (recalled ? ' recalled-msg' : '') + '" data-id="' + m.id + '">' +
         avaHtml +
         '<div class="stack">' +
-        '<div class="who">' + esc(m.author || '?') + ' · ' + fmt(m.created_at) + '</div>' +
+        '<div class="who">' + esc(m.author || '?') + ' · ' + fmt(m.created_at) + recallBtn + '</div>' +
         '<div class="bubble" style="' + colorStyle + '">' + inner + '</div>' +
         '</div></div>';
     }
@@ -162,15 +172,26 @@
     function appendNewest(rows) {
       var body = document.getElementById('chatBody');
       var html = '';
-      rows.forEach(function (m) { html += msgHtml(m); });
+      rows.forEach(function (m) { MSG_INDEX[m.id] = m; html += msgHtml(m); });
       body.insertAdjacentHTML('beforeend', html);
+    }
+
+    function renderOne(m) {
+      var el = document.querySelector('.msg[data-id="' + m.id + '"]');
+      if (el) el.outerHTML = msgHtml(m);
     }
 
     // ---------- 拉取 ----------
     async function loadMessages(reset) {
-      var url = '/rest/v1/forum_messages?select=id,author,kind,body,media_path,created_at&order=id.asc&limit=200';
+      var url = '/rest/v1/forum_messages?select=id,author,kind,body,media_path,created_at,recalled_at&order=id.asc&limit=200';
       if (!reset && lastId) url += '&id=gt.' + lastId;
       var r = await DB.rest(url);
+      // 数据库还没执行「撤回」那条 SQL（没有 recalled_at 列）时，按旧字段重读一次，
+      // 页面不至于挂掉，只是没有撤回按钮
+      if (r.code === 400 && String(r.msg || '').indexOf('recalled_at') >= 0) {
+        canRecall = false;
+        r = await DB.rest(url.replace(',recalled_at', ''));
+      }
       var rows = (r.code === 200 && Array.isArray(r.data)) ? r.data : [];
       var body = document.getElementById('chatBody');
       if (reset) {
@@ -182,6 +203,15 @@
         body.scrollTop = body.scrollHeight;
       }
       await loadAvatars(rows);
+    }
+
+    // 定期整表重拉：id 增量同步看不到别人的撤回，这里补一次（尽量不打断阅读位置）
+    async function refreshAll() {
+      var body = document.getElementById('chatBody');
+      var atBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 40;
+      var keep = body.scrollTop;
+      await loadMessages(true);
+      if (!atBottom) body.scrollTop = keep;
     }
 
     async function loadAvatars(rows) {
@@ -230,6 +260,31 @@
       tip('');
     }
 
+    // ---------- 撤回 ----------
+    async function recall(id) {
+      if (!me) { tip('请先登录后再操作', true); return; }
+      if (!confirm('撤回这条消息？撤回后所有人看到的是「该消息已撤回」。')) return;
+      var r = await DB.rest('/rest/v1/forum_messages?id=eq.' + id, {
+        method: 'PATCH',
+        body: { recalled_at: new Date().toISOString(), body: null, media_path: null },
+        prefer: 'return=minimal'
+      });
+      if (r.code !== 200) { tip('撤回失败：' + (r.msg || ''), true); return; }
+      var m = MSG_INDEX[id];
+      if (m) {
+        m.recalled_at = new Date().toISOString();
+        m.body = null;
+        m.media_path = null;
+        renderOne(m);
+      }
+      tip('已撤回');
+    }
+
+    document.getElementById('chatBody').addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('[data-recall]') : null;
+      if (btn) recall(parseInt(btn.getAttribute('data-recall'), 10));
+    });
+
     // ---------- 气泡颜色 ----------
     async function initColor() {
       var el = document.getElementById('bubbleColor');
@@ -275,7 +330,10 @@
       if (!me) tip('未登录：可以浏览，登录后才能发言（右上角账号设置）', true);
       await initColor();
       await loadMessages(true);
-      timer = setInterval(function () { loadMessages(false); }, 5000);
+      timer = setInterval(function () {
+        polls++;
+        if (polls % 12 === 0) refreshAll(); else loadMessages(false);
+      }, 5000);
     })();
   </script>
 </body>
