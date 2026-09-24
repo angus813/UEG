@@ -50,19 +50,32 @@
 
   var dbPromise = null;
   function ensureDb() {
-    if (window.DB && window.GITHUB_CONFIG) return Promise.resolve();
+    if (window.DB && window.GITHUB_CONFIG) return Promise.resolve(true);
     if (dbPromise) return dbPromise;
+    // 失败不抛异常，一律 resolve(false)：页面里 await window.UEG_DB_READY 只需判真假，
+    // 不会产生 unhandled rejection。
     dbPromise = loadScript(scriptCandidates('config.js'))
       .then(function (ok) {
-        if (!ok) throw new Error('无法加载 config.js（请确认站点根目录存在该文件）');
+        if (!ok) { console.error('数据层：无法加载 config.js（站点根目录应有该文件）'); return false; }
         return loadScript(scriptCandidates('github-db.js'));
       })
       .then(function (ok) {
-        if (!ok) throw new Error('无法加载 github-db.js');
-        if (!window.DB) throw new Error('github-db.js 初始化失败');
+        if (ok === false) return false;
+        if (!ok) { console.error('数据层：无法加载 github-db.js'); return false; }
+        if (!window.DB) { console.error('数据层：github-db.js 未导出 window.DB'); return false; }
+        return true;
+      })
+      .catch(function (e) {
+        console.error('数据层加载异常：' + ((e && e.message) || e));
+        return false;
       });
     return dbPromise;
   }
+
+  // 立即开始加载 config.js + github-db.js：直接使用 window.DB 的页面（mata/forum/profile/guild）
+  // 不再依赖「先调一次 supabase.from 才会去加载数据层」这种隐式时序。
+  window.ensureDB = ensureDb;
+  window.UEG_DB_READY = ensureDb();
 
   function currentUsername() {
     try {
@@ -118,7 +131,8 @@
 
   SbQuery.prototype._exec = function () {
     var self = this;
-    return ensureDb().then(function () {
+    return ensureDb().then(function (ok) {
+      if (!ok || !window.DB) return { data: null, error: { message: '数据层未加载（config.js / github-db.js 加载失败）' } };
       var DB = window.DB;
 
       // ===== 写入：创建地图 =====
@@ -209,7 +223,9 @@
 
   // ---- 暴露兼容接口 ----
   window.supabase = {
-    from: function (table) { return new SbQuery(table); }
+    from: function (table) { return new SbQuery(table); },
+    // 页面可以直接 await supabase.ready() 再使用 window.DB
+    ready: ensureDb
   };
 
   console.log('✅ supabase-client.js（兼容层）已加载：supabase 调用已映射到 GitHub 数据库');
