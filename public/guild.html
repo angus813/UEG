@@ -4,12 +4,24 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>公会 - UEG小网站</title>
-  <link rel="stylesheet" href="rhine-fonts.css" media="print" onload="this.media='all'"> <!-- MiSans（异步加载，不阻塞首屏） -->
-  <noscript><link rel="stylesheet" href="rhine-fonts.css"></noscript> <!-- MiSans webfont -->
+  <link rel="stylesheet" href="rhine-fonts.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="rhine-fonts.css"></noscript>
   <link rel="stylesheet" href="rhine.css">
-  <link rel="stylesheet" href="rhine-motion.css"> <!-- 动效层 -->
-  <!-- 视觉统一由 rhine.css 设计系统提供 -->
+  <link rel="stylesheet" href="rhine-motion.css">
   <script src="rhine-motion.js"></script>
+  <style>
+    .member-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .member-avatar { overflow: hidden; }
+    .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 8px; font-size: 11px;
+      border: 1px solid rgba(120,160,220,.45); opacity: .95; }
+    .tag.owner { border-color: #ffd76e; color: #ffd76e; }
+    .tag.official { border-color: #7de3a4; color: #7de3a4; }
+    .tag.admin { border-color: #8ab7ff; color: #8ab7ff; }
+    .member-actions { display: flex; gap: 6px; align-items: center; }
+    .mini-btn { padding: 4px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;
+      border: 1px solid rgba(120,160,220,.45); background: rgba(30,40,60,.7); color: #e7ecf5; }
+    .mini-btn.warn { border-color: rgba(255,140,140,.5); color: #ffb3b3; }
+  </style>
 </head>
 <body>
   <div class="guild-container">
@@ -24,160 +36,152 @@
             <p>查看同盟战略部署</p>
           </div>
         </a>
-        <div class="feature-card" onclick="alert('论坛即将开放')">
+        <a href="forum.html" class="feature-card" style="text-decoration:none; color:inherit;">
           <div class="feature-icon">💬</div>
           <div class="feature-text">
-            <h3>论坛</h3>
-            <p>交流战术与心得</p>
+            <h3>公会论坛</h3>
+            <p>聊天式交流 · 图片视频表情</p>
           </div>
-        </div>
-        <div class="feature-card" onclick="alert('配队攻略即将开放')">
+        </a>
+        <!-- 配队攻略：由「小游戏 → 舰船强化」迁移而来 -->
+        <a href="games/enhance.html" class="feature-card" style="text-decoration:none; color:inherit;">
           <div class="feature-icon">📋</div>
           <div class="feature-text">
-            <h3>配队攻略</h3>
-            <p>分享舰队配置方案</p>
+            <h3>配队攻略 · 舰船强化</h3>
+            <p>蓝图科技加点与舰队配置</p>
           </div>
-        </div>
+        </a>
       </div>
       <a href="../index.html" class="back-link">← 返回主菜单</a>
     </div>
 
     <!-- 右侧：成员列表 -->
     <div class="right-panel">
-      <div class="members-title">
-公会成员
-      </div>
+      <div class="members-title">公会成员</div>
       <div class="member-list" id="memberList">
         <div class="no-members">加载中...</div>
       </div>
     </div>
   </div>
 
-  <!-- 引入 Supabase 客户端 -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase-client.js"></script>
 
   <script>
-    // ==================== 工具函数 ====================
-    // 获取当前登录用户（从 localStorage，保持与 index.html 一致；数据损坏时返回 null 而非抛错）
     function getCurrentUser() {
       const cu = localStorage.getItem('ueg_current_user');
       if (!cu) return null;
       try { return JSON.parse(cu); } catch (e) { return null; }
     }
-
-    // HTML 转义（防存储型 XSS：用户名等拼接进 innerHTML / onclick 前转义）
     function esc(s) {
       return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    async function myRole() {
+      const u = getCurrentUser();
+      if (!u) return { name: '', admin: false, owner: false, official: false };
+      try {
+        const r = await DB.myProfile();
+        const p = (r && r.code === 200) ? r.data : {};
+        return { name: u.username, admin: !!p.is_admin, owner: !!p.is_owner, official: !!p.is_official };
+      } catch (e) {
+        return { name: u.username, admin: !!u.is_admin, owner: !!u.is_owner, official: !!u.is_official };
+      }
     }
 
-    // 判断当前用户是否为管理员（从 Supabase 实时查询）
-    async function isAdmin() {
-      const user = getCurrentUser();
-      if (!user) return false;
-      const { data, error } = await supabase
-        .from('users')
-        .select('is_admin')
-        .eq('username', user.username)
-        .maybeSingle();
-      if (error || !data) return false;
-      return data.is_admin === true;
+    async function setOfficial(username, on) {
+      const r = await DB.setOfficial(username, on);
+      alert(r.msg || (r.code === 200 ? '已更新' : '操作失败'));
+      if (r.code === 200) await renderMemberList();
     }
+    window.setOfficial = setOfficial;
 
-    // ==================== 删除用户 ====================
     async function deleteMember(username) {
-      if (!confirm(`⚠️ 确定要永久删除用户 "${username}" 吗？此操作不可恢复！`)) return;
-
-      const admin = await isAdmin();
-      if (!admin) {
-        alert('您没有管理员权限');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('username', username);
-
-      if (error) {
-        alert('删除失败: ' + error.message);
-        return;
-      }
-
-      // 如果被删除的是当前登录用户，则登出并跳转
-      const currentUser = getCurrentUser();
-      if (currentUser && currentUser.username === username) {
+      if (!confirm('⚠️ 确定要永久删除用户 "' + username + '" 吗？此操作不可恢复！')) return;
+      const role = await myRole();
+      if (!role.admin && !role.owner) { alert('您没有管理员权限'); return; }
+      const { error } = await supabase.from('users').delete().eq('username', username);
+      if (error) { alert('删除失败: ' + error.message); return; }
+      const cu = getCurrentUser();
+      if (cu && cu.username === username) {
         localStorage.removeItem('ueg_current_user');
         alert('你的账号已被删除，即将返回主页。');
         window.location.href = '../index.html';
         return;
       }
-
-      // 重新渲染列表
       await renderMemberList();
     }
-
-    // 暴露到全局（供 onclick 调用）
     window.deleteMember = deleteMember;
 
-    // ==================== 渲染成员列表 ====================
     async function renderMemberList() {
       const container = document.getElementById('memberList');
       container.innerHTML = '<div class="no-members">加载中...</div>';
 
-      // 从 Supabase 读取所有用户，按用户名排序
       const { data: users, error } = await supabase
         .from('users')
-        .select('username, is_admin')
+        .select('username, is_admin, is_owner, is_official, avatar_url, highest_record')
         .order('username');
 
       if (error) {
         container.innerHTML = '<div class="no-members">加载失败，请刷新重试</div>';
-        console.error('加载成员列表失败:', error);
         return;
       }
-
       if (!users || users.length === 0) {
         container.innerHTML = '<div class="no-members">暂无成员</div>';
         return;
       }
 
-      // 置顶 angus（会长），其余按用户名排序
-      const angus = users.find(u => u.username === 'angus');
-      const others = users.filter(u => u.username !== 'angus');
-      const sorted = angus ? [angus, ...others] : others;
+      const role = await myRole();
+      const canManage = role.admin || role.owner;
 
-      const admin = await isAdmin();
+      // 排序：会长 → 官员 → 管理员 → 其他人（按用户名）
+      const rank = u => (u.is_owner ? 0 : (u.is_official ? 1 : (u.is_admin ? 2 : 3)));
+      const sorted = users.slice().sort((a, b) => {
+        const d = rank(a) - rank(b);
+        if (d) return d;
+        return String(a.username).localeCompare(String(b.username), 'zh-CN');
+      });
+
       let html = '';
       sorted.forEach(user => {
-        const isLeader = user.username === 'angus';
-        const role = isLeader ? '会长' : '成员';
-        const roleClass = isLeader ? 'leader-badge' : '';
         const uName = esc(user.username);
-        html += `
-          <div class="member-item">
-            <div class="member-info">
-              <div class="member-avatar">👤</div>
-              <div>
-                <span class="member-name">${uName}</span>
-                <span class="member-role ${roleClass}">${role}</span>
-              </div>
-            </div>
-            <button class="delete-member-btn" style="display:${admin && !isLeader ? 'block' : 'none'}" onclick="deleteMember('${uName}')">注销</button>
-          </div>
-        `;
+        const isOwner = !!user.is_owner;
+        const isOfficial = !!user.is_official;
+        const isAdmin = !!user.is_admin;
+        let tags = '';
+        if (isOwner) tags += '<span class="tag owner">会长</span>';
+        if (isOfficial) tags += '<span class="tag official">官员</span>';
+        if (isAdmin && !isOwner) tags += '<span class="tag admin">管理员</span>';
+        if (!tags) tags = '<span class="tag">成员</span>';
+
+        const ava = user.avatar_url
+          ? '<img src="' + esc(user.avatar_url) + '" alt="">'
+          : '👤';
+
+        // 会长不能被注销，也不能被他人任免
+        const canToggle = canManage && !isOwner;
+        const toggleBtn = canToggle
+          ? '<button class="mini-btn" onclick="setOfficial(\'' + uName + '\',' + (isOfficial ? 'false' : 'true') + ')">'
+            + (isOfficial ? '解除官员' : '任命官员') + '</button>'
+          : '';
+        const delBtn = (canManage && !isOwner)
+          ? '<button class="mini-btn warn" onclick="deleteMember(\'' + uName + '\')">注销</button>'
+          : '';
+
+        html += '<div class="member-item">' +
+          '<div class="member-info">' +
+            '<div class="member-avatar">' + ava + '</div>' +
+            '<div><span class="member-name">' + uName + '</span>' + tags + '</div>' +
+          '</div>' +
+          '<div class="member-actions">' + toggleBtn + delBtn + '</div>' +
+        '</div>';
       });
 
       container.innerHTML = html;
     }
 
-    // ==================== 初始化 ====================
     (async function init() {
+      try { if (window.UEG_SESSION_READY) await window.UEG_SESSION_READY; } catch (e) {}
       await renderMemberList();
     })();
   </script>

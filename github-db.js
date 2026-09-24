@@ -23,6 +23,18 @@
     if (t) localStorage.setItem('ueg_token', t);
     else localStorage.removeItem('ueg_token');
   }
+  function getRefresh() {
+    return localStorage.getItem('ueg_refresh_token');
+  }
+  function setRefresh(t) {
+    if (t) localStorage.setItem('ueg_refresh_token', t);
+    else localStorage.removeItem('ueg_refresh_token');
+  }
+  function saveSession(data) {
+    if (!data) return;
+    if (data.access_token) setToken(data.access_token);
+    if (data.refresh_token) setRefresh(data.refresh_token);
+  }
   function tokenExpired(t) {
     try {
       const p = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
@@ -133,6 +145,7 @@
       }
       const token = r.data.access_token;
       setToken(token);
+      setRefresh(r.data.refresh_token);   // 免登录：保留刷新令牌
       // 读取档案（不存在则自动补建，兼容注册后未建档的情况）
       const me = await this.rest('/rest/v1/users?select=username,is_admin,highest_record&username=eq.' + enc(username));
       let profile = null;
@@ -149,7 +162,7 @@
 
     // ---- 用户 ----
     async getUsers() {
-      const r = await this.rest('/rest/v1/users?select=username,is_admin,highest_record&order=username');
+      const r = await this.rest('/rest/v1/users?select=username,is_admin,is_owner,is_official,avatar_url,bubble_color,highest_record&order=username');
       return (r.code === 200 && Array.isArray(r.data)) ? r.data : [];
     },
     async getAllUsers() {
@@ -157,10 +170,13 @@
       return { code: 200, data: users };
     },
     async getUserProfile(username) {
-      const r = await this.rest('/rest/v1/users?select=username,is_admin,highest_record&username=eq.' + enc(username));
+      const r = await this.rest('/rest/v1/users?select=*&username=eq.' + enc(username));
       if (r.code === 200 && Array.isArray(r.data) && r.data.length) {
         const u = r.data[0];
-        return { code: 200, data: { username: u.username, is_admin: !!u.is_admin, highest_record: u.highest_record || 0 } };
+        return { code: 200, data: {
+          username: u.username, is_admin: !!u.is_admin, is_owner: !!u.is_owner,
+          is_official: !!u.is_official, avatar_url: u.avatar_url || '',
+          bubble_color: u.bubble_color || '', highest_record: u.highest_record || 0 } };
       }
       return { code: 404, msg: '用户不存在' };
     },
@@ -366,6 +382,111 @@
 
     // ---- 会话 ----
     hasToken() { return !!getToken(); },
+
+    // ---- 免登录：用 refresh token 续期 ----
+    async refreshSession() {
+      const rt = getRefresh();
+      if (!rt) return { code: 401, msg: '没有刷新令牌' };
+      const r = await this.gt('/auth/v1/token?grant_type=refresh_token', { refresh_token: rt });
+      if (r.code !== 200 || !r.data || !r.data.access_token) {
+        setRefresh(null);
+        return { code: 401, msg: '会话已过期，请重新登录' };
+      }
+      saveSession(r.data);
+      return { code: 200, data: r.data };
+    },
+
+    // ---- 免登录：页面加载时恢复会话 ----
+    async restoreSession() {
+      const name = currentUsername();
+      if (!name) return { code: 401, msg: '未登录过' };
+      let t = getToken();
+      if (!t || tokenExpired(t)) {
+        const r = await this.refreshSession();
+        if (r.code !== 200) { setCurrentUser(null); return { code: 401, msg: r.msg }; }
+      }
+      const me = await this.rest('/rest/v1/users?select=*&username=eq.' + enc(name));
+      if (me.code === 200 && Array.isArray(me.data) && me.data.length) {
+        const u = me.data[0];
+        const data = {
+          username: u.username,
+          is_admin: !!u.is_admin,
+          is_official: !!u.is_official,
+          is_owner: !!u.is_owner,
+          highest_record: u.highest_record || 0,
+          avatar_url: u.avatar_url || '',
+          bubble_color: u.bubble_color || ''
+        };
+        setCurrentUser(data);
+        return { code: 200, data: data };
+      }
+      return { code: 200, data: JSON.parse(localStorage.getItem('ueg_current_user') || '{}') };
+    },
+
+    async myProfile() {
+      const name = currentUsername();
+      if (!name) return { code: 401, msg: '未登录' };
+      const r = await this.rest('/rest/v1/users?select=*&username=eq.' + enc(name));
+      if (r.code === 200 && Array.isArray(r.data) && r.data.length) return { code: 200, data: r.data[0] };
+      return { code: 404, msg: '档案不存在' };
+    },
+
+    async updateMyProfile(patch) {
+      const name = currentUsername();
+      if (!name) return { code: 401, msg: '未登录' };
+      const r = await this.rest('/rest/v1/users?username=eq.' + enc(name), {
+        method: 'PATCH', body: patch, prefer: 'return=representation'
+      });
+      if (r.code === 200) {
+        const u = JSON.parse(localStorage.getItem('ueg_current_user') || '{}');
+        Object.assign(u, patch);
+        setCurrentUser(u);
+        return { code: 200, data: patch };
+      }
+      return { code: r.code || 400, msg: r.msg };
+    },
+
+    async setOfficial(username, on) {
+      const r = await this.rest('/rest/v1/users?username=eq.' + enc(username), {
+        method: 'PATCH', body: { is_official: !!on }, prefer: 'return=representation'
+      });
+      if (r.code === 200 && Array.isArray(r.data) && r.data.length) {
+        return { code: 200, msg: on ? '已任命为官员' : '已解除官员' };
+      }
+      return { code: 403, msg: '无权限（仅会长/管理员）' };
+    },
+
+    // ---- Storage：上传到自己的目录，返回公开地址 ----
+    async upload(bucket, filePath, file, contentType) {
+      const t = getToken();
+      if (!t) return { code: 401, msg: '请先登录' };
+      const url = (SB.url || '').replace(/\/+$/, '') + '/storage/v1/object/' + bucket + '/' + filePath;
+      let res;
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            apikey: SB.publishableKey,
+            Authorization: 'Bearer ' + t,
+            'Content-Type': contentType || (file && file.type) || 'application/octet-stream',
+            'x-upsert': 'true'
+          },
+          body: file
+        });
+      } catch (e) {
+        return { code: 500, msg: '上传失败：无法连接 Supabase' };
+      }
+      if (!res.ok) {
+        let j = null;
+        try { j = await res.json(); } catch (e) {}
+        return { code: res.status, msg: (j && (j.message || j.error)) || ('上传失败（HTTP ' + res.status + '）') };
+      }
+      return { code: 200, msg: '上传成功', path: filePath, url: this.publicUrl(bucket, filePath) };
+    },
+
+    publicUrl(bucket, filePath) {
+      return (SB.url || '').replace(/\/+$/, '') + '/storage/v1/object/public/' + bucket + '/' + filePath;
+    },
     getSession() { return { has: !!getToken() }; },
     checkSession() {
       const t = getToken();
@@ -376,7 +497,7 @@
     async setToken() { return { ok: false, error: '已废弃：Supabase 模式请直接注册/登录' }; },
     async unlockToken() { return { ok: false, error: '已废弃：无需解锁 Token，请直接登录' }; },
     async lockToken() { setToken(null); return { ok: true }; },
-    async logout() { setToken(null); return { ok: true }; },
+    async logout() { setToken(null); setRefresh(null); setCurrentUser(null); return { ok: true }; },
     async testConnection() {
       const r = await this.rest('/auth/v1/settings'); // 公开端点探测，根路径需 secret key
       if (r.code !== 200) return { ok: false, error: r.msg };
@@ -527,5 +648,15 @@
   };
 
   window.DB = MODE === 'local' ? LOCAL_IMPL : SB_IMPL;
+
+  // ---- 免登录：打开网站自动恢复会话（access token 过期则用 refresh token 续期） ----
+  try {
+    if (window.DB && typeof window.DB.restoreSession === 'function') {
+      window.UEG_SESSION_READY = window.DB.restoreSession().then(function (r) {
+        try { window.dispatchEvent(new CustomEvent('ueg-session', { detail: r })); } catch (e) {}
+        return r;
+      }).catch(function () { return { code: 401 }; });
+    }
+  } catch (e) {}
   console.log('[UEG] 数据层模式:', MODE === 'local' ? 'local（本地后端）' : 'supabase（默认）');
 })();

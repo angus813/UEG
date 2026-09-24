@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>公会论坛 - UEG小网站</title>
+  <link rel="stylesheet" href="rhine-fonts.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="rhine-fonts.css"></noscript>
+  <link rel="stylesheet" href="rhine.css">
+  <link rel="stylesheet" href="rhine-motion.css">
+  <script src="rhine-motion.js"></script>
+  <style>
+    :root { --bubble-me: #3a7afe; --bubble-other: #2a3040; }
+    .chat-wrap { max-width: 900px; margin: 12px auto 0; padding: 0 12px 12px; display: flex; flex-direction: column;
+      height: calc(100vh - 24px); }
+    .chat-head { display: flex; align-items: center; gap: 10px; padding: 10px 4px; }
+    .chat-head h1 { font-size: 20px; margin: 0; }
+    .chat-head .spacer { flex: 1; }
+    .color-pick { display: flex; align-items: center; gap: 6px; font-size: 13px; opacity: .9; }
+    .color-pick input[type=color] { width: 30px; height: 24px; border: none; background: none; padding: 0; }
+    .chat-body { flex: 1; overflow-y: auto; padding: 8px; border: 1px solid rgba(120,160,220,.22);
+      border-radius: 14px; background: rgba(14,18,28,.6); }
+    .msg { display: flex; gap: 8px; margin: 10px 2px; align-items: flex-start; }
+    .msg .ava { width: 34px; height: 34px; border-radius: 50%; background: #26303f; flex: 0 0 34px;
+      display: flex; align-items: center; justify-content: center; overflow: hidden; font-size: 16px; }
+    .msg .ava img { width: 100%; height: 100%; object-fit: cover; }
+    .msg .stack { max-width: 72%; }
+    .msg .who { font-size: 12px; opacity: .6; margin: 0 0 3px 2px; }
+    .bubble { display: inline-block; padding: 8px 12px; border-radius: 12px; font-size: 14px; line-height: 1.6;
+      word-break: break-word; white-space: pre-wrap; }
+    .bubble img, .bubble video { max-width: 100%; border-radius: 10px; display: block; }
+    .msg.mine { flex-direction: row-reverse; }
+    .msg.mine .who { text-align: right; margin-right: 2px; }
+    .msg.mine .stack { display: flex; flex-direction: column; align-items: flex-end; }
+    .chat-input { display: flex; gap: 8px; align-items: flex-end; padding: 10px 0 0; }
+    .chat-input textarea { flex: 1; min-height: 44px; max-height: 130px; resize: none; padding: 10px 12px;
+      border-radius: 12px; border: 1px solid rgba(120,160,220,.35); background: rgba(20,26,38,.85); color: inherit; font-size: 14px; }
+    .tool { width: 40px; height: 40px; border-radius: 10px; border: 1px solid rgba(120,160,220,.35);
+      background: rgba(20,26,38,.85); cursor: pointer; font-size: 18px; }
+    .send { padding: 0 16px; height: 40px; border-radius: 10px; border: 1px solid rgba(120,160,220,.5);
+      background: linear-gradient(180deg, rgba(90,140,230,.4), rgba(60,100,190,.28)); color: #eaf1ff; cursor: pointer; }
+    .emoji-bar { display: none; flex-wrap: wrap; gap: 6px; padding: 8px 0 0; }
+    .emoji-bar span { cursor: pointer; font-size: 20px; padding: 2px 4px; border-radius: 6px; }
+    .emoji-bar span:hover { background: rgba(120,160,220,.2); }
+    .tips { font-size: 12px; opacity: .6; padding: 6px 2px 0; }
+  </style>
+</head>
+<body>
+  <div class="chat-wrap">
+    <div class="chat-head">
+      <h1>💬 公会论坛</h1>
+      <div class="spacer"></div>
+      <label class="color-pick">我的气泡
+        <input type="color" id="bubbleColor" value="#3a7afe">
+      </label>
+      <a href="guild.html" class="back-link">← 公会</a>
+    </div>
+
+    <div class="chat-body" id="chatBody">
+      <div class="tips">加载中…</div>
+    </div>
+
+    <div class="emoji-bar" id="emojiBar"></div>
+
+    <div class="chat-input">
+      <button class="tool" id="btnEmoji" title="表情">😊</button>
+      <button class="tool" id="btnImg" title="发图片">🖼️</button>
+      <button class="tool" id="btnVid" title="发视频">🎬</button>
+      <input type="file" id="fileImg" accept="image/*" style="display:none">
+      <input type="file" id="fileVid" accept="video/*" style="display:none">
+      <textarea id="txt" placeholder="说点什么…（Enter 发送，Shift+Enter 换行）"></textarea>
+      <button class="send" id="btnSend">发送</button>
+    </div>
+    <div class="tips" id="chatTip"></div>
+  </div>
+
+  <script src="supabase-client.js"></script>
+  <script>
+    var EMOS = ['😀','😄','😁','😆','😉','😊','😍','🤩','😎','🤔','😏','😢','😭','😡','👍','👎','👏','🙏','💪','🎉','🔥','✨','❤️','💔','🚀','🛰️','⚔️','🛡️','🧭','📦','🎯','💎','⭐','🌟','⚡','🫡'];
+    var EMO_CACHE = {};
+    var me = null, myColor = '#3a7afe', lastId = 0, timer = null;
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function userName(u) {
+      return (u || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function fmt(t) {
+      try {
+        var d = new Date(t);
+        var now = new Date();
+        var hm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+        if (d.toDateString() === now.toDateString()) return hm;
+        return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hm;
+      } catch (e) { return ''; }
+    }
+    function currentUser() {
+      try { return JSON.parse(localStorage.getItem('ueg_current_user') || 'null'); } catch (e) { return null; }
+    }
+    function tip(msg, bad) {
+      var el = document.getElementById('chatTip');
+      el.textContent = msg || '';
+      el.style.color = bad ? '#ff9a9a' : '';
+    }
+
+    // ---------- 渲染 ----------
+    function mediaUrl(kind, path) {
+      return DB.publicUrl('forum-media', path);
+    }
+
+    function msgHtml(m) {
+      var mine = me && m.author === me.username;
+      var avaHtml = '<div class="ava">👤</div>';
+      var cached = EMO_CACHE[m.author];
+      if (cached && cached.avatar) avaHtml = '<div class="ava"><img src="' + esc(cached.avatar) + '" alt=""></div>';
+
+      var inner = '';
+      if (m.kind === 'image') {
+        inner = '<img src="' + esc(mediaUrl('image', m.media_path)) + '" loading="lazy" alt="图片">';
+      } else if (m.kind === 'video') {
+        inner = '<video src="' + esc(mediaUrl('video', m.media_path)) + '" controls preload="metadata"></video>';
+      } else {
+        inner = esc(m.body || '');
+      }
+      var color = mine ? (myColor || '#3a7afe') : '#2a3040';
+      var colorStyle = mine ? 'background:' + color + ';color:#fff;' : 'background:' + color + ';color:#e7ecf5;';
+      return '' +
+        '<div class="msg ' + (mine ? 'mine' : '') + '" data-id="' + m.id + '">' +
+        avaHtml +
+        '<div class="stack">' +
+        '<div class="who">' + esc(m.author || '?') + ' · ' + fmt(m.created_at) + '</div>' +
+        '<div class="bubble" style="' + colorStyle + '">' + inner + '</div>' +
+        '</div></div>';
+    }
+
+    function appendNewest(rows) {
+      var body = document.getElementById('chatBody');
+      var html = '';
+      rows.forEach(function (m) { html += msgHtml(m); });
+      body.insertAdjacentHTML('beforeend', html);
+    }
+
+    // ---------- 拉取 ----------
+    async function loadMessages(reset) {
+      var url = '/rest/v1/forum_messages?select=id,author,kind,body,media_path,created_at&order=id.asc&limit=200';
+      if (!reset && lastId) url += '&id=gt.' + lastId;
+      var r = await DB.rest(url);
+      var rows = (r.code === 200 && Array.isArray(r.data)) ? r.data : [];
+      var body = document.getElementById('chatBody');
+      if (reset) {
+        body.innerHTML = rows.length ? '' : '<div class="tips">还没有消息，来说第一句吧</div>';
+      }
+      if (rows.length) {
+        appendNewest(rows);
+        lastId = rows[rows.length - 1].id;
+        body.scrollTop = body.scrollHeight;
+      }
+      await loadAvatars(rows);
+    }
+
+    async function loadAvatars(rows) {
+      var names = [];
+      rows.forEach(function (m) { if (m.author && !EMO_CACHE[m.author] && names.indexOf(m.author) < 0) names.push(m.author); });
+      if (!names.length) return;
+      var q = names.map(function (n) { return encodeURIComponent(n); }).join(',');
+      var r = await DB.rest('/rest/v1/users?select=username,avatar_url&username=in.(' + q + ')');
+      if (r.code === 200 && Array.isArray(r.data)) {
+        r.data.forEach(function (u) { EMO_CACHE[u.username] = { avatar: u.avatar_url || '' }; });
+      } else {
+        names.forEach(function (n) { EMO_CACHE[n] = {}; });
+      }
+    }
+
+    // ---------- 发送 ----------
+    async function send(kind, body, mediaPath) {
+      if (!me) { tip('请先登录后再发言', true); return; }
+      var row = { author: me.username, kind: kind, body: body || null, media_path: mediaPath || null, bubble_color: myColor || null };
+      var r = await DB.rest('/rest/v1/forum_messages', { method: 'POST', body: row, prefer: 'return=minimal' });
+      if (r.code === 200 || r.code === 201) { tip(''); await loadMessages(false); }
+      else tip('发送失败：' + (r.msg || ''), true);
+    }
+
+    async function sendText() {
+      var el = document.getElementById('txt');
+      var v = (el.value || '').trim();
+      if (!v) return;
+      el.value = '';
+      await send('text', v, null);
+    }
+
+    async function sendEmoji(e) {
+      await send('text', e, null);
+    }
+
+    async function uploadMedia(file, kind) {
+      if (!me) { tip('请先登录后再上传', true); return; }
+      if (!file) return;
+      tip('上传中…');
+      var ext = (file.name.split('.').pop() || (kind === 'video' ? 'mp4' : 'png')).toLowerCase().replace(/[^a-z0-9]/g, '');
+      var path = me.username + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
+      var up = await DB.upload('forum-media', path, file, file.type);
+      if (up.code !== 200) { tip('上传失败：' + (up.msg || ''), true); return; }
+      await send(kind, null, path);
+      tip('');
+    }
+
+    // ---------- 气泡颜色 ----------
+    async function initColor() {
+      var el = document.getElementById('bubbleColor');
+      if (!me) return;
+      var r = await DB.rest('/rest/v1/users?select=bubble_color&username=eq.' + encodeURIComponent(me.username));
+      if (r.code === 200 && Array.isArray(r.data) && r.data.length && r.data[0].bubble_color) {
+        myColor = r.data[0].bubble_color;
+        el.value = myColor;
+      }
+      el.addEventListener('change', async function () {
+        myColor = el.value;
+        var w = await DB.updateMyProfile({ bubble_color: myColor });
+        if (w.code !== 200) tip('颜色保存失败：' + (w.msg || ''), true);
+        else tip('气泡颜色已保存');
+        await loadMessages(true);
+      });
+    }
+
+    // ---------- 事件 ----------
+    document.getElementById('btnSend').addEventListener('click', sendText);
+    document.getElementById('txt').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
+    });
+    document.getElementById('btnImg').addEventListener('click', function () { document.getElementById('fileImg').click(); });
+    document.getElementById('btnVid').addEventListener('click', function () { document.getElementById('fileVid').click(); });
+    document.getElementById('fileImg').addEventListener('change', function (e) { uploadMedia(e.target.files[0], 'image'); e.target.value = ''; });
+    document.getElementById('fileVid').addEventListener('change', function (e) { uploadMedia(e.target.files[0], 'video'); e.target.value = ''; });
+
+    var bar = document.getElementById('emojiBar');
+    EMOS.forEach(function (e) {
+      var s = document.createElement('span');
+      s.textContent = e;
+      s.addEventListener('click', function () { sendEmoji(e); });
+      bar.appendChild(s);
+    });
+    document.getElementById('btnEmoji').addEventListener('click', function () {
+      bar.style.display = bar.style.display === 'flex' ? 'none' : 'flex';
+    });
+
+    (async function init() {
+      try { if (window.UEG_SESSION_READY) await window.UEG_SESSION_READY; } catch (e) {}
+      me = currentUser();
+      if (!me) tip('未登录：可以浏览，登录后才能发言（右上角账号设置）', true);
+      await initColor();
+      await loadMessages(true);
+      timer = setInterval(function () { loadMessages(false); }, 5000);
+    })();
+  </script>
+</body>
+</html>

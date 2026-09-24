@@ -28,16 +28,16 @@
       <div class="menu-subtitle">UNITED EARTH GOVNMENT 3 YEARS</div>
       <div class="menu-options">
         <!-- 链接到 public/ 下的页面 -->
-        <a href="public/xinghebei.html" class="menu-card">
+        <a href="public/xinghebei.html" class="menu-card" id="cardXinghebei">
           <div class="menu-card-icon">⚔️</div>
           <div class="menu-card-text">星河杯</div>
           <div class="menu-card-desc">舰队指标选择器</div>
         </a>
-        <div class="menu-card" onclick="alert('交易所即将上线')">
-          <div class="menu-card-icon">📊</div>
-          <div class="menu-card-text">交易所</div>
-          <div class="menu-card-desc">资源交易系统</div>
-        </div>
+        <a href="public/mata.html" class="menu-card">
+          <div class="menu-card-icon">🤖</div>
+          <div class="menu-card-text">MATA</div>
+          <div class="menu-card-desc">自动化助手 · 素材共享 · 排行榜</div>
+        </a>
         <a href="public/games.html" class="menu-card">
           <div class="menu-card-icon">🎮</div>
           <div class="menu-card-text">小游戏</div>
@@ -294,6 +294,29 @@
         if (!r.ok) { setCurrentUser(null); updateUI(); }
       }).catch(function () {});
     }
+  </script>
+  <script>
+    // 星河杯入口仅管理员/官员可见
+    (async function gateXinghebei() {
+      try {
+        var card = document.getElementById('cardXinghebei');
+        if (!card) return;
+        var ready = window.UEG_SESSION_READY;
+        if (ready) { try { await ready; } catch (e) {} }
+        var cu = null;
+        try { cu = JSON.parse(localStorage.getItem('ueg_current_user') || 'null'); } catch (e) {}
+        if (!cu) { card.style.display = 'none'; return; }
+        var ok = false;
+        try {
+          var r = await DB.myProfile();
+          if (r && r.code === 200 && r.data) {
+            ok = !!(r.data.is_admin || r.data.is_owner || r.data.is_official);
+          }
+        } catch (e) {}
+        if (!ok) ok = !!(cu.is_admin || cu.is_owner || cu.is_official);
+        if (!ok) card.style.display = 'none';
+      } catch (e) {}
+    })();
   </script>
 </body>
 </html>

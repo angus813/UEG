@@ -20,7 +20,8 @@
     <input type="text" id="userInput" placeholder="2-20 位中文/字母/数字/下划线">
     <label>密码</label>
     <input type="password" id="pwInput" placeholder="至少 6 位">
-    <div class="hint">密码以 bcrypt 哈希存储在后端，不再明文保存；GitHub Token 由后端统一保管。</div>
+    <div class="hint">密码以 bcrypt 哈希存储在后端，不再明文保存；GitHub Token 由后端统一保管。<br>
+      ✅ 已开启<b>免登录</b>：登录一次后，关闭网页或重启电脑再打开都会自动恢复会话（无需重新登录）。</div>
 
     <div class="row">
       <button class="btn primary" onclick="doLogin()">登录</button>

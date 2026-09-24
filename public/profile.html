@@ -15,7 +15,9 @@
 <body>
   <div class="profile-page">
     <div class="profile-header">
-      <div class="profile-avatar">👤</div>
+      <div class="profile-avatar" id="avatarBox" title="点击更换头像" style="cursor:pointer;">👤</div>
+      <input type="file" id="avatarFile" accept="image/*" style="display:none">
+      <div style="font-size:12px;opacity:.6;text-align:center;margin-top:6px;">点头像可更换（jpg/png，建议方形）</div>
       <div class="profile-username" id="profileUsername">用户名</div>
       <div class="profile-mark"></div>
     </div>
@@ -88,7 +90,7 @@
       // 从 Supabase 读取最新用户数据
       const { data: user, error } = await supabase
         .from('users')
-        .select('username, highest_record, is_admin')
+        .select('username, highest_record, is_admin, is_owner, is_official, avatar_url')
         .eq('username', currentUser.username)
         .maybeSingle();
 
@@ -100,6 +102,13 @@
 
       document.getElementById('profileUsername').textContent = user.username;
       document.getElementById('profileRecord').textContent = user.highest_record || 0;
+      var _pn = document.getElementById('profileUsername');
+      if (user.is_owner) _pn.insertAdjacentHTML('beforeend', ' 【会长】');
+      else if (user.is_official) _pn.insertAdjacentHTML('beforeend', ' 【官员】');
+      var _av = document.getElementById('avatarBox');
+      if (user.avatar_url && _av) {
+        _av.innerHTML = '<img src="' + user.avatar_url + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+      }
 
       // 显示管理员入口
       if (user.is_admin) {
@@ -191,6 +200,31 @@
       if (!confirm('⚠️ 确定要彻底删除你的账号吗？此操作不可恢复！')) return;
       deleteAccount();
     });
+
+    // ==================== 头像上传 ====================
+    (function initAvatar() {
+      var box = document.getElementById('avatarBox');
+      var fi = document.getElementById('avatarFile');
+      if (!box || !fi) return;
+      box.addEventListener('click', function () { fi.click(); });
+      fi.addEventListener('change', async function () {
+        var f = fi.files && fi.files[0];
+        fi.value = '';
+        if (!f) return;
+        if (!/^image\//.test(f.type)) { alert('请选择图片文件'); return; }
+        if (f.size > 4 * 1024 * 1024) { alert('图片请小于 4MB'); return; }
+        var cu = getCurrentUser();
+        if (!cu) { alert('请先登录'); return; }
+        var ext = (f.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
+        var path = cu.username + '/avatar_' + Date.now() + '.' + ext;
+        var up = await DB.upload('avatars', path, f, f.type);
+        if (up.code !== 200) { alert('上传失败：' + (up.msg || '')); return; }
+        var w = await DB.updateMyProfile({ avatar_url: up.url });
+        if (w.code !== 200) { alert('保存失败：' + (w.msg || '')); return; }
+        box.innerHTML = '<img src="' + up.url + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+        alert('头像已更新');
+      });
+    })();
 
     // ==================== 初始化 ====================
     loadProfile();
