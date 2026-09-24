@@ -62,7 +62,37 @@
   --rl-accent-soft: rgba(197, 161, 107, 0.14);
   --rl-status: #9aa87f;
   --rl-selection: #3c4a50;
+  --rl-danger: #d98b78;
   --rl-shadow: 0 26px 95px rgba(0, 0, 0, 0.45);
+  --rl-shadow-sm: 0 10px 34px rgba(0, 0, 0, 0.35);
+}
+
+/* —— 跟随系统深色 ——
+   未给 <html> 指定 data-theme 时按系统偏好自动切深色：
+     · 系统深色 + 无 data-theme → 深色
+     · data-theme="light"        → 强制浅色（显式选择优先于系统）
+     · data-theme="dark"         → 强制深色（上面那块已生效，本块取值相同）
+   本块的令牌必须与上面的深色块保持一致（改一处请同步另一处）。 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --rl-ink: #e0e3dc;
+    --rl-body: #b9bdb6;
+    --rl-muted: #a6b0b1;
+    --rl-line: #536166;
+    --rl-line-soft: #3d4a4f;
+    --rl-line-strong: #5f6d72;
+    --rl-paper: #11181b;
+    --rl-panel: #202a2f;
+    --rl-field: #2a363b;
+    --rl-accent: #c5a16b;
+    --rl-accent-soft: rgba(197, 161, 107, 0.14);
+    --rl-status: #9aa87f;
+    --rl-selection: #3c4a50;
+    --rl-danger: #d98b78;
+    --rl-shadow: 0 26px 95px rgba(0, 0, 0, 0.45);
+    --rl-shadow-sm: 0 10px 34px rgba(0, 0, 0, 0.35);
+  }
 }
 
 /* ============================ 基础 ============================ */
