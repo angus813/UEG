@@ -5,6 +5,13 @@
 --   2) 公会论坛（文字/图片/视频/表情 + 自定义气泡颜色）
 --   3) 头像上传、官员角色
 --   4) 公共记忆 / 知识库（MATA 端使用）
+--
+--  【身份约定·务必遵守】全站用「用户名」做归属键，判定用 public.current_username()
+--    · current_username() 读的是 JWT 的 user_metadata.username（注册时的原始用户名）
+--    · 不要用 auth.jwt() ->> 'email'：邮箱是 encodeURIComponent(用户名)+'@ueg.local'，
+--      中文用户名会被百分号编码，跟网站写入的 username 对不上，写入会被 RLS 直接拒。
+--    · 网站（mata.html / forum.html / profile.html）写入的 uploader/author = 用户名
+--
 --  说明：全部使用 publishable key + 登录 JWT（RLS 生效），不含任何 secret。
 -- ============================================================
 
@@ -37,17 +44,18 @@ alter table public.mata_shots enable row level security;
 
 drop policy if exists mata_shots_read on public.mata_shots;
 create policy mata_shots_read on public.mata_shots
-  for select using (true);                       -- 排行榜需要人人可见
+  for select using (true);                       -- 排行榜/展示需要人人可见
 
 drop policy if exists mata_shots_insert on public.mata_shots;
 create policy mata_shots_insert on public.mata_shots
   for insert to authenticated
-  with check (uploader = (auth.jwt() ->> 'email'));   -- 邮箱形如 用户名@ueg.local
+  with check (uploader = public.current_username());   -- 只能以自己名义上传
 
 drop policy if exists mata_shots_update on public.mata_shots;
 create policy mata_shots_update on public.mata_shots
   for update to authenticated
-  using (true) with check (true);                 -- 数据集标记由 MATA/管理员回写
+  using (uploader = public.current_username() or public.current_user_is_admin())
+  with check (uploader = public.current_username() or public.current_user_is_admin());
 
 -- 排行榜视图：只统计 used_in_dataset = true
 create or replace view public.mata_leaderboard as
@@ -82,17 +90,15 @@ create policy forum_read on public.forum_messages for select using (true);
 drop policy if exists forum_insert on public.forum_messages;
 create policy forum_insert on public.forum_messages
   for insert to authenticated
-  with check (author = (auth.jwt() ->> 'email'));
+  with check (author = public.current_username());
 
 drop policy if exists forum_delete_own on public.forum_messages;
 create policy forum_delete_own on public.forum_messages
   for delete to authenticated
-  using (author = (auth.jwt() ->> 'email')
-         or exists (select 1 from public.users u
-                     where u.username = split_part(auth.jwt() ->> 'email', '@', 1)
-                       and (u.is_admin or u.is_official)));
+  using (author = public.current_username() or public.current_user_is_admin());
 
 -- ---------- 4. 公共记忆 / 知识库（MATA 端） ----------
+-- owner 存「用户名」（MATA 侧 supa.py 的 username，不带 @ueg.local）
 create table if not exists public.mata_memory (
   id         bigserial primary key,
   owner      text not null,
@@ -104,8 +110,8 @@ alter table public.mata_memory enable row level security;
 drop policy if exists mata_memory_all on public.mata_memory;
 create policy mata_memory_all on public.mata_memory
   for all to authenticated
-  using (owner = (auth.jwt() ->> 'email'))
-  with check (owner = (auth.jwt() ->> 'email'));
+  using (owner = public.current_username())
+  with check (owner = public.current_username());
 
 create table if not exists public.mata_kb_docs (
   id         bigserial primary key,
@@ -120,8 +126,8 @@ alter table public.mata_kb_docs enable row level security;
 drop policy if exists mata_kb_all on public.mata_kb_docs;
 create policy mata_kb_all on public.mata_kb_docs
   for all to authenticated
-  using (owner = (auth.jwt() ->> 'email'))
-  with check (owner = (auth.jwt() ->> 'email'));
+  using (owner = public.current_username())
+  with check (owner = public.current_username());
 
 -- ---------- 5. Storage 桶 ----------
 insert into storage.buckets (id, name, public)
@@ -136,17 +142,24 @@ insert into storage.buckets (id, name, public)
 values ('avatars', 'avatars', true)
 on conflict (id) do nothing;
 
--- 桶策略：公开读；登录用户可写自己的目录
+-- 桶策略：公开读；登录用户只能写/改「自己目录」下的文件（路径都是 用户名/xxx）
+-- 注意：用 %I 拼整个策略名（写成 %I_read 会被拼成 "bucket"_read，直接语法错误）
 do $$
 declare b text;
 begin
   foreach b in array array['mata-shots', 'forum-media', 'avatars'] loop
-    execute format('drop policy if exists %I_read on storage.objects', b);
-    execute format($f$create policy %I_read on storage.objects for select using (bucket_id = %L)$f$, b, b);
-    execute format('drop policy if exists %I_write on storage.objects', b);
-    execute format($f$create policy %I_write on storage.objects for insert to authenticated with check (bucket_id = %L)$f$, b, b);
-    execute format('drop policy if exists %I_update on storage.objects', b);
-    execute format($f$create policy %I_update on storage.objects for update to authenticated using (bucket_id = %L)$f$, b, b);
+    execute format('drop policy if exists %I on storage.objects', b || '_read');
+    execute format($f$create policy %I on storage.objects for select using (bucket_id = %L)$f$, b || '_read', b);
+
+    execute format('drop policy if exists %I on storage.objects', b || '_write');
+    execute format($f$create policy %I on storage.objects for insert to authenticated
+                      with check (bucket_id = %L and (storage.foldername(name))[1] = public.current_username())$f$,
+                   b || '_write', b);
+
+    execute format('drop policy if exists %I on storage.objects', b || '_update');
+    execute format($f$create policy %I on storage.objects for update to authenticated
+                      using (bucket_id = %L and (storage.foldername(name))[1] = public.current_username())$f$,
+                   b || '_update', b);
   end loop;
 end $$;
 
