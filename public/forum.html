@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>公会论坛 - UEG小网站</title>
   <link rel="stylesheet" href="rhine-fonts.css" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="rhine-fonts.css"></noscript>
@@ -12,7 +12,8 @@
   <style>
     :root { --bubble-me: #3a7afe; --bubble-other: var(--rl-field); }
     .chat-wrap { max-width: 900px; margin: 12px auto 0; padding: 0 12px 12px; display: flex; flex-direction: column;
-      height: calc(100vh - 24px); }
+      height: calc(100vh - 24px); height: calc(100dvh - 24px);
+      padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
     .chat-head { display: flex; align-items: center; gap: 10px; padding: 10px 4px; }
     .chat-head h1 { font-size: 20px; margin: 0; }
     .chat-head .spacer { flex: 1; }
@@ -47,6 +48,13 @@
       background: transparent; color: var(--rl-muted); font-size: 11px; line-height: 16px; cursor: pointer; }
     @media (hover: hover) { .msg .recall { opacity: 0; } .msg:hover .recall { opacity: 1; } }
     .bubble .recalled { opacity: .55; font-style: italic; }
+    @media (max-width: 700px) {
+      .chat-head { flex-wrap: wrap; row-gap: 6px; }
+      .chat-input textarea { font-size: 16px; min-height: 44px; }
+      .msg .stack { max-width: 80%; }
+      .color-pick input[type=color] { width: 46px; height: 40px; }
+    }
+    @media (hover: none) { .msg .recall { min-height: 32px; padding: 0 10px; font-size: 12px; } }
   </style>
 </head>
 <body>
@@ -72,7 +80,7 @@
       <button class="tool" id="btnVid" title="发视频">🎬</button>
       <input type="file" id="fileImg" accept="image/*" style="display:none">
       <input type="file" id="fileVid" accept="video/*" style="display:none">
-      <textarea id="txt" placeholder="说点什么…（Enter 发送，Shift+Enter 换行）"></textarea>
+      <textarea id="txt" placeholder="说点什么…" enterkeyhint="send" title="Enter 发送，Shift+Enter 换行"></textarea>
       <button class="send" id="btnSend">发送</button>
     </div>
     <div class="tips" id="chatTip"></div>
@@ -305,8 +313,10 @@
 
     // ---------- 事件 ----------
     document.getElementById('btnSend').addEventListener('click', sendText);
+    // 手机上没 Shift 键，Enter 用来换行（用「发送」按钮发）；键盘/鼠标才 Enter 直发
+    var touchOnly = !!(window.matchMedia && window.matchMedia('(hover: none)').matches);
     document.getElementById('txt').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendText(); }
+      if (e.key === 'Enter' && !e.shiftKey && !touchOnly) { e.preventDefault(); sendText(); }
     });
     document.getElementById('btnImg').addEventListener('click', function () { document.getElementById('fileImg').click(); });
     document.getElementById('btnVid').addEventListener('click', function () { document.getElementById('fileVid').click(); });
