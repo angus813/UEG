@@ -48,6 +48,7 @@
       background: transparent; color: var(--rl-muted); font-size: 11px; line-height: 16px; cursor: pointer; }
     @media (hover: hover) { .msg .recall { opacity: 0; } .msg:hover .recall { opacity: 1; } }
     .bubble .recalled { opacity: .55; font-style: italic; }
+    .msg.recalled-msg .bubble { background: var(--rl-field); color: var(--rl-muted); }
     @media (max-width: 700px) {
       .chat-head { flex-wrap: wrap; row-gap: 6px; }
       .chat-input textarea { font-size: 16px; min-height: 44px; }
@@ -92,7 +93,7 @@
   <script>
     var EMOS = ['😀','😄','😁','😆','😉','😊','😍','🤩','😎','🤔','😏','😢','😭','😡','👍','👎','👏','🙏','💪','🎉','🔥','✨','❤️','💔','🚀','🛰️','⚔️','🛡️','🧭','📦','🎯','💎','⭐','🌟','⚡','🫡'];
     var EMO_CACHE = {};
-    var me = null, myColor = '#3a7afe', lastId = 0, timer = null, polls = 0, canRecall = true;
+    var me = null, myColor = '#3a7afe', lastId = 0, timer = null, polls = 0, canSoftRecall = true;
     var MSG_INDEX = {};   // id → 消息行（撤回后就地重渲染，不整页重载）
 
     function esc(s) {
@@ -126,6 +127,9 @@
         return nm ? { username: nm } : null;
       } catch (e) { return null; }
     }
+    // 管理员能撤回别人的消息（与 SQL 里的 forum_recall_own 策略对应）。
+    // is_admin 由登录时写进 localStorage 的档案带过来，initColor() 会再核对一次。
+    function isAdmin() { return !!(me && me.is_admin); }
     function tip(msg, bad) {
       var el = document.getElementById('chatTip');
       el.textContent = msg || '';
@@ -166,8 +170,10 @@
         var color = myColor || '#3a7afe';
         colorStyle = 'background:' + color + ';color:' + readableInk(color) + ';';
       }
-      var recallBtn = (mine && !recalled && canRecall)
-        ? ' <button class="recall" data-recall="' + m.id + '" title="撤回这条消息">撤回</button>' : '';
+      var allowRecall = !recalled && (mine || isAdmin());
+      var recallBtn = (allowRecall && canSoftRecall)
+        ? ' <button class="recall" data-recall="' + m.id + '" title="'
+          + (mine ? '撤回这条消息' : '管理员撤回这条消息') + '">撤回</button>' : '';
       return '' +
         '<div class="msg' + (mine ? ' mine' : '') + (recalled ? ' recalled-msg' : '') + '" data-id="' + m.id + '">' +
         avaHtml +
@@ -197,7 +203,7 @@
       // 数据库还没执行「撤回」那条 SQL（没有 recalled_at 列）时，按旧字段重读一次，
       // 页面不至于挂掉，只是没有撤回按钮
       if (r.code === 400 && String(r.msg || '').indexOf('recalled_at') >= 0) {
-        canRecall = false;
+        canSoftRecall = false;
         r = await DB.rest(url.replace(',recalled_at', ''));
       }
       var rows = (r.code === 200 && Array.isArray(r.data)) ? r.data : [];
@@ -220,6 +226,28 @@
       var keep = body.scrollTop;
       await loadMessages(true);
       if (!atBottom) body.scrollTop = keep;
+    }
+
+    // 只重拉最近 30 条：别人的撤回不用等整表重拉（60 秒）就能就地更新
+    async function syncRecent() {
+      var url = '/rest/v1/forum_messages?select=id,author,kind,body,media_path,created_at,recalled_at'
+        + '&order=id.desc&limit=30';
+      var r = await DB.rest(url);
+      if (r.code === 400 && String(r.msg || '').indexOf('recalled_at') >= 0) {
+        canSoftRecall = false;
+        r = await DB.rest(url.replace(',recalled_at', ''));
+      }
+      if (r.code !== 200 || !Array.isArray(r.data)) return;
+      r.data.forEach(function (m) {
+        var old = MSG_INDEX[m.id];
+        if (!old) return;
+        var changed = (!!old.recalled_at !== !!m.recalled_at)
+          || String(old.body || '') !== String(m.body || '')
+          || String(old.media_path || '') !== String(m.media_path || '');
+        if (!changed) return;
+        MSG_INDEX[m.id] = m;
+        renderOne(m);
+      });
     }
 
     async function loadAvatars(rows) {
@@ -271,21 +299,44 @@
     // ---------- 撤回 ----------
     async function recall(id) {
       if (!me) { tip('请先登录后再操作', true); return; }
-      if (!confirm('撤回这条消息？撤回后所有人看到的是「该消息已撤回」。')) return;
+      var m = MSG_INDEX[id];
+      var mine = !!(m && m.author === me.username);
+      if (!mine && !isAdmin()) { tip('只能撤回自己的消息', true); return; }
+      var ask = mine
+        ? '撤回这条消息？撤回后所有人看到的是「该消息已撤回」。'
+        : ('以管理员身份撤回「' + ((m && m.author) || '该用户') + '」的消息？');
+      if (!confirm(ask)) return;
+      var at = new Date().toISOString();
+      // 用 return=representation 才能确认「真的改到了」：被 RLS 拦下（0 行命中）时
+      // PostgREST 同样返回成功状态码，只看状态码会误报撤回成功。
       var r = await DB.rest('/rest/v1/forum_messages?id=eq.' + id, {
         method: 'PATCH',
-        body: { recalled_at: new Date().toISOString(), body: null, media_path: null },
-        prefer: 'return=minimal'
+        body: { recalled_at: at, body: null, media_path: null },
+        prefer: 'return=representation'
       });
-      if (r.code !== 200) { tip('撤回失败：' + (r.msg || ''), true); return; }
-      var m = MSG_INDEX[id];
+      if (r.code !== 200) {
+        var why = String(r.msg || '');
+        if (why.indexOf('recalled_at') >= 0) why += '（数据库还没执行 ops/forum_recall.sql）';
+        tip('撤回失败：' + why, true);
+        return;
+      }
+      if (!Array.isArray(r.data) || !r.data.length) {
+        tip('撤回失败：没有权限改动这条消息（请确认已在 Supabase 执行 ops/forum_recall.sql）', true);
+        return;
+      }
+      // 顺手清掉已上传的图片/视频，避免撤回后原图 URL 仍能被打开（失败也不影响撤回）
+      if (m && m.media_path && typeof DB.remove === 'function') {
+        try { await DB.remove('forum-media', m.media_path); } catch (e) {}
+      }
       if (m) {
-        m.recalled_at = new Date().toISOString();
+        m.recalled_at = at;
         m.body = null;
         m.media_path = null;
         renderOne(m);
+      } else {
+        await loadMessages(true);
       }
-      tip('已撤回');
+      tip(mine ? '已撤回' : '已撤回（管理员）');
     }
 
     document.getElementById('chatBody').addEventListener('click', function (ev) {
@@ -297,10 +348,11 @@
     async function initColor() {
       var el = document.getElementById('bubbleColor');
       if (!me) return;
-      var r = await DB.rest('/rest/v1/users?select=bubble_color&username=eq.' + encodeURIComponent(me.username));
-      if (r.code === 200 && Array.isArray(r.data) && r.data.length && r.data[0].bubble_color) {
-        myColor = r.data[0].bubble_color;
-        el.value = myColor;
+      var r = await DB.rest('/rest/v1/users?select=bubble_color,is_admin&username=eq.' + encodeURIComponent(me.username));
+      if (r.code === 200 && Array.isArray(r.data) && r.data.length) {
+        var row = r.data[0];
+        if (row.bubble_color) { myColor = row.bubble_color; el.value = myColor; }
+        me.is_admin = !!row.is_admin;   // 管理员可撤回他人消息
       }
       el.addEventListener('change', async function () {
         myColor = el.value;
@@ -342,7 +394,9 @@
       await loadMessages(true);
       timer = setInterval(function () {
         polls++;
-        if (polls % 12 === 0) refreshAll(); else loadMessages(false);
+        loadMessages(false);                   // 拉新消息（增量）
+        syncRecent();                          // 同一条被别人撤回/改动时就地更新
+        if (polls % 12 === 0) refreshAll();    // 兜底：整表重拉（也能同步「硬删除」）
       }, 5000);
     })();
   </script>

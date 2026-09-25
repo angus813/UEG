@@ -484,6 +484,30 @@
       return { code: 200, msg: '上传成功', path: filePath, url: this.publicUrl(bucket, filePath) };
     },
 
+    // ---- Storage：删除自己目录下的对象（撤回图片/视频时清掉源文件，
+    //      否则消息虽然撤回了，原图 URL 仍然能被打开）----
+    async remove(bucket, filePath) {
+      const t = getToken();
+      if (!t) return { code: 401, msg: '请先登录' };
+      if (!filePath) return { code: 400, msg: '缺少文件路径' };
+      const url = (SB.url || '').replace(/\/+$/, '') + '/storage/v1/object/' + bucket + '/' + filePath;
+      let res;
+      try {
+        res = await fetch(url, {
+          method: 'DELETE',
+          headers: { apikey: SB.publishableKey, Authorization: 'Bearer ' + t }
+        });
+      } catch (e) {
+        return { code: 500, msg: '删除失败：无法连接 Supabase' };
+      }
+      if (!res.ok) {
+        let j = null;
+        try { j = await res.json(); } catch (e) {}
+        return { code: res.status, msg: (j && (j.message || j.error)) || ('删除失败（HTTP ' + res.status + '）') };
+      }
+      return { code: 200, msg: '已删除', path: filePath };
+    },
+
     publicUrl(bucket, filePath) {
       return (SB.url || '').replace(/\/+$/, '') + '/storage/v1/object/public/' + bucket + '/' + filePath;
     },

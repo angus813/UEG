@@ -170,6 +170,11 @@ begin
     execute format($f$create policy %I on storage.objects for update to authenticated
                       using (bucket_id = %L and (storage.foldername(name))[1] = public.current_username())$f$,
                    b || '_update', b);
+
+    execute format('drop policy if exists %I on storage.objects', b || '_delete');
+    execute format($f$create policy %I on storage.objects for delete to authenticated
+                      using (bucket_id = %L and (storage.foldername(name))[1] = public.current_username())$f$,
+                   b || '_delete', b);
   end loop;
 end $$;
 
