@@ -388,12 +388,20 @@
       const rt = getRefresh();
       if (!rt) return { code: 401, msg: '没有刷新令牌' };
       const r = await this.gt('/auth/v1/token?grant_type=refresh_token', { refresh_token: rt });
-      if (r.code !== 200 || !r.data || !r.data.access_token) {
+      if (r.code === 200 && r.data && r.data.access_token) {
+        saveSession(r.data);
+        return { code: 200, data: r.data };
+      }
+      // 只有服务端明确拒绝（令牌无效/过期）才丢弃刷新令牌。
+      // 以前是「任何失败都 setRefresh(null)」，而 gt() 带 10s 超时 —— 手机网络
+      // 抖一下就永久踢下线，下次必须重新输密码，「自动登录」形同虚设。
+      // 500/超时/断网这些是暂时的，保留令牌让下一次刷新还能成功。
+      if (r.code === 400 || r.code === 401 || r.code === 403) {
         setRefresh(null);
         return { code: 401, msg: '会话已过期，请重新登录' };
       }
-      saveSession(r.data);
-      return { code: 200, data: r.data };
+      return { code: r.code || 500,
+               msg: '刷新会话暂时失败（' + (r.msg || '网络不通') + '），稍后会自动重试' };
     },
 
     // ---- 免登录：页面加载时恢复会话 ----
@@ -402,8 +410,19 @@
       if (!name) return { code: 401, msg: '未登录过' };
       let t = getToken();
       if (!t || tokenExpired(t)) {
-        const r = await this.refreshSession();
-        if (r.code !== 200) { setCurrentUser(null); return { code: 401, msg: r.msg }; }
+        let r = await this.refreshSession();
+        // 暂时性失败（断网/超时）重试一次 —— 手机上很常见
+        if (r.code !== 200 && r.code !== 401) {
+          await new Promise(function (res) { setTimeout(res, 900); });
+          r = await this.refreshSession();
+        }
+        if (r.code !== 200) {
+          // 只有「明确过期」才清用户名。以前任何失败都 setCurrentUser(null)，
+          // 连 ueg_current_user 都没了 → 下次连 restoreSession 的第一行都过不去，
+          // 自动登录彻底失效。
+          if (r.code === 401) setCurrentUser(null);
+          return { code: r.code || 401, msg: r.msg };
+        }
       }
       const me = await this.rest('/rest/v1/users?select=*&username=eq.' + enc(name));
       if (me.code === 200 && Array.isArray(me.data) && me.data.length) {

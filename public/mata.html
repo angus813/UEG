@@ -72,7 +72,9 @@
         <div class="drop-zone" id="dropZone">
           <div>点这里选择截图，或把图片拖进来</div>
           <div class="mata-note" id="zoneHint">上传需要先登录：回主菜单点右上角「🔑 账号设置」登录后再传，截图才记在你名下。</div>
-          <input type="file" id="fileInput" accept="image/*" multiple capture="environment" style="display:none">
+          <!-- capture="environment" 会强制走相机、且有它时 multiple 被忽略 —— 手机上
+               就选不到相册里的截图（页面还写着「手机也能传」）。改为普通选择器。 -->
+          <input type="file" id="fileInput" accept="image/*,.heic,.heif" multiple style="display:none">
         </div>
         <div class="preview" id="preview"></div>
         <button class="mata-btn" id="btnUpload" disabled>上传到素材库</button>
@@ -131,7 +133,9 @@
     var btn = document.getElementById('btnUpload');
     var st = document.getElementById('upStatus');
 
-    dz.addEventListener('click', function () { fi.click(); });
+    // 只有直接点到 dropZone 才触发。fi 是 dz 的子元素，不加判断时
+    // fi.click() 冒泡回 dz 会再次触发本处理，形成递归。
+    dz.addEventListener('click', function (ev) { if (ev.target !== fi) fi.click(); });
     ['dragenter', 'dragover'].forEach(function (e) {
       dz.addEventListener(e, function (ev) { ev.preventDefault(); dz.classList.add('on'); });
     });
@@ -145,13 +149,22 @@
 
     function addFiles(list) {
       if (!list) return;
+      var added = 0;
       for (var i = 0; i < list.length; i++) {
         var f = list[i];
-        if (!/^image\//.test(f.type)) continue;
+        // 手机相册选出的文件 f.type 经常是空串（HEIC/WebP、部分安卓选择器），
+        // 只认 /^image\// 会把它们静默丢掉 → files 为空 → 上传按钮一直灰，
+        // 表现就是「手机上点了没反应、传不了」。按扩展名兜底。
+        if (!/^image\//.test(f.type) &&
+            !/\.(png|jpe?g|webp|heic|heif|gif|bmp|avif)$/i.test(f.name || '')) continue;
         files.push(f);
+        added++;
+      }
+      if (!added && list.length) {
+        setStatus('所选文件不是图片（支持 jpg / png / webp / heic）', false);
       }
       renderPreview();
-    refreshLoginState();
+      refreshLoginState();
     }
 
     function renderPreview() {
@@ -162,7 +175,9 @@
         img.title = f.name;
         pv.appendChild(img);
       });
-      btn.disabled = files.length === 0 || !currentUser();
+      // 只按有没有选图来禁用。以前还带 `|| !currentUser()`，未登录时按钮是灰的，
+      // 下面那句「请先登录后再上传」根本弹不出来 —— 用户只看到按钮点不动。
+      btn.disabled = files.length === 0;
       btn.textContent = files.length ? ('上传到素材库（' + files.length + ' 张）') : '上传到素材库';
     }
 

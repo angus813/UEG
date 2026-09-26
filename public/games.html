@@ -23,8 +23,8 @@
           <div class="menu-card-text">色块拼图</div>
           <div class="menu-card-desc">障碍上限 · 移动端拖拽</div>
         </a>
-        <!-- 卫戍协议：也直接位于 games/ 下，不再有 weishu 子文件夹 -->
-        <a href="games/weishu.html" class="menu-card">
+        <!-- 卫戍协议：仅管理员可见（默认隐藏，验明 is_admin 后再放出来） -->
+        <a href="games/weishu.html" class="menu-card" id="weishuEntry" style="display:none">
           <div class="menu-card-icon">🛡️</div>
           <div class="menu-card-text">卫戍协议</div>
           <div class="menu-card-desc">塔防策略对战</div>
@@ -34,5 +34,36 @@
       <a href="../index.html" class="back-link">← 返回主菜单</a>
     </div>
   </div>
+
+  <script src="../config.js"></script>
+  <script src="../github-db.js"></script>
+  <script>
+    // 卫戍协议入口：只有管理员能看到。
+    // 默认 display:none —— 先藏起来，验明身份再放，普通用户连闪都不会闪。
+    // localStorage 里的档案可能是登录时的旧快照，所以本地为真时仍向后端核一次。
+    (async function () {
+      var card = document.getElementById('weishuEntry');
+      if (!card) return;
+      var show = false;
+      try {
+        if (window.UEG_SESSION_READY) await window.UEG_SESSION_READY;
+        var cu = null;
+        try { cu = JSON.parse(localStorage.getItem('ueg_current_user') || 'null'); } catch (e) {}
+        if (cu && cu.is_admin) {
+          show = true;
+          if (window.DB && cu.username) {
+            try {
+              var r = await DB.rest('/rest/v1/users?select=is_admin&username=eq.' +
+                                    encodeURIComponent(cu.username));
+              if (r.code === 200 && Array.isArray(r.data) && r.data[0]) {
+                show = !!r.data[0].is_admin;
+              }
+            } catch (e) { /* 后端查不到就维持本地判断，不因为一次抖动把管理员挡在门外 */ }
+          }
+        }
+      } catch (e) { show = false; }
+      card.style.display = show ? '' : 'none';
+    })();
+  </script>
 </body>
 </html>
