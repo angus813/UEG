@@ -100,6 +100,16 @@
   <script src="supabase-client.js"></script>
   <script>
     var files = [];
+    var uploading = false;
+
+    // 上传是本页内的 await 循环，切走/关掉页面必然中断 —— 上传中先拦一道。
+    // （文件对象无法序列化，所以不能靠 localStorage 续传，只能阻止误退）
+    window.addEventListener('beforeunload', function (e) {
+      if (!uploading) return;
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    });
     var me = null;
 
     function esc(s) {
@@ -196,28 +206,46 @@
         return;
       }
       btn.disabled = true;
+      uploading = true;
       var okCount = 0, failCount = 0, firstErr = '';
-      for (var i = 0; i < files.length; i++) {
-        var f = files[i];
-        setStatus('上传中 ' + (i + 1) + '/' + files.length + ' …');
-        var ext = (f.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
-        var path = u.username + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
-        var up = await DB.upload('mata-shots', path, f, f.type);
-        if (up.code !== 200) {
-          failCount++;
-          if (!firstErr) firstErr = up.msg || ('存储上传失败 HTTP ' + up.code);
-          continue;
+      try {
+        for (var i = 0; i < files.length; i++) {
+          var f = files[i];
+          setStatus('上传中 ' + (i + 1) + '/' + files.length + ' …');
+          var ext = (f.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
+          var path = u.username + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
+          var up = await DB.upload('mata-shots', path, f, f.type);
+          // 网络抖一下就重试一次：否则单张失败会直接计入失败，整批白传
+          if (up.code !== 200) up = await DB.upload('mata-shots', path, f, f.type);
+          if (up.code !== 200) {
+            failCount++;
+            if (!firstErr) firstErr = up.msg || ('存储上传失败 HTTP ' + up.code);
+            continue;
+          }
+          var ins = await DB.rest('/rest/v1/mata_shots', {
+            method: 'POST',
+            body: { uploader: u.username, storage_path: path, file_name: f.name, file_size: f.size },
+            prefer: 'return=minimal'
+          });
+          if (ins.code !== 200 && ins.code !== 201) ins = await DB.rest('/rest/v1/mata_shots', {
+            method: 'POST',
+            body: { uploader: u.username, storage_path: path, file_name: f.name, file_size: f.size },
+            prefer: 'return=minimal'
+          });
+          if (ins.code === 200 || ins.code === 201) okCount++;
+          else {
+            failCount++;
+            if (!firstErr) firstErr = ins.msg || ('写入记录失败 HTTP ' + ins.code);
+          }
         }
-        var ins = await DB.rest('/rest/v1/mata_shots', {
-          method: 'POST',
-          body: { uploader: u.username, storage_path: path, file_name: f.name, file_size: f.size },
-          prefer: 'return=minimal'
-        });
-        if (ins.code === 200 || ins.code === 201) okCount++;
-        else {
-          failCount++;
-          if (!firstErr) firstErr = ins.msg || ('写入记录失败 HTTP ' + ins.code);
-        }
+      } catch (err) {
+        // 没有 finally 的话，任何一次抛异常都会让 uploading 卡在 true，
+        // 之后每次离开页面都被 beforeunload 拦住，反而更糟
+        failCount++;
+        if (!firstErr) firstErr = '上传中断：' + ((err && err.message) || err);
+      } finally {
+        uploading = false;
+        btn.disabled = false;
       }
       files = []; renderPreview();
       setStatus('完成：成功 ' + okCount + ' 张' +
