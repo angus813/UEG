@@ -57,16 +57,21 @@ create policy mata_shots_update on public.mata_shots
   using (uploader = public.current_username() or public.current_user_is_admin())
   with check (uploader = public.current_username() or public.current_user_is_admin());
 
--- 排行榜视图：只统计 used_in_dataset = true
+-- 排行榜视图：「已采纳」与「已上传」两个口径都给。
+-- 原来带 where used_in_dataset = true，副作用是：传了但还没被采纳的人根本不出现在
+-- 榜上，last_upload 也只在已采纳的行里取 —— 实测三人共 92 张上传、0 张采纳，
+-- 于是视图返回 0 行，页面永远是空的。
+-- 改成全量统计，采纳/上传分列；排序仍以「已采纳」为准（贡献口径不变）。
+-- 注意：create or replace view 不允许改已有列名，upload_count 只能追加在末尾。
 create or replace view public.mata_leaderboard as
   select uploader,
-         count(*)                                    as dataset_count,
-         count(*) filter (where labeled)             as labeled_count,
-         max(created_at)                             as last_upload
+         count(*) filter (where used_in_dataset) as dataset_count,   -- 已采纳（进数据集）
+         count(*) filter (where labeled)         as labeled_count,
+         max(created_at)                         as last_upload,
+         count(*)                                as upload_count     -- 已上传（含审核中）
     from public.mata_shots
-   where used_in_dataset = true
    group by uploader
-   order by dataset_count desc;
+   order by dataset_count desc, upload_count desc;
 
 grant select on public.mata_leaderboard to anon, authenticated;
 

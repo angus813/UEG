@@ -83,11 +83,11 @@
     <!-- 排行榜 -->
     <div class="mata-card">
       <h2>🏆 素材贡献排行榜</h2>
-      <p class="mata-note">只统计已进入数据集的截图（被采纳为准；审核中/未采纳不计入）。</p>
+      <p class="mata-note">已采纳 = 进入数据集的截图；已上传 = 传过的全部截图（含审核中）。</p>
       <div class="my-stats" id="myStats"></div>
       <table class="board" id="board">
-        <thead><tr><th>名次</th><th>用户</th><th>已采纳截图</th><th>最近上传</th></tr></thead>
-        <tbody><tr><td colspan="4">加载中…</td></tr></tbody>
+        <thead><tr><th>名次</th><th>用户</th><th>已采纳</th><th>已上传</th><th>最近上传</th></tr></thead>
+        <tbody><tr><td colspan="5">加载中…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -230,20 +230,22 @@
       var tb = document.querySelector('#board tbody');
       me = currentUser();
       if (!window.DB) {
-        tb.innerHTML = '<tr><td colspan="4">数据层未加载：请按 Ctrl+F5 强制刷新</td></tr>';
+        tb.innerHTML = '<tr><td colspan="5">数据层未加载：请按 Ctrl+F5 强制刷新</td></tr>';
         return;
       }
       var r = await DB.rest('/rest/v1/mata_leaderboard?select=*');
       var rows = (r.code === 200 && Array.isArray(r.data)) ? r.data : [];
       if (!rows.length) {
-        tb.innerHTML = '<tr><td colspan="4">还没有被采纳的截图，来传第一张吧</td></tr>';
+        tb.innerHTML = '<tr><td colspan="5">还没有人上传过截图，来传第一张吧</td></tr>';
       } else {
         var html = '';
         rows.forEach(function (row, i) {
           var cls = i === 0 ? 'rank1' : (i === 1 ? 'rank2' : (i === 2 ? 'rank3' : ''));
           var mine = me && me.username === row.uploader ? ' class="me"' : '';
           html += '<tr' + mine + '><td class="' + cls + '">' + (i + 1) + '</td><td>' + esc(row.uploader) +
-                  '</td><td>' + (row.dataset_count || 0) + '</td><td>' + fmt(row.last_upload) + '</td></tr>';
+                  '</td><td>' + (row.dataset_count || 0) + '</td><td>' +
+                  (row.upload_count != null ? row.upload_count : (row.dataset_count || 0)) +
+                  '</td><td>' + fmt(row.last_upload) + '</td></tr>';
         });
         tb.innerHTML = html;
       }
