@@ -283,7 +283,10 @@
       updateUI();
     });
     document.getElementById('btnToken').addEventListener('click', () => {
-      window.location.href = 'token.html';
+      // token.html 已删除（登录/注册功能与本页弹窗完全重复）。
+      // 顶栏这个按钮不能变死链：未登录 → 开登录弹窗；已登录 → 进个人中心。
+      if (getCurrentUser()) window.location.href = 'public/profile.html';
+      else openModal('login');
     });
 
     // ==================== 初始化 ====================
