@@ -70,11 +70,11 @@
     <!-- 排行榜 -->
     <div class="mata-card">
       <h2>素材贡献排行榜</h2>
-      <p class="mata-note">已采纳 = 进入数据集的截图；已上传 = 传过的全部截图（含审核中）。</p>
+      <p class="mata-note">已上传 = 传过的全部截图（含审核中）。</p>
       <div class="my-stats" id="myStats"></div>
       <table class="board" id="board">
-        <thead><tr><th>名次</th><th>用户</th><th>已采纳</th><th>已上传</th><th>最近上传</th></tr></thead>
-        <tbody><tr><td colspan="5">加载中…</td></tr></tbody>
+        <thead><tr><th>名次</th><th>用户</th><th>已上传</th><th>最近上传</th></tr></thead>
+        <tbody><tr><td colspan="4">加载中…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -235,7 +235,7 @@
       files = []; renderPreview();
       setStatus('完成：成功 ' + okCount + ' 张' +
                 (failCount ? '，失败 ' + failCount + ' 张（' + (firstErr || '未知原因') + '）' : '') +
-                '。进入待标注池，审核采纳后计入排行榜。', failCount === 0);
+                '。已计入排行榜。', failCount === 0);
       refreshLoginState();
       loadBoard();
     });
@@ -258,34 +258,33 @@
       var tb = document.querySelector('#board tbody');
       me = currentUser();
       if (!window.DB) {
-        tb.innerHTML = '<tr><td colspan="5">数据层未加载：请按 Ctrl+F5 强制刷新</td></tr>';
+        tb.innerHTML = '<tr><td colspan="4">数据层未加载：请按 Ctrl+F5 强制刷新</td></tr>';
         return;
       }
       var r = await DB.rest('/rest/v1/mata_leaderboard?select=*');
       var rows = (r.code === 200 && Array.isArray(r.data)) ? r.data : [];
       if (!rows.length) {
-        tb.innerHTML = '<tr><td colspan="5">还没有人上传过截图，来传第一张吧</td></tr>';
+        tb.innerHTML = '<tr><td colspan="4">还没有人上传过截图，来传第一张吧</td></tr>';
       } else {
         var html = '';
         rows.forEach(function (row, i) {
           var cls = i === 0 ? 'rank1' : (i === 1 ? 'rank2' : (i === 2 ? 'rank3' : ''));
           var mine = me && me.username === row.uploader ? ' class="me"' : '';
           html += '<tr' + mine + '><td class="' + cls + '">' + (i + 1) + '</td><td>' + esc(row.uploader) +
-                  '</td><td>' + (row.dataset_count || 0) + '</td><td>' +
+                  '</td><td>' +
                   (row.upload_count != null ? row.upload_count : (row.dataset_count || 0)) +
                   '</td><td>' + fmt(row.last_upload) + '</td></tr>';
         });
         tb.innerHTML = html;
       }
-      // 我的统计（含未采纳）
+      // 我的统计
       if (me) {
         var my = await DB.rest('/rest/v1/mata_shots?select=used_in_dataset&uploader=eq.' + encodeURIComponent(me.username));
         var list = (my.code === 200 && Array.isArray(my.data)) ? my.data : [];
-        var used = list.filter(function (x) { return x.used_in_dataset; }).length;
         document.getElementById('myStats').innerHTML =
-          '我上传：<b>' + list.length + '</b> 张 ｜ 已采纳：<b>' + used + '</b> 张 ｜ 审核中：<b>' + (list.length - used) + '</b> 张';
+          '我上传：<b>' + list.length + '</b> 张';
       } else {
-        document.getElementById('myStats').innerHTML = '登录后可查看自己的上传与采纳情况。';
+        document.getElementById('myStats').innerHTML = '登录后可查看自己的上传情况。';
       }
     }
 
