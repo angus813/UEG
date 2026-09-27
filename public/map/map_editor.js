@@ -327,9 +327,8 @@ const ShapeGenerator = {
       case 'cube': drawCubePath(p, x, y, w, h); break;
       case 'donut': drawDonutPath(p, cx, cy, Math.min(w, h) / 2, Math.min(w, h) / 4); break;
       case 'chevron': drawChevronPath(p, x, y, w, h); break;
-      case 'arrowR': case 'arrowL': case 'arrowU': case 'arrowD': case 'arrowLR': case 'arrowUD': case 'arrow4':
-        drawBlockArrowPath(p, x, y, w, h, { arrowR: 'R', arrowL: 'L', arrowU: 'U', arrowD: 'D', arrowLR: 'LR', arrowUD: 'UD', arrow4: '4' }[type]); break;
-      case 'arrowBent': drawBentArrowPath(p, x, y, w, h); break;
+      case 'arrowR': case 'arrowL': case 'arrowU': case 'arrowD': case 'arrowLR': case 'arrowUD':
+        drawBlockArrowPath(p, x, y, w, h, { arrowR: 'R', arrowL: 'L', arrowU: 'U', arrowD: 'D', arrowLR: 'LR', arrowUD: 'UD' }[type]); break;
       case 'minus': drawMinusPath(p, x, y, w, h); break;
       case 'multiply': drawMultiplyPath(p, x, y, w, h); break;
       case 'divide': drawDividePath(p, x, y, w, h); break;
@@ -531,24 +530,6 @@ function drawBlockArrowPath(p, x, y, w, h, dir) {
     p.lineTo(cx + aw, y + h); p.lineTo(cx, y + h - ah * 0.35); p.lineTo(cx - aw, y + h);
     p.lineTo(cx - aw, y + h - ah); p.lineTo(cx - bw, y + h - ah); p.closePath();
   }
-}
-function drawBentArrowPath(p, x, y, w, h) {
-  // 注意：Path2D.arc 对负半径会抛 IndexSizeError（图标 24px 时尤其容易触发），
-  // 因此所有半径都必须夹紧为正值。
-  const t = Math.min(w, h) * 0.24;
-  const r = Math.max(t * 2.6, Math.min(w, h) * 0.46);
-  const cx = x + r, cy = y + h - r;
-  p.moveTo(x, y + h);
-  p.lineTo(x, y + cy);
-  p.arc(cx, cy, r, Math.PI, Math.PI * 1.5, false);
-  p.lineTo(cx + r + t * 1.5, y);
-  p.lineTo(cx + r + t * 1.5, y + t * 1.5);
-  p.lineTo(cx + r, y + t * 1.5);
-  p.lineTo(cx + r, y + t * 2.5);
-  p.arc(cx, cy, Math.max(0.5, r - t * 2.5), Math.PI * 1.5, Math.PI, true);
-  p.lineTo(x + t * 2.5, y + h - t * 2.5);
-  p.lineTo(x + t * 2.5, y + h);
-  p.closePath();
 }
 function drawExplosionPath(p, cx, cy, r) {
   const n = 12, inner = r * 0.62;
@@ -1020,8 +1001,7 @@ function getShapePresets() {
     { category: '箭头总汇', shapes: [
       { type: 'arrowR', name: '右箭头' }, { type: 'arrowL', name: '左箭头' },
       { type: 'arrowU', name: '上箭头' }, { type: 'arrowD', name: '下箭头' },
-      { type: 'arrowLR', name: '左右箭头' }, { type: 'arrowUD', name: '上下箭头' },
-      { type: 'arrow4', name: '四向箭头' }, { type: 'arrowBent', name: '弯曲箭头' }
+      { type: 'arrowLR', name: '左右箭头' }, { type: 'arrowUD', name: '上下箭头' }
     ]},
     { category: '公式形状', shapes: [
       { type: 'plus', name: '加号' }, { type: 'minus', name: '减号' }, { type: 'multiply', name: '乘号' },
@@ -1120,7 +1100,7 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
   const PATH_ICON_TYPES = ['rect','roundRect','ellipse','triangle','rightTriangle','diamond','parallelogram',
     'trapezoid','pentagon','hexagon','octagon','star','star6','star8','star12','cross','plus','minus',
     'multiply','divide','equal','heart','moon','lightning','sun','cloud','smiley','cylinder','cube','donut',
-    'chevron','arrowR','arrowL','arrowU','arrowD','arrowLR','arrowUD','arrow4','arrowBent','explosion','banner',
+    'chevron','arrowR','arrowL','arrowU','arrowD','arrowLR','arrowUD','explosion','banner',
     'calloutRect','calloutRound','calloutEllipse','calloutCloud',
     'flowProcess','flowDecision','flowData','flowTerminator','flowDocument'];
   if (PATH_ICON_TYPES.indexOf(type) >= 0) {
@@ -1569,6 +1549,45 @@ function drawShapeLabel(ctx, shape) {
   ctx.restore();
 }
 
+
+// ---------- UEG 水印：屏幕坐标系平铺，预渲染到离屏画布（每帧只一次 drawImage） ----------
+let _uegWm = null, _uegWmKey = '';
+function drawWatermark() {
+  const w = canvas.width, h = canvas.height;
+  if (!w || !h) return;
+  const key = w + 'x' + h;
+  if (!_uegWm || _uegWmKey !== key) {
+    const off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    const o = off.getContext('2d');
+    o.clearRect(0, 0, w, h);
+    o.save();
+    o.translate(w / 2, h / 2);
+    o.rotate(-Math.PI / 9);              // 倾斜 20°
+    o.font = 'bold 30px Arial, sans-serif';
+    o.textAlign = 'center';
+    o.textBaseline = 'middle';
+    o.fillStyle = '#ffffff';
+    o.globalAlpha = 0.07;
+    const sx = 300, sy = 150;
+    // 旋转后要覆盖整个矩形，四边各多留一圈
+    const reach = Math.ceil(Math.hypot(w, h) / 2);
+    for (let y = -reach; y <= reach; y += sy) {
+      for (let x = -reach; x <= reach; x += sx) {
+        o.fillText('UEG', x, y);
+      }
+    }
+    o.restore();
+    _uegWm = off;
+    _uegWmKey = key;
+  }
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.drawImage(_uegWm, 0, 0);
+  ctx.restore();
+}
+
 // ---------- 主渲染函数 ----------
 function redraw() {
   syncAnimation();   // 按需启停「敌情」旋转动画（避免无谓的 20FPS 空转）
@@ -1721,6 +1740,7 @@ function redraw() {
   }
 
   ctx.restore();
+  drawWatermark();
 }
 
 // ---------- 文本绘制辅助 ----------
