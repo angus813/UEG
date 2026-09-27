@@ -271,15 +271,14 @@
           var cls = i === 0 ? 'rank1' : (i === 1 ? 'rank2' : (i === 2 ? 'rank3' : ''));
           var mine = me && me.username === row.uploader ? ' class="me"' : '';
           html += '<tr' + mine + '><td class="' + cls + '">' + (i + 1) + '</td><td>' + esc(row.uploader) +
-                  '</td><td>' +
-                  (row.upload_count != null ? row.upload_count : (row.dataset_count || 0)) +
+                  '</td><td>' + row.upload_count +
                   '</td><td>' + fmt(row.last_upload) + '</td></tr>';
         });
         tb.innerHTML = html;
       }
       // 我的统计
       if (me) {
-        var my = await DB.rest('/rest/v1/mata_shots?select=used_in_dataset&uploader=eq.' + encodeURIComponent(me.username));
+        var my = await DB.rest('/rest/v1/mata_shots?select=id&uploader=eq.' + encodeURIComponent(me.username));
         var list = (my.code === 200 && Array.isArray(my.data)) ? my.data : [];
         document.getElementById('myStats').innerHTML =
           '我上传：<b>' + list.length + '</b> 张';
