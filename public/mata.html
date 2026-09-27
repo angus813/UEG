@@ -52,7 +52,7 @@
     <div class="mata-cards">
       <!-- 卡片一：项目介绍 -->
       <div class="mata-card">
-        <h2>🧭 MATA 是什么</h2>
+        <h2>MATA 是什么</h2>
         <p>MATA 是我们自己写的<b>游戏助手</b>：它在电脑上看游戏画面、自己点按钮，把过程录下来当"教材"，
            训练出一个能认界面的小模型，让助手越来越会玩。</p>
         <ul>
@@ -67,11 +67,11 @@
 
       <!-- 卡片二：截图上传 -->
       <div class="mata-card">
-        <h2>📤 上传游戏截图</h2>
+        <h2>上传游戏截图</h2>
         <p>手机或电脑都能传。多选、拖拽都行，支持 jpg / png / webp。</p>
         <div class="drop-zone" id="dropZone">
           <div>点这里选择截图，或把图片拖进来</div>
-          <div class="mata-note" id="zoneHint">上传需要先登录：回主菜单点右上角「🔑 账号设置」登录后再传，截图才记在你名下。</div>
+          <div class="mata-note" id="zoneHint">上传需要先登录：回主菜单登录后再传，截图才记在你名下。</div>
           <!-- capture="environment" 会强制走相机、且有它时 multiple 被忽略 —— 手机上
                就选不到相册里的截图（页面还写着「手机也能传」）。改为普通选择器。 -->
           <input type="file" id="fileInput" accept="image/*,.heic,.heif" multiple style="display:none">
@@ -84,7 +84,7 @@
 
     <!-- 排行榜 -->
     <div class="mata-card">
-      <h2>🏆 素材贡献排行榜</h2>
+      <h2>素材贡献排行榜</h2>
       <p class="mata-note">已采纳 = 进入数据集的截图；已上传 = 传过的全部截图（含审核中）。</p>
       <div class="my-stats" id="myStats"></div>
       <table class="board" id="board">
@@ -198,7 +198,7 @@
 
     btn.addEventListener('click', async function () {
       var u = currentUser();
-      if (!u) { setStatus('请先登录后再上传（右上角账号设置）', false); return; }
+      if (!u) { setStatus('请先登录后再上传（回主菜单登录）', false); return; }
       if (!files.length) return;
       if (!window.DB) {
         btn.disabled = false;
@@ -263,7 +263,7 @@
         hint.textContent = '当前登录：' + u.username + '（截图会记在你名下）';
         btn.disabled = !files.length;
       } else {
-        hint.textContent = '未登录：回主菜单点右上角「🔑 账号设置」登录后才能上传。';
+        hint.textContent = '未登录：回主菜单登录后才能上传。';
         btn.disabled = true;
       }
     }

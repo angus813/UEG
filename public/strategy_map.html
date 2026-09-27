@@ -572,13 +572,13 @@
         // 编辑按钮：星系地图对所有用户显示，模板地图仅管理员显示
         if (map.type === 'galaxy' || isAdmin) {
           html += `
-            <a href="map/map_editor.html?mode=edit&id=${esc(map.id)}" class="edit-map-btn" style="display:flex;" title="编辑地图">✎</a>
+            <a href="map/map_editor.html?mode=edit&id=${esc(map.id)}" class="edit-map-btn" style="display:flex;" title="编辑地图"></a>
           `;
         }
         // 删除按钮：仅管理员
         if (isAdmin) {
           html += `
-            <button class="delete-map-btn" style="display:block;" onclick="deleteMap('${esc(map.id)}')">✕</button>
+            <button class="delete-map-btn" style="display:block;" onclick="deleteMap('${esc(map.id)}')"></button>
           `;
         }
         html += `</div>`;

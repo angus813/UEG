@@ -14,7 +14,7 @@
 </head>
 <body>
   <div class="card">
-    <h2>📥 数据导入工具</h2>
+    <h2>数据导入工具</h2>
     <div class="sub">将备份数据导入主数据源（默认 Supabase 云端）。GitHub 数据仓库 ueg-data 的同步由后端脚本独立执行 —— GitHub Token 由后端保管，前端无需也不可持有</div>
 
     <div class="lock-box">
@@ -25,15 +25,15 @@
       <button class="btn ghost" onclick="doLogout()">退出</button>
     </div>
 
-    <h3>📄 ships_data.js（舰船数据）</h3>
+    <h3>ships_data.js（舰船数据）</h3>
     <textarea id="shipsInput" placeholder="粘贴 ships_data.js 内容（window.SHIPS_DATA = {...}）"></textarea>
     <button class="btn" onclick="importShips()">导入舰船数据</button>
 
-    <h3>👥 users.json</h3>
+    <h3>users.json</h3>
     <textarea id="usersInput" placeholder='粘贴 users.json 内容'></textarea>
     <button class="btn" onclick="importUsers()">导入用户数据</button>
 
-    <h3>🗺️ guild_maps.json</h3>
+    <h3>guild_maps.json</h3>
     <textarea id="mapsInput" placeholder='粘贴 guild_maps.json 内容'></textarea>
     <button class="btn" onclick="importMaps()">导入地图数据</button>
 
@@ -61,49 +61,49 @@
     function refreshState() {
       const el = document.getElementById('lockState');
       const u = getCurrentUser();
-      if (u) el.textContent = '✅ 已登录：' + u.username + (u.is_admin ? '（管理员）' : '（⚠️ 导入需要管理员）');
-      else el.textContent = '🔒 未登录（导入需管理员账号）';
+      if (u) el.textContent = '已登录：' + u.username + (u.is_admin ? '（管理员）' : '（导入需要管理员）');
+      else el.textContent = '未登录（导入需管理员账号）';
     }
     async function doLogin() {
       const username = document.getElementById('userInput').value.trim();
       const pw = document.getElementById('pwInput').value;
-      if (!username || !pw) { setStatus('❌ 请输入用户名和密码'); return; }
-      setStatus('⏳ 登录中...');
+      if (!username || !pw) { setStatus('请输入用户名和密码'); return; }
+      setStatus('登录中...');
       const r = await DB.login(username, pw);
       if (r.code === 200) {
         setCurrentUser(r.data);
-        setStatus('✅ 登录成功' + (r.data.is_admin ? '（管理员）' : '，但导入需要管理员权限'));
+        setStatus('登录成功' + (r.data.is_admin ? '（管理员）' : '，但导入需要管理员权限'));
         refreshState();
       } else {
-        setStatus('❌ ' + r.msg);
+        setStatus('' + r.msg);
       }
     }
     function doLogout() {
       DB.logout();
       setCurrentUser(null);
-      setStatus('🔒 已退出');
+      setStatus('已退出');
       refreshState();
     }
     async function importShips() {
       const c = document.getElementById('shipsInput').value.trim();
-      if (!c) { setStatus('❌ 请先粘贴内容'); return; }
-      setStatus('⏳ 导入中...');
+      if (!c) { setStatus('请先粘贴内容'); return; }
+      setStatus('导入中...');
       const r = await DB.importShipsFromJs(c);
-      setStatus(r.ok ? '✅ 成功（' + r.count + ' 艘）' : '❌ ' + r.msg);
+      setStatus(r.ok ? '成功（' + r.count + ' 艘）' : '' + r.msg);
     }
     async function importUsers() {
       const c = document.getElementById('usersInput').value.trim();
-      if (!c) { setStatus('❌ 请先粘贴内容'); return; }
-      setStatus('⏳ 导入中...');
+      if (!c) { setStatus('请先粘贴内容'); return; }
+      setStatus('导入中...');
       const r = await DB.importUsersJson(c);
-      setStatus(r.ok ? '✅ 成功（' + r.count + ' 人）' : '❌ ' + r.msg);
+      setStatus(r.ok ? '成功（' + r.count + ' 人）' : '' + r.msg);
     }
     async function importMaps() {
       const c = document.getElementById('mapsInput').value.trim();
-      if (!c) { setStatus('❌ 请先粘贴内容'); return; }
-      setStatus('⏳ 导入中...');
+      if (!c) { setStatus('请先粘贴内容'); return; }
+      setStatus('导入中...');
       const r = await DB.importMapsJson(c);
-      setStatus(r.ok ? '✅ 成功（' + r.count + ' 张）' : '❌ ' + r.msg);
+      setStatus(r.ok ? '成功（' + r.count + ' 张）' : '' + r.msg);
     }
     refreshState();
   </script>

@@ -90,10 +90,10 @@
         if (!resp.ok) throw new Error('py 模块加载失败');
         await pyEngine.runPythonAsync(await resp.text());
         pyMode = true;
-        console.log('🐍 Python 数据处理引擎已启动');
+        console.log('Python 数据处理引擎已启动');
       } catch (e) {
         pyEngine = null; pyMode = false;
-        console.warn('⚠️ Python 引擎不可用，使用 JS 计算引擎：' + e.message);
+        console.warn('Python 引擎不可用，使用 JS 计算引擎：' + e.message);
       }
       return pyMode;
     })();
@@ -106,7 +106,7 @@
       var r = pyEngine.globals.get(fnName).apply(null, args);
       if (r && typeof r.toJs === 'function') return r.toJs({ create_proxies: false, dict_converter: Object.fromEntries });
       return r;
-    } catch (e) { console.warn('⚠️ Python 计算失败，降级 JS：' + fnName + ' ' + e.message); return null; }
+    } catch (e) { console.warn('Python 计算失败，降级 JS：' + fnName + ' ' + e.message); return null; }
   }
     
   function shipClass(type) {
@@ -135,11 +135,11 @@
   }
   function bpStatus(v) {
     const s = bpState[v.key] || { obtained: false, progress: 0 };
-    if (v.main) return s.obtained ? { text: '✅ 已获得（主型号）', cls: 'ok' } : { text: '🔒 未获得（开箱首次必出）', cls: 'lock' };
-    if (s.progress >= 100) return { text: '✅ 已研究完成', cls: 'ok' };
-    if (s.progress >= 25) return { text: '🔧 研究 ' + s.progress + '% · 1艘试用', cls: 'ing' };
-    if (s.progress > 0) return { text: '🔧 研究 ' + s.progress + '% · 0艘（只能看）', cls: 'ing' };
-    return { text: '🔒 未获得', cls: 'lock' };
+    if (v.main) return s.obtained ? { text: '已获得（主型号）', cls: 'ok' } : { text: '未获得（开箱首次必出）', cls: 'lock' };
+    if (s.progress >= 100) return { text: '已研究完成', cls: 'ok' };
+    if (s.progress >= 25) return { text: '研究 ' + s.progress + '% · 1艘试用', cls: 'ing' };
+    if (s.progress > 0) return { text: '研究 ' + s.progress + '% · 0艘（只能看）', cls: 'ing' };
+    return { text: '未获得', cls: 'lock' };
   }
   function renderBlueprint(ship) {
     const vs = getVariants(ship);
@@ -148,7 +148,7 @@
     if (cls === '超主力舰') return renderModules(ship);
     const add = BP_PROGRESS[ship.type] || 20;
     const times = BP_TIMES[ship.type] || 5;
-    let h = '<div class="bp-sec"><div class="sec-title">🔵 蓝图 · ' + cls + '（' + ship.type + '）</div>';
+    let h = '<div class="bp-sec"><div class="sec-title">蓝图 · ' + cls + '（' + ship.type + '）</div>';
     h += '<div class="bp-tip">主型号 + ' + (vs.length - 1) + '个子型号 · 重复开箱给研究进度（' + add + '%-100%，' + times + '次必得）</div>';
     vs.forEach(v => {
       const st = bpStatus(v);
@@ -160,7 +160,7 @@
       h += '<span class="bp-status">' + st.text + '</span>';
       h += '</div>';
     });
-    h += '<div class="bp-actions"><button class="bp-box" onclick="window._openBox()">📦 开箱</button>';
+    h += '<div class="bp-actions"><button class="bp-box" onclick="window._openBox()">开箱</button>';
     h += '<button class="bp-box bp-clear" onclick="window._clearBp()">重置</button></div>';
     h += '<div class="bp-tip">▷ 重复获得蓝图时，若选择研究子型号，给的研究进度如下：护卫/护航艇/战机 35%-100%（3次必得）· 驱逐 25%-100%（4次必得）· 巡洋 20%-100%（5次必得）</div>';
     h += '<div class="bp-tip">▷ 研究进度未达100%时存在服役上限：0%-25% 0艘（只能看）· 25%-99% 1艘（试用款）</div>';
@@ -178,7 +178,7 @@
   };
   function renderModules(ship) {
     const sysMap = (window.SYSTEM_STATS || {})[currentKey];
-    if (!sysMap) return '<div class="bp-sec"><div class="sec-title">🔧 模块系统</div><div class="bp-tip">暂无模块数据</div></div>';
+    if (!sysMap) return '<div class="bp-sec"><div class="sec-title">模块系统</div><div class="bp-tip">暂无模块数据</div></div>';
     let groups = py('module_groups', sysMap, moduleState);
     if (!groups) {
       groups = [];
@@ -196,12 +196,12 @@
         groups.push({ cls: g, chosen: chosen, options: lst.map(x => ({ opt: x.opt, sys: x.sys, selected: x.opt === chosen })) });
       });
     }
-    let h = '<div class="bp-sec"><div class="sec-title">🔧 模块系统（蓝图+模块 · 同分类只能安装1个）</div>';
+    let h = '<div class="bp-sec"><div class="sec-title">模块系统（蓝图+模块 · 同分类只能安装1个）</div>';
     h += '<div class="bp-tip">超主力舰蓝图由蓝图+模块组成，无子型号。模块分 M/A/B/C（D/E）类，同分类只能安装1个，首次获得自带2-4个初始模块，其余需抽取（新增系统需10技术值）</div>';
     groups.forEach(g => {
       h += '<div class="mod-group"><span class="mod-class">' + g.cls + '类</span>';
       g.options.forEach(m => {
-        h += '<span class="mod-chip ' + (m.selected ? 'on' : '') + '" onclick="window._pickModule(\'' + g.cls + '\',\'' + String(m.opt).replace(/'/g, '') + '\')">' + m.opt + ' ' + m.sys + (m.selected ? ' ✅' : '') + '</span>';
+        h += '<span class="mod-chip ' + (m.selected ? 'on' : '') + '" onclick="window._pickModule(\'' + g.cls + '\',\'' + String(m.opt).replace(/'/g, '') + '\')">' + m.opt + ' ' + m.sys + (m.selected ? ' ' : '') + '</span>';
       });
       h += '</div>';
     });
@@ -214,7 +214,7 @@
     const ship = DATA[currentKey];
     const vs = getVariants(ship);
     if (!vs.length) return;
-    if (shipClass(ship.type) === '超主力舰') { flashTip('🔧 超主力舰无子型号：模块通过抽取获得（见模块系统）'); return; }
+    if (shipClass(ship.type) === '超主力舰') { flashTip('超主力舰无子型号：模块通过抽取获得（见模块系统）'); return; }
     const add = BP_PROGRESS[ship.type] || 20;
     const mainV = vs[0];
     const st = bpState[mainV.key] || { obtained: false, progress: 0 };
@@ -222,7 +222,7 @@
       st.obtained = true;
       bpState[mainV.key] = st;
       saveBp();
-      flashTip('📦 首次开箱必得主型号：A.' + (mainV.model || ''));
+      flashTip('首次开箱必得主型号：A.' + (mainV.model || ''));
     } else {
       const subs = vs.slice(1).filter(v => (bpState[v.key] || { progress: 0 }).progress < 100);
       if (subs.length) {
@@ -231,15 +231,15 @@
         s.progress = Math.min(100, s.progress + add);
         bpState[pick.key] = s;
         saveBp();
-        flashTip('📦 重复蓝图 → 子型号研究进度 +' + add + '%（' + pick.letter + '.' + pick.model + '）');
-      } else flashTip('📦 所有子型号已研究完毕');
+        flashTip('重复蓝图 → 子型号研究进度 +' + add + '%（' + pick.letter + '.' + pick.model + '）');
+      } else flashTip('所有子型号已研究完毕');
     }
     renderPanel();
   };
   window._clearBp = function () {
     bpState = {};
     saveBp();
-    flashTip('🗑️ 蓝图研究已重置');
+    flashTip('蓝图研究已重置');
     renderPanel();
   };
     function computeFirepowerDpm() {
@@ -334,13 +334,13 @@
       const keys = grouped[type] || [];
       if (!keys.length) continue;
       html += `<div class="type-group">
-        <div class="type-header">${ICONS[type] ? '<img class="type-ico" src="' + ICONS[type] + '" alt="">' : '🚀'} ${type}<span class="cnt">${keys.length}</span></div>`;
+        <div class="type-header">${ICONS[type] ? '<img class="type-ico" src="' + ICONS[type] + '" alt="">' : ''} ${type}<span class="cnt">${keys.length}</span></div>`;
       keys.forEach(key => {
         const s = DATA[key];
         const active = key === currentKey ? 'active' : '';
         const disp = s.model ? `${s.name}·${s.model}` : s.name;
         html += `<div class="ship-item ${active}" data-key="${escapeHtml(key)}">
-          <span class="ico">${ICONS[s.type] ? '<img src="' + ICONS[s.type] + '" alt="">' : '🚀'}</span>
+          <span class="ico">${ICONS[s.type] ? '<img src="' + ICONS[s.type] + '" alt="">' : ''}</span>
           <div><div class="nm">${s.name}</div>${s.model ? `<div class="model">${s.model}</div>` : ''}</div>
           <span class="co">${s.company || ''}</span>
         </div>`;
@@ -479,7 +479,7 @@
     const fmt = n => Math.round(n).toLocaleString('zh-CN');
     const wt = computeWeaponTotals();
     const dpm = computeFirepowerDpm();
-    const wtHTML = wt.weapons ? `<div class="stat-sec"><div class="sec-title">⚔️ 武器系统合计（${wt.weapons} 槽 · 全部武器${enh.fireMul > 1.0001 ? ' ·强化+'+Math.round((enh.fireMul-1)*100)+'%' : ''}）</div>
+    const wtHTML = wt.weapons ? `<div class="stat-sec"><div class="sec-title">武器系统合计（${wt.weapons} 槽 · 全部武器${enh.fireMul > 1.0001 ? ' ·强化+'+Math.round((enh.fireMul-1)*100)+'%' : ''}）</div>
         <div class="stat-grid">
           <span>伤害 <b>${fmt(Math.round(wt.damage * enh.fireMul))}</b></span>
           <span>循环 <b>${wt.cycle}</b></span>
@@ -499,22 +499,22 @@
     if (enh.energyAdd >= 0.5) boostTags.push(`能量装甲+${Math.round(enh.energyAdd)}`);
     return `<div class="stat-panel">
       <div class="stat-top">
-        <span>🛡️ <b>${st.type || ship.type}</b>${st.position ? ' · ' + st.position : ''}</span>
+        <span><b>${st.type || ship.type}</b>${st.position ? ' · ' + st.position : ''}</span>
         <span class="cls-badge">${shipClass(ship.type)}</span><span class="scale-badge">${shipScale(ship.type)}</span>
-        <span>🚩 指挥值 <b>${st.commandValue}</b></span>
-        <span>🧩 变体 <b>${variantCount}</b></span>
-        <span>⚡ 已投入科技点 <b>${invested}</b></span>
-        <span>🚢 服役上限 <b>${st.serviceLimit}</b></span>
-        ${boostTags.length ? `<span class="gain">⚡ ${boostTags.join(' ')}</span>` : ''}
+        <span>指挥值 <b>${st.commandValue}</b></span>
+        <span>变体 <b>${variantCount}</b></span>
+        <span>已投入科技点 <b>${invested}</b></span>
+        <span>服役上限 <b>${st.serviceLimit}</b></span>
+        ${boostTags.length ? `<span class="gain">${boostTags.join(' ')}</span>` : ''}
       </div>
-      <div class="stat-sec"><div class="sec-title">🔥 火力属性</div>
+      <div class="stat-sec"><div class="sec-title">火力属性</div>
         <div class="stat-grid">
           <span>反舰 ${dpm.antiShip ? fmtStat(dpm.antiShip, enh.fireMul, 0, fmt) : '—'}<i class="src">DPM</i></span>
           <span>防空 ${dpm.antiAir ? fmtStat(dpm.antiAir, enh.aaMul, 0, fmt) : '—'}<i class="src">DPM</i></span>
           <span>攻城 ${dpm.siege ? fmtStat(dpm.siege, enh.siegeMul, 0, fmt) : '—'}<i class="src">DPM</i></span>
         </div>
       </div>
-      <div class="stat-sec"><div class="sec-title">📊 基础属性</div>
+      <div class="stat-sec"><div class="sec-title">基础属性</div>
         <div class="stat-grid">
           <span>舰船生命 ${fmtStat(st.hp || 0, enh.hpMul, enh.hpAdd, fmt)}</span>
           <span>巡航速度 ${(() => { const cv = st.cruise || '—'; const m = enh.cruiseMul || 1; if (cv !== '—' && /^\d+$/.test(String(cv)) && m > 1.0001) return `<b class="boost">${Math.round(Number(cv) * m)}</b> <span class="gain">+${((m - 1) * 100).toFixed(1)}%</span>`; return `<b>${cv}</b>${m > 1.0001 ? ` <span class="gain">+${((m - 1) * 100).toFixed(1)}%</span>` : ''}`; })()}</span>
@@ -524,7 +524,7 @@
           <span>尺寸 <b>${st.size ? fmt(st.size) + 'm' : '—'}</b></span>
         </div>
       </div>
-      ${st.build ? `<div class="stat-sec"><div class="sec-title">🏗️ 建造</div>
+      ${st.build ? `<div class="stat-sec"><div class="sec-title">建造</div>
         <div class="stat-grid">
           <span>金属 <b>${fmt(st.build.metal || 0)}</b></span>
           <span>晶体 <b>${fmt(st.build.crystal || 0)}</b></span>
@@ -535,10 +535,10 @@
       </div>` : ''}
 ${wtHTML}
 ${renderBlueprint(ship)}
-${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div><div class="stat-desc">${st.desc}</div></div>` : ''}
-      ${st.quote ? `<details class="ship-lore"><summary>📜 舰船语录（原文）</summary><div class="lore-text">${st.quote}</div></details>` : ''}
-      ${st.story ? `<details class="ship-lore"><summary>📚 舰船档案（原文）</summary><div class="lore-text">${st.story}</div></details>` : ''}
-      <div class="stat-sec"><div class="sec-title">🏆 同级别排名</div>
+${st.desc ? `<div class="stat-sec"><div class="sec-title">舰船描述</div><div class="stat-desc">${st.desc}</div></div>` : ''}
+      ${st.quote ? `<details class="ship-lore"><summary>舰船语录（原文）</summary><div class="lore-text">${st.quote}</div></details>` : ''}
+      ${st.story ? `<details class="ship-lore"><summary>舰船档案（原文）</summary><div class="lore-text">${st.story}</div></details>` : ''}
+      <div class="stat-sec"><div class="sec-title">同级别排名</div>
         <div class="stat-grid">
           <span>反舰 <b>${r.antiShip || '—'}</b></span>
           <span>防空 <b>${r.antiAir || '—'}</b></span>
@@ -548,7 +548,7 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
           <span>战略 <b>${r.strategy || '—'}</b></span>
         </div>
       </div>
-      <div class="stat-sec"><div class="sec-title">🧩 系统（${st.modules.length}）</div>
+      <div class="stat-sec"><div class="sec-title">系统（${st.modules.length}）</div>
         <div class="mod-tags">${st.modules.map(m => `<span>${m}</span>`).join('')}</div>
       </div>
     </div>`;
@@ -567,7 +567,7 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
 
     let html = '';
     html += `<div class="ship-head">
-      <span class="big-ico">${ICONS[ship.type] ? '<img src="' + ICONS[ship.type] + '" alt="">' : '🚀'}</span>
+      <span class="big-ico">${ICONS[ship.type] ? '<img src="' + ICONS[ship.type] + '" alt="">' : ''}</span>
       <div>
         <span class="nm">${ship.name}</span>
         ${ship.model ? `<span class="model">${ship.model}</span>` : ''}
@@ -590,7 +590,7 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
           <div class="sys-header ${open ? 'open' : ''}" data-sys="${si}">
             <span class="arrow">▶</span>
             <span class="nm">${sys.name}</span>
-            <span class="wn">${sys.weapons.length ? '🔫 ' + sys.weapons.length + ' 武器' : ''} · ${techCount} 项科技</span>
+            <span class="wn">${sys.weapons.length ? '' + sys.weapons.length + ' 武器' : ''} · ${techCount} 项科技</span>
           </div>`;
         if (open) {
           html += `<div class="sys-body">`;
@@ -609,13 +609,13 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
               list.forEach(w => {
                 const selected = w.name === chosen;
                 html += `<div class="sp-item ${selected ? 'selected' : ''}">`;
-                html += `<div class="sp-head"><span class="sp-name">🔫 ${w.name}</span>`;
+                html += `<div class="sp-head"><span class="sp-name">${w.name}</span>`;
                 // 互斥槽位（同 option 多武器）生成切换按钮；data-pick 格式与 panelEl.onclick 委托解析一致：key|s系统|o槽位|w武器
                 if (list.length > 1) {
-                  html += `<button class="sp-pick ${selected ? 'on' : ''}" data-pick="${escapeHtml(currentKey)}|s${escapeHtml(sys.name)}|o${escapeHtml(option)}|w${escapeHtml(w.name)}" ${selected ? 'disabled' : ''}>${selected ? '✓ 已选' : '选择'}</button>`;
+                  html += `<button class="sp-pick ${selected ? 'on' : ''}" data-pick="${escapeHtml(currentKey)}|s${escapeHtml(sys.name)}|o${escapeHtml(option)}|w${escapeHtml(w.name)}" ${selected ? 'disabled' : ''}>${selected ? '已选' : '选择'}</button>`;
                 }
                                 html += `</div>`;
-                html += `<div class="sp-stats">${w.type ? `<span class="tag">${w.type}</span>` : ''}${w.weaponType ? `<span class="tag">${w.weaponType}</span>` : ''}${w.damage !== undefined ? `<span>⚔️伤害 ${Math.round(w.damage * (enh.fireMul || 1))}${enh.fireMul > 1.0001 ? ' <i class="src">+' + Math.round((enh.fireMul - 1) * 100) + '%</i>' : ''}</span>` : ''}${w.cycle !== undefined ? `<span>💫循环 ${w.cycle}</span>` : ''}${w.lockOn !== undefined ? `<span>🔒锁定 ${w.lockOn}</span>` : ''}${w.rounds !== undefined ? `<span>🔁轮数 ${w.rounds}</span>` : ''}${w.cooldown !== undefined ? `<span>⏱️冷却 ${enh.cdMul && enh.cdMul < 1 ? (Math.round(w.cooldown * enh.cdMul * 10) / 10) + 's <i class="src">-' + Math.round((1 - enh.cdMul) * 100) + '%</i>' : w.cooldown + 's'}</span>` : ''}${w.duration !== undefined ? `<span>⏳持续 ${w.duration}s</span>` : ''}</div>`;
+                html += `<div class="sp-stats">${w.type ? `<span class="tag">${w.type}</span>` : ''}${w.weaponType ? `<span class="tag">${w.weaponType}</span>` : ''}${w.damage !== undefined ? `<span>伤害 ${Math.round(w.damage * (enh.fireMul || 1))}${enh.fireMul > 1.0001 ? ' <i class="src">+' + Math.round((enh.fireMul - 1) * 100) + '%</i>' : ''}</span>` : ''}${w.cycle !== undefined ? `<span>循环 ${w.cycle}</span>` : ''}${w.lockOn !== undefined ? `<span>锁定 ${w.lockOn}</span>` : ''}${w.rounds !== undefined ? `<span>轮数 ${w.rounds}</span>` : ''}${w.cooldown !== undefined ? `<span>冷却 ${enh.cdMul && enh.cdMul < 1 ? (Math.round(w.cooldown * enh.cdMul * 10) / 10) + 's <i class="src">-' + Math.round((1 - enh.cdMul) * 100) + '%</i>' : w.cooldown + 's'}</span>` : ''}${w.duration !== undefined ? `<span>持续 ${w.duration}s</span>` : ''}</div>`;
                 w.actions.forEach(a => {
                   let info = a.name || '';
                   if (a.effect && a.act) info += ` <i>·</i> ${a.effect}${a.act}${a.value !== undefined ? ' <b>+' + a.value + '</b>' : ''}`;
@@ -632,7 +632,7 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
           });
           if (sys.weapons.length) {
             html += `<div class="weapon-tags">`;
-            sys.weapons.forEach(w => { html += `<span class="wp-tag">🔫 ${w.name}</span>`; });
+            sys.weapons.forEach(w => { html += `<span class="wp-tag">${w.name}</span>`; });
             html += `</div>`;
           }
           html += `</div>`;
@@ -737,7 +737,7 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
   function flashPoints(msg) {
     const el = pointsEl;
     const old = el.textContent;
-    const flash = '⚠ ' + msg;
+    const flash = '' + msg;
     el.textContent = flash;
     setTimeout(() => {
       // 仅当仍显示本次提示时才恢复，避免连点时旧定时器把新提示覆盖掉
@@ -764,5 +764,5 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">📖 舰船描述</div
     renderPanel();
   }
   initPyEngine();
-  console.log('✅ 舰船强化系统已加载：' + Object.keys(DATA).length + ' 艘舰船');
+  console.log('舰船强化系统已加载：' + Object.keys(DATA).length + ' 艘舰船');
 })();

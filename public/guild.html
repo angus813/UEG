@@ -30,14 +30,14 @@
       <div class="guild-title">公会</div>
       <div class="feature-cards">
         <a href="strategy_map.html" class="feature-card" style="text-decoration:none; color:inherit;">
-          <div class="feature-icon">🗺️</div>
+          <div class="feature-icon"></div>
           <div class="feature-text">
             <h3>战略地图</h3>
             <p>查看同盟战略部署</p>
           </div>
         </a>
         <a href="forum.html" class="feature-card" style="text-decoration:none; color:inherit;">
-          <div class="feature-icon">💬</div>
+          <div class="feature-icon"></div>
           <div class="feature-text">
             <h3>公会论坛</h3>
             <p>聊天式交流 · 图片视频表情</p>
@@ -45,7 +45,7 @@
         </a>
         <!-- 配队攻略：由「小游戏 → 舰船强化」迁移而来 -->
         <a href="games/enhance.html" class="feature-card" style="text-decoration:none; color:inherit;">
-          <div class="feature-icon">📋</div>
+          <div class="feature-icon"></div>
           <div class="feature-text">
             <h3>配队攻略 · 舰船强化</h3>
             <p>蓝图科技加点与舰队配置</p>
@@ -99,7 +99,7 @@
     window.setOfficial = setOfficial;
 
     async function deleteMember(username) {
-      if (!confirm('⚠️ 确定要永久删除用户 "' + username + '" 吗？此操作不可恢复！')) return;
+      if (!confirm('确定要永久删除用户 "' + username + '" 吗？此操作不可恢复！')) return;
       const role = await myRole();
       if (!role.admin && !role.owner) { alert('您没有管理员权限'); return; }
       const { error } = await supabase.from('users').delete().eq('username', username);
@@ -158,7 +158,7 @@
 
         const ava = user.avatar_url
           ? '<img src="' + esc(user.avatar_url) + '" alt="">'
-          : '👤';
+          : '';
 
         // 会长不能被注销，也不能被他人任免
         const canToggle = canManage && !isOwner;

@@ -228,5 +228,5 @@
     ready: ensureDb
   };
 
-  console.log('✅ supabase-client.js（兼容层）已加载：supabase 调用已映射到 GitHub 数据库');
+  console.log('supabase-client.js（兼容层）已加载：supabase 调用已映射到 GitHub 数据库');
 })();

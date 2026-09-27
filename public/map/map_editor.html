@@ -12,7 +12,9 @@
        ============================================================ */
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
-    html, body { height: 100vh; overflow: hidden; }
+    /* 移动端浏览器地址栏收起/展开会让 100vh 忽大忽小，底部工具栏被遮或留白；
+       100dvh 是动态视口，不支持的浏览器回退到上一行的 vh */
+    html, body { height: 100vh; height: 100dvh; overflow: hidden; }
 
     body {
       background-color: var(--rhine-bg);
@@ -245,8 +247,13 @@
     #textureFile { color: var(--rhine-ink) !important; }
 
     @media (max-width: 768px) {
-      .main-area { flex-direction: column; }
+      .main-area { flex-direction: column; min-height: 0; }
       .toolbar { width: 100%; max-height: 200px; border-left: none; border-top: 1px solid var(--rhine-line-strong); }
+      /* 窄屏顶栏按钮挤不下会溢出：允许换行，收紧留白与字号 */
+      .header { padding: 8px 10px; flex-wrap: wrap; gap: 6px 8px; }
+      .back-btn { padding: 5px 8px; font-size: 0.62rem; letter-spacing: 0; }
+      .map-title { font-size: 0.78rem; }
+      .shape-btn { width: 32px; height: 32px; }
     }
 
     /* ============================================================
@@ -283,35 +290,19 @@
     .toolbar #textureFile { color: #c3cddb !important; }
     .toolbar .btn-delete-shape { background: rgba(120, 40, 40, 0.35); border-color: rgba(200, 90, 90, 0.55); color: #ffb8b8; }
     .toolbar .btn-delete-shape:hover { background: #9c4a3a; border-color: #9c4a3a; color: #fff; }
-    .header .btn, .header .btn.save, .header #btnUniverse {
+    .header .btn, .header .btn.save {
       background: rgba(18, 24, 38, 0.85); border-color: rgba(120, 140, 175, 0.40); color: #cfd6e0;
     }
-    .header .btn:hover, .header .btn.save:hover, .header #btnUniverse:hover,
-    .header #btnUniverse.active { background: #9b7247; border-color: #9b7247; color: #04060d; }
+    .header .btn:hover, .header .btn.save:hover {
+      background: #9b7247; border-color: #9b7247; color: #04060d;
+    }
     /* 弹窗/属性面板在深色主题下的对比 */
     .modal-box { background: #101a2e !important; border-color: #22304c !important; color: #c3cddb; }
     .modal-box h3 { color: #e8eef7; }
     .modal-input { background: #0a1020 !important; color: #e8eef7 !important; border-color: #33456b !important; }
 
-    /* ============================================================
-       宇宙背景：本页启用 dyson-bg.js 的动态宇宙（全站默认隐藏）
-       戴森球 + 冷色星云 + 星空 + 粒子，约 63s 自转
-       页面内容置于其上；地图画布半透明以透出背景
-       ============================================================ */
     body { background: #04060d; }
-    /* 动态宇宙背景：默认关闭（dyson-bg 的后期处理较重，低端设备可能掉帧）
-       点击顶栏「✦ 动态宇宙」可开启；静态星空底色已保证宇宙观感 */
-    #dyson-bg.dyson-on {
-      display: block !important;
-      position: fixed !important;
-      top: 0; left: 0;
-      width: 100vw !important;
-      height: 100vh !important;
-      z-index: 0 !important;
-      pointer-events: none;
-    }
-    .header, .main-area { position: relative; z-index: 1; }
-    /* 顶栏与工具栏改为深色玻璃，与宇宙背景协调 */
+    /* 顶栏与工具栏改为深色玻璃 */
     .header {
       background: rgba(6, 10, 20, 0.72);
       border-bottom-color: rgba(155, 114, 71, 0.55);
@@ -343,44 +334,6 @@
     .toolbar button:hover, .toolbar .tool-btn:hover { background: #9b7247; border-color: #9b7247; color: #04060d; }
     .canvas-container { border-color: rgba(120, 140, 175, 0.30); }
   </style>
-  <script>
-    /* 动态宇宙背景开关（默认关闭，保证低端设备流畅） */
-    function initUniverseToggle() {
-      var btn = document.getElementById('btnUniverse');
-      if (!btn) return;
-      var on = false, loading = false;
-      btn.addEventListener('click', function () {
-        /* 关闭：只切 class，脚本留着也不影响（画布隐藏后不再可见） */
-        if (on) {
-          on = false;
-          var c0 = document.getElementById('dyson-bg');
-          if (c0) c0.classList.remove('dyson-on');
-          btn.classList.remove('active');
-          btn.textContent = '✦ 动态宇宙';
-          return;
-        }
-        /* 开启：首次点击才动态加载 dyson-bg.js（默认不加载，零开销） */
-        var enable = function () {
-          var c = document.getElementById('dyson-bg');
-          if (c) c.classList.add('dyson-on');
-          on = true;
-          btn.classList.add('active');
-          btn.textContent = '✦ 动态宇宙（开）';
-        };
-        if (document.getElementById('dyson-bg')) { enable(); return; }
-        if (loading) return;
-        loading = true;
-        btn.textContent = '✦ 加载中…';
-        var s = document.createElement('script');
-        s.src = '../dyson-bg.js';
-        s.onload = function () { loading = false; setTimeout(enable, 60); };
-        s.onerror = function () { loading = false; btn.textContent = '✦ 动态宇宙（加载失败）'; };
-        document.head.appendChild(s);
-      });
-    }
-    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initUniverseToggle);
-    else initUniverseToggle();
-  </script>
 </head>
 <body>
   <div class="header">
@@ -389,8 +342,7 @@
       <div class="map-title" id="mapTitle">加载中...</div>
     </div>
     <div>
-      <button class="btn" id="btnUniverse" title="开启/关闭动态宇宙背景（低配设备建议关闭）">✦ 动态宇宙</button>
-      <button class="btn save" id="saveBtn">💾 保存</button>
+      <button class="btn save" id="saveBtn">保存</button>
     </div>
   </div>
 
@@ -401,7 +353,7 @@
 
     <div class="toolbar" id="toolbar">
       <div class="tool-section">
-        <div class="section-title" data-collapse="tools">✏️ 绘图工具</div>
+        <div class="section-title" data-collapse="tools">绘图工具</div>
         <div class="section-content" id="drawTools">
           <button class="tool-btn active" data-tool="select">选择</button>
           <button class="tool-btn" data-tool="line">直线</button>
@@ -409,15 +361,15 @@
           <button class="tool-btn" data-tool="rect">矩形</button>
           <button class="tool-btn" data-tool="ellipse">椭圆</button>
           <button class="tool-btn" data-tool="circle">圆规</button>
-          <button class="tool-btn" id="btnUndo" style="margin-top:6px;">↩️ 撤回</button>
-          <button class="tool-btn" id="btnRedo">↪️ 回撤</button>
-          <button class="tool-btn" id="btnCopy" style="margin-top:4px;">📋 复制</button>
-          <button class="tool-btn" id="btnPaste">📄 粘贴</button>
+          <button class="tool-btn" id="btnUndo" style="margin-top:6px;">撤回</button>
+          <button class="tool-btn" id="btnRedo">回撤</button>
+          <button class="tool-btn" id="btnCopy" style="margin-top:4px;">复制</button>
+          <button class="tool-btn" id="btnPaste">粘贴</button>
         </div>
       </div>
 
       <div class="tool-section" id="propertiesSection" style="display:none;">
-        <div class="section-title" data-collapse="props">🎨 形状属性</div>
+        <div class="section-title" data-collapse="props">形状属性</div>
         <div class="section-content" style="flex-direction:column;">
           <label>填充颜色</label>
           <input type="color" class="color-picker" id="fillColor" value="#00c8ff">
@@ -449,13 +401,13 @@
           <input type="range" class="range-input" id="opacity" min="0" max="1" step="0.05" value="1">
           <label>备注（限30字）</label>
           <input type="text" id="remarkInput" class="modal-input" maxlength="30" placeholder="输入备注...">
-          <button class="btn-delete-shape" id="deleteShapeBtn">🗑️ 删除形状</button>
+          <button class="btn-delete-shape" id="deleteShapeBtn">删除形状</button>
         </div>
       </div>
 
       <!-- 坐标定位工具 -->
       <div class="tool-section">
-        <div class="section-title" data-collapse="locate">📍 坐标定位</div>
+        <div class="section-title" data-collapse="locate">坐标定位</div>
         <div class="section-content" style="flex-direction:column;">
           <label style="margin-top:0;">X 坐标</label>
           <input type="number" id="locateX" class="modal-input" placeholder="0-10000" min="0" max="10000" value="5000" style="margin-bottom:5px;">

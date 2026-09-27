@@ -539,8 +539,8 @@ body {
     <div class="top-bar" id="topBar">
 <span class="bar-title">色块拼图 · 障碍上限</span>
         <span class="level-badge" id="levelBadge">第 1 关</span>
-        <span class="timer-display" id="timerDisplay">⏱️ 00:00</span>
-        <div class="hint-banner" id="hintBanner"><span>💡</span> 提示：观察行列色块，试试旋转图形！</div>
+        <span class="timer-display" id="timerDisplay">00:00</span>
+        <div class="hint-banner" id="hintBanner"><span></span> 提示：观察行列色块，试试旋转图形！</div>
     </div>
 
     <div class="game-container" id="gameContainer">
@@ -557,17 +557,17 @@ body {
             </div>
         </div>
         <div class="pieces-panel" id="piecesPanel">
-            <h3>🧩 拼图块</h3>
+            <h3>拼图块</h3>
             <div id="piecesList" style="display:flex;flex-direction:row;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;"></div>
             <div class="btn-row">
-                <button class="btn" id="btnReset">🔄 重置</button>
+                <button class="btn" id="btnReset">重置</button>
             </div>
         </div>
     </div>
 
     <div class="win-overlay" id="winOverlay" style="display:none;">
         <div class="win-dialog">
-            <div class="trophy">🏆</div>
+            <div class="trophy"></div>
             <h2>恭喜通关！</h2>
             <p id="winMessage"></p>
             <button id="btnPlayAgain">▶ 下一关</button>
@@ -1159,14 +1159,14 @@ body {
 
             function startTimer() {
                 timerStartTime = Date.now();
-                timerDisplay.textContent = '⏱️ 00:00'; // 立即重置显示，避免首个 tick 前残留上一关时间
+                timerDisplay.textContent = '00:00'; // 立即重置显示，避免首个 tick 前残留上一关时间
                 hintShown = false; gameWon = false;
                 removeHintGlow(); hintBanner.classList.remove('visible'); timerDisplay.classList.remove('warning');
                 if (timerInterval) clearInterval(timerInterval);
                 timerInterval = setInterval(() => {
                     if (!timerStartTime || gameWon) return;
                     const e = Math.floor((Date.now()-timerStartTime)/1000);
-                    timerDisplay.textContent = '⏱️ '+Math.floor(e/60).toString().padStart(2,'0')+':'+(e%60).toString().padStart(2,'0');
+                    timerDisplay.textContent = ''+Math.floor(e/60).toString().padStart(2,'0')+':'+(e%60).toString().padStart(2,'0');
                     if (currentLevelNumber <= 15 && e >= HINT_TIMEOUT_SEC && !hintShown && !gameWon) {
                         hintShown = true;
                         hintBanner.classList.add('visible');

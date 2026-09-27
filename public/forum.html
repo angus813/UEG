@@ -61,7 +61,7 @@
 <body>
   <div class="chat-wrap">
     <div class="chat-head">
-      <h1>💬 公会论坛</h1>
+      <h1>公会论坛</h1>
       <div class="spacer"></div>
       <label class="color-pick">我的气泡
         <input type="color" id="bubbleColor" value="#3a7afe">
@@ -76,9 +76,9 @@
     <div class="emoji-bar" id="emojiBar"></div>
 
     <div class="chat-input">
-      <button class="tool" id="btnEmoji" title="表情">😊</button>
-      <button class="tool" id="btnImg" title="发图片">🖼️</button>
-      <button class="tool" id="btnVid" title="发视频">🎬</button>
+      <button class="tool" id="btnEmoji" title="表情"></button>
+      <button class="tool" id="btnImg" title="发图片"></button>
+      <button class="tool" id="btnVid" title="发视频"></button>
       <input type="file" id="fileImg" accept="image/*" style="display:none">
       <input type="file" id="fileVid" accept="video/*" style="display:none">
       <textarea id="txt" placeholder="说点什么…" enterkeyhint="send" title="Enter 发送，Shift+Enter 换行"></textarea>
@@ -151,7 +151,7 @@
     function msgHtml(m) {
       var mine = me && m.author === me.username;
       var recalled = !!m.recalled_at;
-      var avaHtml = '<div class="ava">👤</div>';
+      var avaHtml = '<div class="ava"></div>';
       var cached = EMO_CACHE[m.author];
       if (cached && cached.avatar) avaHtml = '<div class="ava"><img src="' + esc(cached.avatar) + '" alt=""></div>';
 
@@ -389,7 +389,7 @@
     (async function init() {
       try { if (window.UEG_SESSION_READY) await window.UEG_SESSION_READY; } catch (e) {}
       me = currentUser();
-      if (!me) tip('未登录：可以浏览，登录后才能发言（右上角账号设置）', true);
+      if (!me) tip('未登录：可以浏览，登录后才能发言（回主菜单登录）', true);
       await initColor();
       await loadMessages(true);
       timer = setInterval(function () {

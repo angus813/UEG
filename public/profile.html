@@ -15,7 +15,7 @@
 <body>
   <div class="profile-page">
     <div class="profile-header">
-      <div class="profile-avatar" id="avatarBox" title="点击更换头像" style="cursor:pointer;">👤</div>
+      <div class="profile-avatar" id="avatarBox" title="点击更换头像" style="cursor:pointer;"></div>
       <input type="file" id="avatarFile" accept="image/*" style="display:none">
       <div style="font-size:12px;opacity:.6;text-align:center;margin-top:6px;">点头像可更换（jpg/png，建议方形）</div>
       <div class="profile-username" id="profileUsername">用户名</div>
@@ -31,7 +31,7 @@
 
     <!-- 管理员入口（动态显示） -->
     <div class="admin-zone" id="adminEntry" style="display: none;">
-      <a href="admin.html" class="btn-admin">🛡️ 管理用户</a>
+      <a href="admin.html" class="btn-admin">管理用户</a>
     </div>
 
     <!-- 修改密码 -->
@@ -199,7 +199,7 @@
     });
 
     document.getElementById('btnDeleteAccount').addEventListener('click', () => {
-      if (!confirm('⚠️ 确定要彻底删除你的账号吗？此操作不可恢复！')) return;
+      if (!confirm('确定要彻底删除你的账号吗？此操作不可恢复！')) return;
       deleteAccount();
     });
 
