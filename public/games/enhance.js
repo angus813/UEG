@@ -160,8 +160,7 @@
       h += '<span class="bp-status">' + st.text + '</span>';
       h += '</div>';
     });
-    h += '<div class="bp-actions"><button class="bp-box" onclick="window._openBox()">开箱</button>';
-    h += '<button class="bp-box bp-clear" onclick="window._clearBp()">重置</button></div>';
+    h += '<div class="bp-actions"><button class="bp-box bp-clear" onclick="window._clearBp()">重置</button></div>';
     h += '<div class="bp-tip">▷ 重复获得蓝图时，若选择研究子型号，给的研究进度如下：护卫/护航艇/战机 35%-100%（3次必得）· 驱逐 25%-100%（4次必得）· 巡洋 20%-100%（5次必得）</div>';
     h += '<div class="bp-tip">▷ 研究进度未达100%时存在服役上限：0%-25% 0艘（只能看）· 25%-99% 1艘（试用款）</div>';
     h += '<div class="bp-tip">▷ 特殊子型号：A.限时研究协议（500比邻星币→指定型号1%-10%进度）· B.对接（如AC721-C离子炮←离子科技研究中心）· C.副本/市场（如AC720艾格勒姆未名者·英雄舰）</div>';
@@ -209,33 +208,6 @@
     h += '</div>';
     return h;
   }
-  window._openBox = function () {
-    if (!currentKey) return;
-    const ship = DATA[currentKey];
-    const vs = getVariants(ship);
-    if (!vs.length) return;
-    if (shipClass(ship.type) === '超主力舰') { flashTip('超主力舰无子型号：模块通过抽取获得（见模块系统）'); return; }
-    const add = BP_PROGRESS[ship.type] || 20;
-    const mainV = vs[0];
-    const st = bpState[mainV.key] || { obtained: false, progress: 0 };
-    if (!st.obtained) {
-      st.obtained = true;
-      bpState[mainV.key] = st;
-      saveBp();
-      flashTip('首次开箱必得主型号：A.' + (mainV.model || ''));
-    } else {
-      const subs = vs.slice(1).filter(v => (bpState[v.key] || { progress: 0 }).progress < 100);
-      if (subs.length) {
-        const pick = subs[Math.floor(Math.random() * subs.length)];
-        const s = bpState[pick.key] || { obtained: true, progress: 0 };
-        s.progress = Math.min(100, s.progress + add);
-        bpState[pick.key] = s;
-        saveBp();
-        flashTip('重复蓝图 → 子型号研究进度 +' + add + '%（' + pick.letter + '.' + pick.model + '）');
-      } else flashTip('所有子型号已研究完毕');
-    }
-    renderPanel();
-  };
   window._clearBp = function () {
     bpState = {};
     saveBp();

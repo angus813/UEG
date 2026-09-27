@@ -3,8 +3,6 @@ window.SHIP_STATS_ALIAS = {
   "乌拉诺斯之矛级": "乌拉诺斯之矛",
   "RB7-13型": "RB7",
   "XT-20级": "XT",
-  "XT-10级": "XT",
-  "XT-8级": "XT",
   "牛蛙型": "牛蛙",
   "维塔斯B010": "维塔斯",
   "S-列维9号": "S",
@@ -14,7 +12,6 @@ window.SHIP_STATS_ALIAS = {
   "CV-T800型": "CV",
   "雷火之星级": "雷火之星",
   "翼骑兵级": "枪骑兵级",
-  "XT-8型": "XT",
   "S-Levy9- Heavy Torpedo Escort Corvette": "S",
   "S-Levy9": "S"
 };
@@ -1967,39 +1964,6 @@ window.SHIP_STATS = {
  ],
  "XT": [
   {
-   "name": "XT-8级-两栖登陆舰",
-   "variant": "攻城型",
-   "type": "护卫舰",
-   "position": "中排",
-   "commandValue": 4,
-   "hp": 7070,
-   "cruise": "1000-1200",
-   "warp": 5000,
-   "physicalArmor": 5,
-   "energyArmor": 5,
-   "serviceLimit": 10,
-   "ratings": {
-    "antiShip": "C",
-    "antiAir": "B",
-    "siege": "C",
-    "survival": "C",
-    "strategy": "A",
-    "support": "A"
-   },
-   "firepower": {
-    "antiShip": 246,
-    "antiAir": 101,
-    "siege": 1530
-   },
-   "modules": [
-    "攻城无人机系统",
-    "防卫系统"
-   ],
-   "desc": "由X20工程舰改装而来的辅助巡洋舰，被私掠者用作指挥舰。原有的采矿支援设施被改装为维修坞，可在战场上提供战术支援。",
-   "story": "银河战争期间，安东塔斯城的部分外部建筑被XT-20搭载的护航艇摧毁。在战后城市修缮中，安东尼奥斯财团借助一张古老的建筑设计图恢复了城市的原始风貌。",
-   "quote": "建筑之美依赖于强大先进的技术，而无能糟糕的设计师才是建筑丑陋的罪魁祸首。——马库斯"
-  },
-  {
    "name": "XT-20级-护航巡洋舰",
    "variant": "运载型A",
    "type": "巡洋舰",
@@ -2168,47 +2132,6 @@ window.SHIP_STATS = {
     "FK-200S垂直发射系统",
     "通用火炮系统"
    ]
-  },
-  {
-   "name": "XT-10级-武装鱼雷驱逐舰",
-   "variant": "鱼雷型A",
-   "type": "驱逐舰",
-   "position": "中排",
-   "commandValue": 10,
-   "hp": 25650,
-   "cruise": 850,
-   "warp": 4250,
-   "physicalArmor": 2,
-   "energyArmor": 5,
-   "serviceLimit": 10,
-   "ratings": {
-    "antiShip": "A",
-    "antiAir": "C",
-    "siege": "C",
-    "survival": "C",
-    "strategy": "A"
-   },
-   "firepower": {
-    "antiShip": 5659,
-    "antiAir": 1791,
-    "siege": 80
-   },
-   "modules": [
-    "永远的北极星投射系统",
-    "通用火炮系统"
-   ],
-   "size": 490,
-   "maxShip": 10,
-   "build": {
-    "metal": 24810,
-    "crystal": 3170,
-    "deuterium": 810,
-    "time": 0.05,
-    "capacity": 11500
-   },
-   "desc": "由X10工程舰改装而来。工程无人机舱与储存空间被改装为弹药库。此外加装了走私版\"永恒北极星\"投射系统，提供可观的反舰火力。",
-   "story": "由安东尼奥斯财团开发的集束鱼雷攻击技术成果\"永恒北极星\"投射发射系统，能够对舰船造成极高伤害。财团只与少数亲密盟友签署了该技术的授权共享协议。然而近年来，其技术授权与复制品出现在跳蚤市场上，数量有限，短时间内被匿名高价买走。安东尼奥斯财团展开了一系列调查，却一无所获。不久后，XT10鱼雷驱逐舰",
-   "quote": "我们共享技术的起源与发展道路，却不共享社会与文化。或许这就是战争的根源。——科尼·冯，首席"
   }
  ],
  "诺玛M470级": [
@@ -3598,96 +3521,6 @@ window.SHIP_STATS = {
    "modules": [
     "舰首离子炮系统",
     "防空系统"
-   ]
-  }
- ],
- "迅捷级": [
-  {
-   "name": "迅捷级-武装运输船",
-   "variant": "通用型",
-   "type": "巡洋舰",
-   "position": "中排",
-   "commandValue": 12,
-   "hp": 48290,
-   "cruise": "600-1200",
-   "warp": 3000,
-   "physicalArmor": 10,
-   "energyArmor": 5,
-   "serviceLimit": 10,
-   "ratings": {
-    "antiShip": "C",
-    "antiAir": "C",
-    "siege": "C",
-    "survival": "C",
-    "strategy": "A"
-   },
-   "firepower": {
-    "antiShip": 2400,
-    "antiAir": 720,
-    "siege": 256
-   },
-   "modules": [
-    "防御火炮系统"
-   ]
-  },
-  {
-   "name": "迅捷级-载机运输船",
-   "variant": "载机型B",
-   "type": "巡洋舰",
-   "position": "中排",
-   "commandValue": 12,
-   "hp": 48290,
-   "cruise": "600-1200",
-   "warp": 3000,
-   "physicalArmor": 10,
-   "energyArmor": 5,
-   "serviceLimit": 10,
-   "ratings": {
-    "antiShip": "C",
-    "antiAir": "C",
-    "siege": "C",
-    "survival": "C",
-    "strategy": "B"
-   },
-   "firepower": {
-    "antiShip": 2400,
-    "antiAir": 720,
-    "siege": 256
-   },
-   "modules": [
-    "舰载机系统",
-    "防御火炮系统"
-   ]
-  },
-  {
-   "name": "迅捷级-TE-高速载机运输船（载机型A）",
-   "variant": "TE-高速载机运输船",
-   "type": "护卫舰",
-   "position": "中排",
-   "commandValue": 14,
-   "hp": 48290,
-   "cruise": "600~1200",
-   "warp": 3200,
-   "physicalArmor": 5,
-   "energyArmor": 5,
-   "serviceLimit": 10,
-   "ratings": {
-    "antiShip": "C",
-    "antiAir": "C",
-    "siege": "C",
-    "survival": "C",
-    "strategy": "A"
-   },
-   "firepower": {
-    "antiShip": 0,
-    "antiAir": 0,
-    "siege": 0
-   },
-   "modules": [
-    "A：舰载机系统",
-    "2. 系统机制：负责舰载机存放、整备、投放，为本舰核心支援模块，无火炮伤害、攻击时序相关参数。",
-    "B：防御火炮系统",
-    "5. 系统机制：双联装攻击主炮，主要针对小型舰船以及空中舰载目标作战。"
    ]
   }
  ],
@@ -7039,50 +6872,9 @@ window.SHIP_STATS = {
    "modules": []
   }
  ],
- "寂灭刺客": [
+ "迅捷级": [
   {
-   "name": "寂灭刺客-装甲型",
-   "type": "护航艇",
-   "position": "前排",
-   "size": 88,
-   "maxShip": 10,
-   "commandValue": 2,
-   "hp": 5350,
-   "cruise": 2500,
-   "warp": 12500,
-   "physicalArmor": 0,
-   "energyArmor": 0,
-   "serviceLimit": 10,
-   "firepower": {
-    "antiShip": 1800,
-    "antiAir": 630,
-    "siege": 0
-   },
-   "ratings": {
-    "antiShip": "B",
-    "strategy": "B"
-   },
-   "modules": [
-    "高速推进系统",
-    "速射炮台系统",
-    "装甲系统",
-    "指挥系统"
-   ],
-   "build": {
-    "metal": 6310,
-    "crystal": 380,
-    "deuterium": 80,
-    "time": 0.01,
-    "capacity": 0
-   },
-   "desc": "装备3门轻型速射火炮与4台加速高速引擎，对中小型目标非常有效。强化装甲可抵御轻型武器火力。性价比极高的护航艇。",
-   "story": "寂灭刺客护航艇因其外观得名，但其强大的火力还为其赢得了\"胖子\"的绰号。",
-   "quote": "火力不足的恐惧困扰着每一支舰队。——席琪，盘古集团高级工程师"
-  }
- ],
- "破袭者级": [
-  {
-   "name": "破袭者级-武装运输型",
+   "name": "迅捷级-武装运输型",
    "type": "巡洋舰",
    "position": "后排",
    "size": 798,
@@ -7126,7 +6918,7 @@ window.SHIP_STATS = {
    "quote": "你所踏足之处，皆是我的疆土；那里的凡民，皆是我的子民。——神圣群星帝国楚皇"
   },
   {
-   "name": "破袭者级-载机运输型",
+   "name": "迅捷级-载机运输型",
    "type": "巡洋舰",
    "position": "后排",
    "size": 798,
@@ -7339,52 +7131,6 @@ window.SHIP_STATS = {
    "desc": "在原有快速反应设计基础上增加附加装甲，成为装甲驱逐舰。以部分机动性换取防御能力，使其在要塞突击等更激烈的战斗场景中成为有效力量。",
    "story": "加利波利卫星城是木星工业的舰船制造基地，拥有多座主力舰船坞与舰载机装配线，为灭绝者提供大量武器装备。冥王星流浪兄弟会曾对加利波利卫星城发动大规模袭击，摧毁了大量船坞与在建舰船，包括数十艘阋神星级驱逐舰。这场灾难性事件后来被称为\"加利波利危机\"。此后，仲裁委员会派遣灭绝者追捕所有流浪兄弟会",
    "quote": "补给线被切断并不意味着战争会停止，只会使它变得更加凶残。——曼恩·赞达尔，秘书长"
-  }
- ],
- "赫利俄斯级": [
-  {
-   "name": "赫利俄斯级-重型火炮突击型",
-   "type": "驱逐舰",
-   "position": "前排",
-   "size": 610,
-   "maxShip": 10,
-   "commandValue": 15,
-   "hp": 44310,
-   "cruise": 650,
-   "warp": 3250,
-   "physicalArmor": 0,
-   "energyArmor": 0,
-   "serviceLimit": 10,
-   "firepower": {
-    "antiShip": 9135,
-    "antiAir": 1178,
-    "siege": 123
-   },
-   "ratings": {
-    "antiShip": "S",
-    "antiAir": "C",
-    "siege": "B",
-    "support": "C",
-    "survival": "B",
-    "strategy": "C"
-   },
-   "modules": [
-    "舰首综合重型炮台系统",
-    "小型炮台系统",
-    "装甲系统",
-    "推进系统",
-    "指挥系统"
-   ],
-   "build": {
-    "metal": 28080,
-    "crystal": 3220,
-    "deuterium": 660,
-    "time": 0.05,
-    "capacity": 11000
-   },
-   "desc": "火力强大的神圣群星帝国海军火炮突击舰。装备2门舰载火炮与5门速射火炮用于集中攻击，火力足以媲美巡洋舰。",
-   "story": "这艘舰曾服役于神圣群星帝国第一舰队。帝国覆灭后，其军事装备被无数竞争势力瓜分。因此这艘舰成为银河市场上最常见的型号之一。",
-   "quote": "你所踏足之处，皆是我的疆土；那里的凡民，皆是我的子民。——神圣群星帝国楚皇"
   }
  ],
  "孢子A404": [
