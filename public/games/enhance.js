@@ -124,46 +124,27 @@
     return '';
   }
   
-  const BP_PROGRESS = { '护卫舰': 35, '护航艇': 35, '战机': 35, '驱逐舰': 25, '巡洋舰': 20 };
-  const BP_TIMES = { '护卫舰': 3, '护航艇': 3, '战机': 3, '驱逐舰': 4, '巡洋舰': 5 };
-  let bpState = {};
-  try { bpState = JSON.parse(localStorage.getItem('ueg_bp_state') || '{}'); } catch (e) { bpState = {}; }
-  function saveBp() { localStorage.setItem('ueg_bp_state', JSON.stringify(bpState)); }
   function getVariants(ship) {
     return Object.keys(DATA).filter(k => DATA[k].name === ship.name)
       .map((k, i) => ({ key: k, model: DATA[k].model, letter: i === 0 ? 'A' : String.fromCharCode(66 + i - 1), main: i === 0 }));
-  }
-  function bpStatus(v) {
-    const s = bpState[v.key] || { obtained: false, progress: 0 };
-    if (v.main) return s.obtained ? { text: '已获得（主型号）', cls: 'ok' } : { text: '未获得（开箱首次必出）', cls: 'lock' };
-    if (s.progress >= 100) return { text: '已研究完成', cls: 'ok' };
-    if (s.progress >= 25) return { text: '研究 ' + s.progress + '% · 1艘试用', cls: 'ing' };
-    if (s.progress > 0) return { text: '研究 ' + s.progress + '% · 0艘（只能看）', cls: 'ing' };
-    return { text: '未获得', cls: 'lock' };
   }
   function renderBlueprint(ship) {
     const vs = getVariants(ship);
     if (!vs.length) return '';
     const cls = shipClass(ship.type);
     if (cls === '超主力舰') return renderModules(ship);
-    const add = BP_PROGRESS[ship.type] || 20;
-    const times = BP_TIMES[ship.type] || 5;
     let h = '<div class="bp-sec"><div class="sec-title">蓝图 · ' + cls + '（' + ship.type + '）</div>';
-    h += '<div class="bp-tip">主型号 + ' + (vs.length - 1) + '个子型号 · 重复开箱给研究进度（' + add + '%-100%，' + times + '次必得）</div>';
+    h += '<div class="bp-tip">主型号 + ' + (vs.length - 1) + '个子型号</div>';
     vs.forEach(v => {
-      const st = bpStatus(v);
       const letter = v.letter;
       const special = (v.model || '').includes('离子炮') || (v.model || '').includes('英雄');
-      h += '<div class="bp-variant ' + st.cls + '">';
+      h += '<div class="bp-variant ok">';
       h += '<span class="bp-letter">' + letter + '.' + (v.main ? '主型号' : '子型号') + '</span>';
       h += '<span class="bp-model">' + (v.model || '') + (special ? ' <em>特殊子型号</em>' : '') + '</span>';
-      h += '<span class="bp-status">' + st.text + '</span>';
+      h += '<span class="bp-status">已获得</span>';
       h += '</div>';
     });
-    h += '<div class="bp-actions"><button class="bp-box bp-clear" onclick="window._clearBp()">重置</button></div>';
-    h += '<div class="bp-tip">▷ 重复获得蓝图时，若选择研究子型号，给的研究进度如下：护卫/护航艇/战机 35%-100%（3次必得）· 驱逐 25%-100%（4次必得）· 巡洋 20%-100%（5次必得）</div>';
-    h += '<div class="bp-tip">▷ 研究进度未达100%时存在服役上限：0%-25% 0艘（只能看）· 25%-99% 1艘（试用款）</div>';
-    h += '<div class="bp-tip">▷ 特殊子型号：A.限时研究协议（500比邻星币→指定型号1%-10%进度）· B.对接（如AC721-C离子炮←离子科技研究中心）· C.副本/市场（如AC720艾格勒姆未名者·英雄舰）</div>';
+    h += '<div class="bp-tip">▷ 特殊子型号：对接（如AC721-C离子炮←离子科技研究中心）· 副本/市场（如AC720艾格勒姆未名者·英雄舰）</div>';
     h += '</div>';
     return h;
   }
@@ -208,12 +189,6 @@
     h += '</div>';
     return h;
   }
-  window._clearBp = function () {
-    bpState = {};
-    saveBp();
-    flashTip('蓝图研究已重置');
-    renderPanel();
-  };
     function computeFirepowerDpm() {
     const r = py('firepower_dpm', getSelectedWeapons());
     if (r) return { antiShip: r.antiShip || 0, antiAir: r.antiAir || 0, siege: r.siege || 0 };
