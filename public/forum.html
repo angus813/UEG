@@ -37,7 +37,7 @@
     .chat-input textarea { flex: 1; min-height: 44px; max-height: 130px; resize: none; padding: 10px 12px;
       border-radius: 12px; border: 1px solid var(--rl-line); background: var(--rl-field); color: var(--rl-ink); font-size: 14px; }
     .tool { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--rl-line);
-      background: var(--rl-field); color: var(--rl-ink); cursor: pointer; font-size: 18px; }
+      background: var(--rl-field); color: var(--rl-ink); cursor: pointer; font-size: 13px; }
     .send { padding: 0 16px; height: 40px; border-radius: 10px; border: 1px solid var(--rl-accent);
       background: var(--rl-accent); color: var(--rl-paper); cursor: pointer; }
     .emoji-bar { display: none; flex-wrap: wrap; gap: 6px; padding: 8px 0 0; }
@@ -76,9 +76,9 @@
     <div class="emoji-bar" id="emojiBar"></div>
 
     <div class="chat-input">
-      <button class="tool" id="btnEmoji" title="表情"></button>
-      <button class="tool" id="btnImg" title="发图片"></button>
-      <button class="tool" id="btnVid" title="发视频"></button>
+      <button class="tool" id="btnEmoji" title="表情">表情</button>
+      <button class="tool" id="btnImg" title="发图片">图片</button>
+      <button class="tool" id="btnVid" title="发视频">视频</button>
       <input type="file" id="fileImg" accept="image/*" style="display:none">
       <input type="file" id="fileVid" accept="video/*" style="display:none">
       <textarea id="txt" placeholder="说点什么…" enterkeyhint="send" title="Enter 发送，Shift+Enter 换行"></textarea>
