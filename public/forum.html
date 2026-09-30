@@ -743,6 +743,7 @@
       await loadMessages(true);
       timer = setInterval(function () {
         polls++;
+        if (document.hidden) return;   // 页面在后台/切走时不轮询（省请求、省连接占用）
         if (currentView === 'posts') {
           // 帖子视图：详情页静默刷新（保留滚动位置）；列表页低频刷新
           if (currentPostId && document.getElementById('postDetail').style.display !== 'none') {
