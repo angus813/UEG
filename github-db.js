@@ -477,6 +477,33 @@
       return { code: r.code || 400, msg: r.msg };
     },
 
+    // ---- 修改用户名：RPC 一次性完成 校验/查重/每天一次冷却/级联改档/改 auth 邮箱 ----
+    async changeUsername(newName) {
+      const name = currentUsername();
+      if (!name) return { code: 401, msg: '未登录' };
+      newName = String(newName == null ? '' : newName).trim();
+      if (!/^[一-龥A-Za-z0-9_]{2,20}$/.test(newName)) {
+        return { code: 400, msg: '用户名需为2-20位中文/字母/数字/下划线' };
+      }
+      if (/^(angus|admin)$/i.test(newName)) return { code: 400, msg: '该用户名不可用' };
+      if (newName === name) return { code: 400, msg: '与当前用户名相同' };
+      const r = await this.rest('/rest/v1/rpc/change_username', {
+        method: 'POST', body: { new_name: newName }
+      });
+      if (r.code !== 200) return { code: r.code, msg: r.msg || '改名失败' };
+      const d = r.data || {};
+      if (!d.ok) return { code: 400, msg: d.error || '改名失败' };
+      // 本地档案换成新名
+      try {
+        const u = JSON.parse(localStorage.getItem('ueg_current_user') || '{}');
+        u.username = d.username;
+        setCurrentUser(u);
+      } catch (e) {}
+      // 刷新 token：JWT 里还是旧用户名的快照，不刷新的话之后发帖/上传仍挂旧名
+      try { await this.refreshSession(); } catch (e) {}
+      return { code: 200, msg: '改名成功', data: { username: d.username } };
+    },
+
     async setOfficial(username, on) {
       const r = await this.rest('/rest/v1/users?username=eq.' + enc(username), {
         method: 'PATCH', body: { is_official: !!on }, prefer: 'return=representation'

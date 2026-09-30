@@ -34,6 +34,18 @@
       <a href="admin.html" class="btn-admin">管理用户</a>
     </div>
 
+    <!-- 修改用户名 -->
+    <div class="password-section">
+      <button class="btn-toggle-pw" id="btnToggleUsername">修改用户名</button>
+      <div class="pw-form" id="usernameForm">
+        <input type="text" id="newUsername" placeholder="新用户名（2-20位中文/字母/数字/下划线）" maxlength="20">
+        <div class="form-actions">
+          <button class="btn-save" id="btnSaveUsername">保存</button>
+          <button class="btn-cancel" id="btnCancelUsername">取消</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 修改密码 -->
     <div class="password-section">
       <button class="btn-toggle-pw" id="btnTogglePassword">修改密码</button>
@@ -125,6 +137,37 @@
       };
       setCurrentUser(updatedUser);
     }
+
+    // ==================== 修改用户名 ====================
+    document.getElementById('btnToggleUsername').addEventListener('click', () => {
+      document.getElementById('usernameForm').style.display = 'block';
+      document.getElementById('newUsername').focus();
+    });
+    document.getElementById('btnCancelUsername').addEventListener('click', () => {
+      document.getElementById('usernameForm').style.display = 'none';
+      document.getElementById('newUsername').value = '';
+    });
+    document.getElementById('btnSaveUsername').addEventListener('click', async () => {
+      const name = document.getElementById('newUsername').value.trim();
+      if (!name) { alert('请输入新用户名'); return; }
+      const cu = getCurrentUser();
+      if (!cu) { alert('请先登录'); return; }
+      if (name === cu.username) { alert('与当前用户名相同'); return; }
+      if (!window.DB || typeof DB.changeUsername !== 'function') {
+        alert('数据层未加载：请强制刷新后重试'); return;
+      }
+      const save = document.getElementById('btnSaveUsername');
+      save.disabled = true;
+      try {
+        const r = await DB.changeUsername(name);
+        if (r.code !== 200) { alert('改名失败：' + (r.msg || '')); return; }
+        alert('改名成功！当前用户名：' + r.data.username +
+              '\n之前发的帖子和上传记录已同步改名，新内容从现在起归属新名字。');
+        location.reload();
+      } finally {
+        save.disabled = false;
+      }
+    });
 
     // ==================== 修改密码 ====================
     async function changePassword(oldPw, newPw) {
