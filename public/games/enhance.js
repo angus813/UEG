@@ -321,9 +321,9 @@
         const t = s && s.techs.find(x => x.name === tn);
         if (t) invested += investedFor(t, levels[sn][tn]);
       }));
-      return { fireMul: pr.fireMul, aaMul: pr.aaMul, siegeMul: pr.siegeMul, cdMul: pr.cdMul === undefined ? 1 : pr.cdMul, hpMul: pr.hpMul, physMul: pr.physMul, energyMul: pr.energyMul, cruiseMul: pr.cruiseMul, warpMul: pr.warpMul, invested: invested, hpAdd: pr.hpAdd || 0, physAdd: pr.physAdd || 0, energyAdd: pr.energyAdd || 0 };
+      return { fireMul: pr.fireMul, aaMul: pr.aaMul, siegeMul: pr.siegeMul, cdMul: pr.cdMul === undefined ? 1 : pr.cdMul, hpMul: pr.hpMul, physMul: pr.physMul, energyMul: pr.energyMul, cruiseMul: pr.cruiseMul, warpMul: pr.warpMul, durMul: pr.durMul === undefined ? 1 : pr.durMul, invested: invested, hpAdd: pr.hpAdd || 0, physAdd: pr.physAdd || 0, energyAdd: pr.energyAdd || 0 };
     }
-        const acc = { dmg: 0, aa: 0, siege: 0, cd: 0, hit: 0, crit: 0, hp: 0, phys: 0, energy: 0, cruise: 0, warp: 0, atkSpeed: 0, freq: 0, physAdd: 0, energyAdd: 0, hpAdd: 0, invested: 0 };
+        const acc = { dmg: 0, aa: 0, siege: 0, cd: 0, hit: 0, crit: 0, hp: 0, phys: 0, energy: 0, cruise: 0, warp: 0, atkSpeed: 0, freq: 0, dur: 0, physAdd: 0, energyAdd: 0, hpAdd: 0, invested: 0 };
     ((ship && ship.systems) || []).forEach(sys => (sys.techs || []).forEach(t => {
       const lv = getLevel(currentKey, sys.name, t.name);
       if (lv <= 0) return;
@@ -348,7 +348,8 @@
           else if (/防空/.test(T)) acc.aa += absV * dirV;
           else if (/冷却/.test(T)) acc.cd += absV * dirV;
           else if (/暴击/.test(T)) acc.crit += absV * dirV;
-          else if (/持续时间|攻击间隔/.test(T)) acc.atkSpeed += absV * dirV;
+          else if (/持续时间/.test(T)) acc.dur += per;
+          else if (/攻击间隔/.test(T)) acc.atkSpeed += absV * dirV;
           else if (/频率|每轮攻击|额外射击/.test(T)) acc.freq += absV * dirV;
           else if (/命中/.test(T)) acc.hit += absV * dirV;
           else if (/生命|结构值/.test(T)) acc.hp += absV * dirV;
@@ -381,25 +382,23 @@
       energyMul: 1 + acc.energy / 100, energyAdd: acc.energyAdd,
       cruiseMul: 1 + acc.cruise / 100,
       warpMul: 1 + acc.warp / 100,
+      durMul: 1 + acc.dur / 100,
       invested: acc.invested
     };
   }
 
   
+  const sec1 = n => Math.round(n * 10) / 10;
   function fmtStat(base, mul, add, fmtFn) {
-    const hasMul = mul && mul > 1.0001;
+    // hasMul 允许 <1（如冷却缩减 cdMul），否则循环/持续这类降值系数不生效
+    const hasMul = mul && Math.abs(mul - 1) > 0.0001;
     const hasAdd = add && Math.abs(add) >= 0.5;
     if (!hasMul && !hasAdd) {
       if (!base) return '<b>—</b>';
       return `<b>${fmtFn(base)}</b>`;
     }
     const boosted = base * (hasMul ? mul : 1) + (hasAdd ? add : 0);
-    let gain = '';
-    if (hasMul && hasAdd) gain = ` <span class="gain">+${((mul - 1) * 100).toFixed(1)}% +${Math.round(add)}</span>`;
-    else if (hasMul) gain = ` <span class="gain">+${((mul - 1) * 100).toFixed(1)}%</span>`;
-    else gain = ` <span class="gain">${add >= 0 ? '+' : ''}${Math.round(add)}</span>`; // 负 add 避免渲染成 "+-3"
-    if (!base) return `<b class="boost">${fmtFn(boosted)}</b>${gain}`;
-    return `<b class="boost">${fmtFn(boosted)}</b>${gain}`;
+    return `<b class="boost">${fmtFn(boosted)}</b>`;
   }
 
   
@@ -426,24 +425,17 @@
     const fmt = n => Math.round(n).toLocaleString('zh-CN');
     const wt = computeWeaponTotals();
     const dpm = computeFirepowerDpm();
-    const wtHTML = wt.weapons ? `<div class="stat-sec"><div class="sec-title">武器系统合计（${wt.weapons} 槽 · 全部武器${enh.fireMul > 1.0001 ? ' ·强化+'+Math.round((enh.fireMul-1)*100)+'%' : ''}）</div>
+    const wtHTML = wt.weapons ? `<div class="stat-sec"><div class="sec-title">武器系统合计（${wt.weapons} 槽 · 全部武器）</div>
         <div class="stat-grid">
           <span>伤害 <b>${fmt(Math.round(wt.damage * enh.fireMul))}</b></span>
-          <span>循环 <b>${wt.cycle}</b></span>
+          <span>循环 ${fmtStat(wt.cycle, enh.cdMul, 0, sec1)}</span>
           <span>锁定 <b>${wt.lockOn}</b></span>
           <span>轮数 <b>${wt.rounds}</b></span>
-          <span>冷却 <b>${enh.cdMul && enh.cdMul < 1 ? (Math.round(wt.cooldown * enh.cdMul * 10) / 10) + 's <i class="src">-' + Math.round((1 - enh.cdMul) * 100) + '%</i>' : wt.cooldown + 's'}</b></span>
-          <span>持续 <b>${wt.duration}s</b></span>
+          <span>冷却 <b>${enh.cdMul && enh.cdMul < 1 ? (Math.round(wt.cooldown * enh.cdMul * 10) / 10) : wt.cooldown}s</b></span>
+          <span>持续 ${fmtStat(wt.duration, enh.durMul, 0, sec1)}s</span>
         </div></div>` : '';
     const r = st.ratings || {};
     const fp = st.firepower || {};
-    const boostTags = [];
-    if (enh.fireMul > 1.0001) boostTags.push(`火力+${((enh.fireMul - 1) * 100).toFixed(1)}%`);
-    if (enh.hpMul > 1.0001) boostTags.push(`生命+${((enh.hpMul - 1) * 100).toFixed(1)}%`);
-    if (enh.physMul > 1.0001) boostTags.push(`物理装甲+${((enh.physMul - 1) * 100).toFixed(1)}%`);
-    if (enh.energyMul > 1.0001) boostTags.push(`能量装甲+${((enh.energyMul - 1) * 100).toFixed(1)}%`);
-    if (enh.physAdd >= 0.5) boostTags.push(`物理装甲+${Math.round(enh.physAdd)}`);
-    if (enh.energyAdd >= 0.5) boostTags.push(`能量装甲+${Math.round(enh.energyAdd)}`);
     return `<div class="stat-panel">
       <div class="stat-top">
         <span><b>${st.type || ship.type}</b>${st.position ? ' · ' + st.position : ''}</span>
@@ -452,7 +444,6 @@
         <span>变体 <b>${variantCount}</b></span>
         <span>已投入科技点 <b>${invested}</b></span>
         <span>服役上限 <b>${st.serviceLimit}</b></span>
-        ${boostTags.length ? `<span class="gain">${boostTags.join(' ')}</span>` : ''}
       </div>
       <div class="stat-sec"><div class="sec-title">火力属性</div>
         <div class="stat-grid">
@@ -464,7 +455,7 @@
       <div class="stat-sec"><div class="sec-title">基础属性</div>
         <div class="stat-grid">
           <span>舰船生命 ${fmtStat(st.hp || 0, enh.hpMul, enh.hpAdd, fmt)}</span>
-          <span>巡航速度 ${(() => { const cv = st.cruise || '—'; const m = enh.cruiseMul || 1; if (cv !== '—' && /^\d+$/.test(String(cv)) && m > 1.0001) return `<b class="boost">${Math.round(Number(cv) * m)}</b> <span class="gain">+${((m - 1) * 100).toFixed(1)}%</span>`; return `<b>${cv}</b>${m > 1.0001 ? ` <span class="gain">+${((m - 1) * 100).toFixed(1)}%</span>` : ''}`; })()}</span>
+          <span>巡航速度 ${(() => { const cv = st.cruise || '—'; const m = enh.cruiseMul || 1; if (cv !== '—' && /^\d+$/.test(String(cv)) && m > 1.0001) return `<b class="boost">${Math.round(Number(cv) * m)}</b>`; return `<b>${cv}</b>`; })()}</span>
           <span>曲速 ${fmtStat(st.warp || 0, enh.warpMul, 0, fmt)}</span>
           <span>物理装甲 ${fmtStat(st.physicalArmor || 0, enh.physMul, enh.physAdd, fmt)}</span>
           <span>能量装甲 ${fmtStat(st.energyArmor || 0, enh.energyMul, enh.energyAdd, fmt)}</span>
@@ -562,7 +553,7 @@ ${st.desc ? `<div class="stat-sec"><div class="sec-title">舰船描述</div><div
                   html += `<button class="sp-pick ${selected ? 'on' : ''}" data-pick="${escapeHtml(currentKey)}|s${escapeHtml(sys.name)}|o${escapeHtml(option)}|w${escapeHtml(w.name)}" ${selected ? 'disabled' : ''}>${selected ? '已选' : '选择'}</button>`;
                 }
                                 html += `</div>`;
-                html += `<div class="sp-stats">${w.type ? `<span class="tag">${w.type}</span>` : ''}${w.weaponType ? `<span class="tag">${w.weaponType}</span>` : ''}${w.damage !== undefined ? `<span>伤害 ${Math.round(w.damage * (enh.fireMul || 1))}${enh.fireMul > 1.0001 ? ' <i class="src">+' + Math.round((enh.fireMul - 1) * 100) + '%</i>' : ''}</span>` : ''}${w.cycle !== undefined ? `<span>循环 ${w.cycle}</span>` : ''}${w.lockOn !== undefined ? `<span>锁定 ${w.lockOn}</span>` : ''}${w.rounds !== undefined ? `<span>轮数 ${w.rounds}</span>` : ''}${w.cooldown !== undefined ? `<span>冷却 ${enh.cdMul && enh.cdMul < 1 ? (Math.round(w.cooldown * enh.cdMul * 10) / 10) + 's <i class="src">-' + Math.round((1 - enh.cdMul) * 100) + '%</i>' : w.cooldown + 's'}</span>` : ''}${w.duration !== undefined ? `<span>持续 ${w.duration}s</span>` : ''}</div>`;
+                html += `<div class="sp-stats">${w.type ? `<span class="tag">${w.type}</span>` : ''}${w.weaponType ? `<span class="tag">${w.weaponType}</span>` : ''}${w.damage !== undefined ? `<span>伤害 ${Math.round(w.damage * (enh.fireMul || 1))}</span>` : ''}${w.cycle !== undefined ? `<span>循环 ${fmtStat(w.cycle, enh.cdMul, 0, sec1)}</span>` : ''}${w.lockOn !== undefined ? `<span>锁定 ${w.lockOn}</span>` : ''}${w.rounds !== undefined ? `<span>轮数 ${w.rounds}</span>` : ''}${w.cooldown !== undefined ? `<span>冷却 ${enh.cdMul && enh.cdMul < 1 ? (Math.round(w.cooldown * enh.cdMul * 10) / 10) : w.cooldown}s</span>` : ''}${w.duration !== undefined ? `<span>持续 ${fmtStat(w.duration, enh.durMul, 0, sec1)}s</span>` : ''}</div>`;
                 w.actions.forEach(a => {
                   let info = a.name || '';
                   if (a.effect && a.act) info += ` <i>·</i> ${a.effect}${a.act}${a.value !== undefined ? ' <b>+' + a.value + '</b>' : ''}`;

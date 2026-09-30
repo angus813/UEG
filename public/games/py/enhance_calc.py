@@ -46,7 +46,7 @@ def compute_enhancement(systems, levels):
     """
     acc = {'dmg': 0, 'aa': 0, 'siege': 0, 'cd': 0, 'hit': 0, 'crit': 0,
            'hp': 0, 'phys': 0, 'energy': 0, 'cruise': 0, 'warp': 0,
-           'atkSpeed': 0, 'freq': 0}
+           'atkSpeed': 0, 'freq': 0, 'dur': 0}
     for sys in systems:
         for t in sys.get('techs', []):
             lv = (levels.get(sys.get('name', ''), {}) or {}).get(t.get('name', ''), 0) or 0
@@ -79,7 +79,8 @@ def compute_enhancement(systems, levels):
                 elif '防空' in typ: acc['aa'] += abs_v * dir_v
                 elif '冷却' in typ: acc['cd'] += abs_v * dir_v
                 elif '暴击' in typ: acc['crit'] += abs_v * dir_v
-                elif '持续时间' in typ or '攻击间隔' in typ: acc['atkSpeed'] += abs_v * dir_v
+                elif '持续时间' in typ: acc['dur'] += per
+                elif '攻击间隔' in typ: acc['atkSpeed'] += abs_v * dir_v
                 elif '频率' in typ or '每轮攻击' in typ or '额外射击' in typ: acc['freq'] += abs_v * dir_v
                 elif '命中' in typ: acc['hit'] += abs_v * dir_v
                 elif '生命' in typ or '结构值' in typ: acc['hp'] += abs_v * dir_v
@@ -99,6 +100,7 @@ def compute_enhancement(systems, levels):
         'energyMul': 1 + acc['energy'] / 100,
         'cruiseMul': 1 + acc['cruise'] / 100,
         'warpMul': 1 + acc['warp'] / 100,
+        'durMul': 1 + acc['dur'] / 100,
     }
 
 
