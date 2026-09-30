@@ -101,6 +101,12 @@ create table if not exists public.forum_messages (
 );
 create index if not exists forum_messages_created_idx on public.forum_messages (created_at desc);
 
+-- 帖子模式（与聊天并存）：主帖 kind='post' + title；回复用 parent_id 指向主帖（平铺楼层）。
+-- 复用同一张表：RLS(author=current_username)/媒体/撤回/气泡全部沿用，无需新表。
+alter table public.forum_messages add column if not exists title text;
+alter table public.forum_messages add column if not exists parent_id bigint;
+create index if not exists forum_messages_parent_idx on public.forum_messages (parent_id);
+
 alter table public.forum_messages enable row level security;
 
 drop policy if exists forum_read on public.forum_messages;
