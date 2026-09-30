@@ -50,16 +50,16 @@
     </div>
 
     <div class="mata-cards">
-      <!-- 卡片二：截图上传 -->
+      <!-- 卡片二：截图 / 录屏上传 -->
       <div class="mata-card">
-        <h2>上传游戏截图</h2>
-        <p>手机或电脑都能传。多选、拖拽都行，支持 jpg / png / webp。</p>
+        <h2>上传游戏截图 / 录屏</h2>
+        <p>手机或电脑都能传。多选、拖拽都行。图片：jpg / png / webp / heic；录屏：mp4 / mov / webm（单个视频 ≤ 50MB）。</p>
         <div class="drop-zone" id="dropZone">
-          <div>点这里选择截图，或把图片拖进来</div>
-          <div class="mata-note" id="zoneHint">上传需要先登录：回主菜单登录后再传，截图才记在你名下。</div>
+          <div>点这里选择截图或录屏，也可拖进来</div>
+          <div class="mata-note" id="zoneHint">上传需要先登录：回主菜单登录后再传，素材才记在你名下。</div>
           <!-- capture="environment" 会强制走相机、且有它时 multiple 被忽略 —— 手机上
                就选不到相册里的截图（页面还写着「手机也能传」）。改为普通选择器。 -->
-          <input type="file" id="fileInput" accept="image/*,.heic,.heif" multiple style="display:none">
+          <input type="file" id="fileInput" accept="image/*,video/*,.heic,.heif,.mp4,.mov,.m4v,.webm,.mkv,.avi" multiple style="display:none">
         </div>
         <div class="preview" id="preview"></div>
         <button class="mata-btn" id="btnUpload" disabled>上传到素材库</button>
@@ -70,7 +70,7 @@
     <!-- 排行榜 -->
     <div class="mata-card">
       <h2>素材贡献排行榜</h2>
-      <p class="mata-note">已上传 = 传过的全部截图（含审核中）。</p>
+      <p class="mata-note">已上传 = 传过的全部截图与录屏（含审核中）。</p>
       <div class="my-stats" id="myStats"></div>
       <table class="board" id="board">
         <thead><tr><th>名次</th><th>用户</th><th>已上传</th><th>最近上传</th></tr></thead>
@@ -141,21 +141,35 @@
     });
     fi.addEventListener('change', function () { addFiles(fi.files); });
 
+    // 图片/录屏都收：手机相册选出的 f.type 经常是空串（HEIC/WebP/录屏、部分安卓
+    // 选择器），只认 MIME 会把它们静默丢掉 → files 空 → 上传按钮一直灰。按扩展名兜底。
+    var IMAGE_EXT = /\.(png|jpe?g|webp|heic|heif|gif|bmp|avif)$/i;
+    var VIDEO_EXT = /\.(mp4|mov|m4v|webm|mkv|avi|3gp)$/i;
+    var MAX_VIDEO_MB = 50;   // 站点存储单文件上限（超限服务端也会拒，先在前端拦下并提示）
+
+    function fileKind(f) {
+      var n = String(f.name || '');
+      if (/^video\//.test(f.type || '') || VIDEO_EXT.test(n)) return 'video';
+      if (/^image\//.test(f.type || '') || IMAGE_EXT.test(n)) return 'image';
+      return '';
+    }
+
     function addFiles(list) {
       if (!list) return;
-      var added = 0;
+      var added = 0, skipHuge = 0;
       for (var i = 0; i < list.length; i++) {
         var f = list[i];
-        // 手机相册选出的文件 f.type 经常是空串（HEIC/WebP、部分安卓选择器），
-        // 只认 /^image\// 会把它们静默丢掉 → files 为空 → 上传按钮一直灰，
-        // 表现就是「手机上点了没反应、传不了」。按扩展名兜底。
-        if (!/^image\//.test(f.type) &&
-            !/\.(png|jpe?g|webp|heic|heif|gif|bmp|avif)$/i.test(f.name || '')) continue;
+        var kind = fileKind(f);
+        if (!kind) continue;
+        if (kind === 'video' && f.size > MAX_VIDEO_MB * 1024 * 1024) { skipHuge++; continue; }
+        f._kind = kind;   // 预览与上传复用这个标记
         files.push(f);
         added++;
       }
-      if (!added && list.length) {
-        setStatus('所选文件不是图片（支持 jpg / png / webp / heic）', false);
+      if (skipHuge) {
+        setStatus('已跳过 ' + skipHuge + ' 个超过 ' + MAX_VIDEO_MB + 'MB 的视频（请剪短后再传）', false);
+      } else if (!added && list.length) {
+        setStatus('所选文件不是图片或视频（图片：jpg/png/webp/heic；录屏：mp4/mov/webm）', false);
       }
       renderPreview();
       refreshLoginState();
@@ -164,15 +178,35 @@
     function renderPreview() {
       pv.innerHTML = '';
       files.slice(0, 24).forEach(function (f) {
+        if (f._kind === 'video') {
+          // 视频不做缩略图（解码开销大），显示文件名与体积
+          var box = document.createElement('div');
+          box.title = f.name;
+          box.style.cssText = 'width:72px;height:72px;border-radius:6px;' +
+            'background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);' +
+            'display:flex;align-items:center;justify-content:center;text-align:center;' +
+            'font-size:10px;line-height:1.3;padding:4px;box-sizing:border-box;overflow:hidden;word-break:break-all;';
+          box.textContent = '🎬 ' + f.name + ' ' + (f.size / 1048576).toFixed(1) + 'MB';
+          pv.appendChild(box);
+          return;
+        }
         var img = document.createElement('img');
         img.src = URL.createObjectURL(f);
         img.title = f.name;
         pv.appendChild(img);
       });
-      // 只按有没有选图来禁用。以前还带 `|| !currentUser()`，未登录时按钮是灰的，
+      // 只按有没有选文件来禁用。以前还带 `|| !currentUser()`，未登录时按钮是灰的，
       // 下面那句「请先登录后再上传」根本弹不出来 —— 用户只看到按钮点不动。
       btn.disabled = files.length === 0;
-      btn.textContent = files.length ? ('上传到素材库（' + files.length + ' 张）') : '上传到素材库';
+      var vids = files.filter(function (x) { return x._kind === 'video'; }).length;
+      if (!files.length) {
+        btn.textContent = '上传到素材库';
+      } else if (vids) {
+        btn.textContent = '上传到素材库（' + files.length + ' 个：图 ' +
+          (files.length - vids) + ' / 视频 ' + vids + '）';
+      } else {
+        btn.textContent = '上传到素材库（' + files.length + ' 张）';
+      }
     }
 
     function setStatus(msg, ok) {
@@ -195,12 +229,16 @@
       try {
         for (var i = 0; i < files.length; i++) {
           var f = files[i];
-          setStatus('上传中 ' + (i + 1) + '/' + files.length + ' …');
+          var isVid = f._kind === 'video';
+          setStatus('上传中 ' + (i + 1) + '/' + files.length +
+                    (isVid ? '（视频较大，请保持页面不要切走）' : '') + ' …');
           var ext = (f.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
           var path = DB.folderOf(u.username) + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
-          var up = await DB.upload('mata-shots', path, f, f.type);
-          // 网络抖一下就重试一次：否则单张失败会直接计入失败，整批白传
-          if (up.code !== 200) up = await DB.upload('mata-shots', path, f, f.type);
+          // 视频：MIME 为空串时按扩展名兜底（服务端要 Content-Type）+ 给足超时（大文件慢网）
+          var ct = f.type || (isVid ? (/\.webm$/i.test(f.name || '') ? 'video/webm' : 'video/mp4') : '');
+          var up = await DB.upload('mata-shots', path, f, ct, isVid ? 300000 : undefined);
+          // 网络抖一下就重试一次：否则单个失败会直接计入失败，整批白传
+          if (up.code !== 200) up = await DB.upload('mata-shots', path, f, ct, isVid ? 300000 : undefined);
           if (up.code !== 200) {
             failCount++;
             if (!firstErr) firstErr = up.msg || ('存储上传失败 HTTP ' + up.code);
@@ -232,8 +270,8 @@
         btn.disabled = false;
       }
       files = []; renderPreview();
-      setStatus('完成：成功 ' + okCount + ' 张' +
-                (failCount ? '，失败 ' + failCount + ' 张（' + (firstErr || '未知原因') + '）' : '') +
+      setStatus('完成：成功 ' + okCount + ' 个' +
+                (failCount ? '，失败 ' + failCount + ' 个（' + (firstErr || '未知原因') + '）' : '') +
                 '。已计入排行榜。', failCount === 0);
       refreshLoginState();
       loadBoard();
@@ -244,7 +282,7 @@
       var hint = document.getElementById('zoneHint');
       var u = currentUser();
       if (u && u.username) {
-        hint.textContent = '当前登录：' + u.username + '（截图会记在你名下）';
+        hint.textContent = '当前登录：' + u.username + '（素材会记在你名下）';
         btn.disabled = !files.length;
       } else {
         hint.textContent = '未登录：回主菜单登录后才能上传。';

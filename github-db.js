@@ -519,14 +519,16 @@
     },
 
     // ---- Storage：上传到自己的目录，返回公开地址 ----
-    async upload(bucket, filePath, file, contentType) {
+    // timeoutMs：视频等大文件可传更长超时（默认 30s）
+    async upload(bucket, filePath, file, contentType, timeoutMs) {
       const t = getToken();
       if (!t) return { code: 401, msg: '请先登录' };
       const url = (SB.url || '').replace(/\/+$/, '') + '/storage/v1/object/' + bucket + '/' + filePath;
       let res;
-      // 30 秒超时：裸 fetch 没有超时，网络差时会无限卡在「上传中」不给结果
+      // 超时：默认 30 秒，视频等大文件由调用方传更长值（网络差时不给结果会一直卡「上传中」）
+      const limitMs = Math.max(3000, Number(timeoutMs) || 30000);
       const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer = ac ? setTimeout(function () { ac.abort(); }, 30000) : null;
+      const timer = ac ? setTimeout(function () { ac.abort(); }, limitMs) : null;
       try {
         res = await fetch(url, {
           method: 'POST',
@@ -541,7 +543,7 @@
         });
       } catch (e) {
         return (e && e.name === 'AbortError')
-          ? { code: 504, msg: '上传超时（30 秒），请检查网络后重试' }
+          ? { code: 504, msg: '上传超时（' + Math.round(limitMs / 1000) + ' 秒），请检查网络后重试' }
           : { code: 500, msg: '网络连接失败，请检查网络后重试' };
       } finally {
         if (timer) clearTimeout(timer);
