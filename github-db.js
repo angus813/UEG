@@ -62,17 +62,24 @@
     // ---- GoTrue（Auth）----
     async gt(path, body) {
       const headers = { apikey: SB.publishableKey, 'Content-Type': 'application/json' };
-      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 10000) : null;
       let res;
-      try {
-        res = await fetch(SB.url.replace(/\/+$/, '') + path, {
-          method: 'POST', headers, body: JSON.stringify(body), signal: ctrl ? ctrl.signal : undefined
-        });
-      } catch (e) {
-        return { code: 500, msg: '网络连接失败，请检查网络后重试' };
-      } finally {
-        if (timer) clearTimeout(timer);
+      // 网络层失败（断连/超时）自动重试 1 次：偶发抖动大多秒级恢复，不重试的话
+      // 用户看到的就是一次生硬的「网络连接失败」；拿到 HTTP 响应（哪怕 4xx）不重试。
+      // 超时 30s：原 10s 在慢网络下偏紧，一超时就按网络失败呈现。
+      for (let attempt = 0; ; attempt++) {
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 30000) : null;
+        try {
+          res = await fetch(SB.url.replace(/\/+$/, '') + path, {
+            method: 'POST', headers, body: JSON.stringify(body), signal: ctrl ? ctrl.signal : undefined
+          });
+          break;
+        } catch (e) {
+          if (attempt < 1) continue;
+          return { code: 500, msg: '网络连接失败，请检查网络后重试' };
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
       }
       let j = null;
       try { j = await res.json(); } catch (e) { }
@@ -91,20 +98,25 @@
       const t = getToken();
       if (t) headers.Authorization = 'Bearer ' + t;
       if (opts && opts.prefer) headers.Prefer = opts.prefer;
-      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 15000) : null;
       let res;
-      try {
-        res = await fetch(SB.url.replace(/\/+$/, '') + path, {
-          method: (opts && opts.method) || 'GET',
-          headers,
-          body: opts && opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-          signal: ctrl ? ctrl.signal : undefined
-        });
-      } catch (e) {
-        return { code: 500, msg: '网络连接失败，请检查网络后重试' };
-      } finally {
-        if (timer) clearTimeout(timer);
+      // 同 gt()：网络层失败自动重试 1 次、超时 30s（原 15s），业务错误不重试
+      for (let attempt = 0; ; attempt++) {
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 30000) : null;
+        try {
+          res = await fetch(SB.url.replace(/\/+$/, '') + path, {
+            method: (opts && opts.method) || 'GET',
+            headers,
+            body: opts && opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+            signal: ctrl ? ctrl.signal : undefined
+          });
+          break;
+        } catch (e) {
+          if (attempt < 1) continue;
+          return { code: 500, msg: '网络连接失败，请检查网络后重试' };
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
       }
       let j = null;
       try { j = await res.json(); } catch (e) { }
