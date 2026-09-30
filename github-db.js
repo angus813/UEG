@@ -133,8 +133,10 @@
       if (!password || password.length < 6) return { code: 400, msg: '密码长度至少6位' };
       const r = await this.gt('/auth/v1/signup', { email: encEmail(username), password, data: { username } });
       if (r.code !== 200) {
-        if (r.body && (r.body.code === 'email_exists' || r.body.code === 'user_already_exists')) return { code: 400, msg: '用户名已存在' };
-        if (r.body && (r.body.code === 'signup_disabled')) return { code: 400, msg: '注册功能未开启' };
+        // GoTrue 现把错误码放在 error_code（code 字段已是 HTTP 数字），双取兼容新旧格式
+        const ec = (r.body && (r.body.error_code || r.body.code)) || '';
+        if (ec === 'email_exists' || ec === 'user_already_exists') return { code: 400, msg: '用户名已存在' };
+        if (ec === 'signup_disabled') return { code: 400, msg: '注册功能未开启' };
         return r;
       }
       // 建档（RLS 允许插入自己的档案行）；signup 无 session 时留待登录后补建
@@ -151,8 +153,10 @@
       username = (username || '').trim();
       const r = await this.gt('/auth/v1/token?grant_type=password', { email: encEmail(username), password });
       if (r.code !== 200) {
-        if (r.body && r.body.code === 'email_not_confirmed') return { code: 400, msg: '邮箱未确认：请在 Supabase Dashboard 关闭“Confirm email”后重试' };
-        if (r.body && r.body.code === 'invalid_credentials') return { code: 400, msg: '用户名或密码错误' };
+        // GoTrue 现把错误码放在 error_code（code 字段已是 HTTP 数字），双取兼容新旧格式
+        const ec = (r.body && (r.body.error_code || r.body.code)) || '';
+        if (ec === 'email_not_confirmed') return { code: 400, msg: '邮箱未确认：请在 Supabase Dashboard 关闭“Confirm email”后重试' };
+        if (ec === 'invalid_credentials') return { code: 400, msg: '用户名或密码错误' };
         return r;
       }
       const token = r.data.access_token;
