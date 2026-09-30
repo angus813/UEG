@@ -172,12 +172,23 @@
         btnLogout.style.display = 'inline-block';
         btnProfile.style.display = 'inline-block';
         menuCards.forEach(c => { c.style.pointerEvents = 'auto'; c.style.opacity = '1'; });
+        // 登录后先恢复可见，是否真有权限由 gateXinghebei 异步判定。
+        // 它定义在后面的 script 里，首次 updateUI() 执行时还没定义 —— typeof 兜底，
+        // 由后面的 IIFE 负责首次判定。
+        const xcCard = document.getElementById('cardXinghebei');
+        if (xcCard) xcCard.style.display = '';
+        if (typeof window.gateXinghebei === 'function') window.gateXinghebei();
         if (modal.style.display === 'flex') modal.style.display = 'none';
       } else {
         userInfo.textContent = '未登录';
         btnLogout.style.display = 'none';
         btnProfile.style.display = 'none';
         menuCards.forEach(c => { c.style.pointerEvents = 'none'; c.style.opacity = '0.6'; });
+        // 星河杯入口未登录直接藏：gateXinghebei 只在页面加载时跑一次，
+        // 而 DB.checkSession 失效是异步的（会把登录态清掉并弹登录框），
+        // 两者之间有窗口期会让「登录框弹着、卡片还挂着」。
+        const xcCard = document.getElementById('cardXinghebei');
+        if (xcCard) xcCard.style.display = 'none';
         if (modal.style.display !== 'flex') openModal('login');
       }
     }
@@ -292,15 +303,17 @@
     }
   </script>
   <script>
-    // 星河杯入口仅管理员/官员可见
-    (async function gateXinghebei() {
+    // 星河杯入口仅管理员/官员可见。
+    // updateUI() 会在登录态每次变化时重调它（登录、注销、checkSession 失效）。
+    window.gateXinghebei = async function gateXinghebei() {
       try {
         var card = document.getElementById('cardXinghebei');
         if (!card) return;
         var ready = window.UEG_SESSION_READY;
         if (ready) { try { await ready; } catch (e) {} }
-        var cu = null;
-        try { cu = JSON.parse(localStorage.getItem('ueg_current_user') || 'null'); } catch (e) {}
+        // 与 updateUI 同源取登录态：checkSession 判定失效时会把它清掉，
+        // 这里读到 null 就藏，不再用页面加载瞬间的旧快照兜底。
+        var cu = getCurrentUser();
         if (!cu) { card.style.display = 'none'; return; }
         var ok = false;
         try {
@@ -310,9 +323,10 @@
           }
         } catch (e) {}
         if (!ok) ok = !!(cu.is_admin || cu.is_owner || cu.is_official);
-        if (!ok) card.style.display = 'none';
+        card.style.display = ok ? '' : 'none';
       } catch (e) {}
-    })();
+    };
+    window.gateXinghebei();
   </script>
 </body>
 </html>
