@@ -333,6 +333,15 @@
     }
     .toolbar button:hover, .toolbar .tool-btn:hover { background: #9b7247; border-color: #9b7247; color: #04060d; }
     .canvas-container { border-color: rgba(120, 140, 175, 0.30); }
+
+    /* 移动端手势提示（首次显示，可点 × 关闭）+ 工具栏收起 */
+    .touch-hint {
+      position: absolute; left: 50%; transform: translateX(-50%); bottom: 14px;
+      background: rgba(10, 16, 32, 0.92); color: #dbe2ee; border: 1px solid #33456b;
+      border-radius: 8px; padding: 6px 10px; font-size: 12px; z-index: 30;
+      display: flex; align-items: center; gap: 6px; white-space: nowrap;
+    }
+    body.toolbar-collapsed .toolbar { display: none; }
   </style>
 </head>
 <body>
@@ -342,6 +351,7 @@
       <div class="map-title" id="mapTitle">加载中...</div>
     </div>
     <div>
+      <button class="btn" id="btnToggleToolbar" title="收起 / 展开右侧工具栏（手机可腾出画布空间）">收起工具栏</button>
       <button class="btn save" id="saveBtn">保存</button>
     </div>
   </div>
@@ -349,6 +359,10 @@
   <div class="main-area">
     <div class="canvas-container" id="canvasContainer">
       <canvas id="mainCanvas"></canvas>
+      <div class="touch-hint" id="touchHint" style="display:none;">
+        双指缩放 · 双击放大 · 拖拽平移
+        <span id="touchHintClose" style="cursor:pointer;padding:0 4px;font-weight:bold;">×</span>
+      </div>
     </div>
 
     <div class="toolbar" id="toolbar">
@@ -356,6 +370,7 @@
         <div class="section-title" data-collapse="tools">绘图工具</div>
         <div class="section-content" id="drawTools">
           <button class="tool-btn active" data-tool="select">选择</button>
+          <button class="tool-btn" data-tool="pan">平移</button>
           <button class="tool-btn" data-tool="line">直线</button>
           <button class="tool-btn" data-tool="freehand">自由曲线</button>
           <button class="tool-btn" data-tool="rect">矩形</button>

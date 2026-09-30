@@ -13,6 +13,7 @@ const WORLD_MIN = 0;
 const WORLD_MAX = 10000;
 
 let scale = 1, offsetX = 0, offsetY = 0;
+let initialScale = 1;   // 首次适配视图的缩放（双击缩放据此判断「已放大过」）
 
 let currentTool = 'select';
 let isDrawing = false, tempShape = null;
@@ -42,6 +43,80 @@ let dirty = false;
 // ---------- 触摸缩放新增 ----------
 let lastTouchDist = 0;
 let isTouchPinch = false;
+
+// ---------- 移动端体验：拖拽惯性 / 双击缩放 ----------
+let panVel = { x: 0, y: 0 };      // 平移速度（screen px/帧），松手后做惯性
+let lastPanTs = 0;
+let panRaf = 0;
+let lastTapTs = 0, lastTapX = 0, lastTapY = 0;
+
+function cancelPanInertia() {
+  if (panRaf) { cancelAnimationFrame(panRaf); panRaf = 0; }
+  panVel = { x: 0, y: 0 };
+}
+
+function samplePanVel(dx, dy) {
+  const now = performance.now();
+  const dt = now - lastPanTs;
+  lastPanTs = now;
+  if (dt <= 0 || dt > 120) return;      // 首帧/停顿不算速度
+  const k = 16.67 / dt;                 // 归一到「每帧」
+  panVel.x = panVel.x * 0.55 + dx * k * 0.45;
+  panVel.y = panVel.y * 0.55 + dy * k * 0.45;
+}
+
+function startPanInertia() {
+  const sp = Math.hypot(panVel.x, panVel.y);
+  if (sp < 1.5) { panVel = { x: 0, y: 0 }; return; }
+  if (panRaf) cancelAnimationFrame(panRaf);
+  const step = () => {
+    panVel.x *= 0.92;
+    panVel.y *= 0.92;
+    offsetX -= panVel.x / scale;
+    offsetY += panVel.y / scale;
+    clampOffset();
+    redraw();
+    if (Math.hypot(panVel.x, panVel.y) > 0.4) {
+      panRaf = requestAnimationFrame(step);
+    } else {
+      panRaf = 0;
+      panVel = { x: 0, y: 0 };
+    }
+  };
+  panRaf = requestAnimationFrame(step);
+}
+
+// 以画布内某点为锚缩放（双击与双指共用同一套数学）
+function zoomAt(sx, sy, factor) {
+  const world = toWorld(sx, sy);
+  const ns = clampScale(scale * factor);
+  if (ns === scale) return false;
+  offsetX = world.x - sx / ns;
+  offsetY = world.y - (canvas.height - sy) / ns;
+  clampOffset();
+  scale = ns;
+  redraw();
+  return true;
+}
+
+function baseScale() {
+  return Math.min(canvas.width / (WORLD_MAX - WORLD_MIN),
+                  canvas.height / (WORLD_MAX - WORLD_MIN));
+}
+
+// 双击：放大一档；已明显放大则回到整体适配
+function dblZoomAt(sx, sy) {
+  // 判据用「首次适配视图的缩放」：初始视图是按图形范围 fit 出来的（fitToShapes），
+  // 拿整个世界范围的 baseScale 比会永远误判「已放大」，双击只会缩小
+  const base = initialScale > 0 ? initialScale : baseScale();
+  if (scale > base * 1.5) zoomAt(sx, sy, base / scale);   // 回到初始适配
+  else zoomAt(sx, sy, 1.8);                               // 放大一档
+}
+
+function onDblClick(e) {           // 桌面双击
+  const pos = getEventPos(e);
+  dblZoomAt(pos.x, pos.y);
+}
 
 // ---------- 模板图形只读标记 ----------
 let isGalaxyMode = false;
@@ -1487,6 +1562,7 @@ function resizeCanvas() {
     scale = Math.min(canvas.width / (WORLD_MAX - WORLD_MIN), canvas.height / (WORLD_MAX - WORLD_MIN));
     offsetX = 5000 - canvas.width / (2 * scale);
     offsetY = 5000 - canvas.height / (2 * scale);
+    initialScale = scale;
   }
   clampOffset();
   redraw();
@@ -1511,6 +1587,7 @@ function fitToShapes() {
     offsetX = 5000 - canvas.width / (2 * scale);
     offsetY = 5000 - canvas.height / (2 * scale);
     clampOffset();
+    initialScale = scale;
     return;
   }
   const pad = 50;
@@ -1519,6 +1596,7 @@ function fitToShapes() {
   offsetX = cx - canvas.width / (2 * scale);
   offsetY = cy - canvas.height / (2 * scale);
   clampOffset();
+  initialScale = scale;
 }
 
 // ---------- 绘制用户名+备注标签 ----------
@@ -1853,6 +1931,7 @@ canvas.addEventListener('mouseup', onPointerUp);
 canvas.addEventListener('touchstart', onPointerDown, {passive: false});
 canvas.addEventListener('touchmove', onPointerMove, {passive: false});
 canvas.addEventListener('touchend', onPointerUp);
+canvas.addEventListener('dblclick', onDblClick);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 // 画布外松开鼠标 / 触摸取消也统一清理状态，避免 isDrawing 等标志卡死
 window.addEventListener('mouseup', onPointerUp);
@@ -1863,6 +1942,7 @@ window.addEventListener('touchcancel', onPointerUp);
 function onPointerDown(e) {
   e.preventDefault();
   const pos = getEventPos(e);
+  cancelPanInertia();   // 新操作立刻打断惯性滑动
 
   // 双指触摸检测
   if (e.touches && e.touches.length === 2) {
@@ -1884,6 +1964,15 @@ function onPointerDown(e) {
       lastScreen = { x: pos.x, y: pos.y };
       return;
     }
+    return;
+  }
+
+  // 平移工具：编辑模式下单指/单键拖动即平移画布（无需长按 300ms）
+  if (currentTool === 'pan') {
+    clearLongPress(); cancelPanInertia();
+    isPanning = true; lastPanTs = performance.now();
+    lastScreen = { x: pos.x, y: pos.y };
+    canvas.style.cursor = 'grabbing';
     return;
   }
 
@@ -1979,6 +2068,7 @@ function onPointerMove(e) {
     if (isPanning) {
       const dx = pos.x - lastScreen.x;
       const dy = pos.y - lastScreen.y;
+      samplePanVel(dx, dy);            // 采样速度，松手后做惯性
       offsetX -= dx / scale;
       offsetY += dy / scale;
       clampOffset();
@@ -1995,6 +2085,7 @@ function onPointerMove(e) {
   }
   if(isPanning||isLongPressPan) {
     const dx=pos.x-lastScreen.x, dy=pos.y-lastScreen.y;
+    samplePanVel(dx, dy);              // 采样速度，松手后做惯性
     offsetX-=dx/scale; offsetY+=dy/scale; clampOffset(); lastScreen={x:pos.x,y:pos.y}; redraw(); return;
   }
   if(dragHandle) {
@@ -2043,14 +2134,35 @@ function onPointerUp(e) {
     lastTouchDist = 0;
   }
 
+  // 触摸双击缩放：仅查看模式 / 平移工具下的「轻触双击」（编辑绘制模式不参与，避免误触）
+  if (e && e.changedTouches && e.changedTouches.length === 1 &&
+      !isPanning && !isLongPressPan && !isDrawing && !dragHandle && !isMovingShape &&
+      (isViewMode || currentTool === 'pan')) {
+    const t = e.changedTouches[0];
+    const now = performance.now();
+    const rect = canvas.getBoundingClientRect();
+    const sx = t.clientX - rect.left, sy = t.clientY - rect.top;
+    const inCanvas = sx >= 0 && sy >= 0 && sx <= rect.width && sy <= rect.height;
+    if (inCanvas && now - lastTapTs < 300 &&
+        Math.hypot(t.clientX - lastTapX, t.clientY - lastTapY) < 28) {
+      lastTapTs = 0;
+      dblZoomAt(sx, sy);
+    } else {
+      lastTapTs = inCanvas ? now : 0;
+      lastTapX = t.clientX;
+      lastTapY = t.clientY;
+    }
+  }
+
   if (isViewMode) {
+    if (isPanning) startPanInertia();     // 松手滑行
     isPanning = false;
     isPointerDown = false;
     return;
   }
   clearLongPress(); isPointerDown = false;
-  if(isLongPressPan){ isLongPressPan=false; isPanning=false; canvas.style.cursor='crosshair'; return; }
-  if(isPanning){ isPanning=false; return; }
+  if(isLongPressPan){ isLongPressPan=false; isPanning=false; startPanInertia(); canvas.style.cursor='crosshair'; return; }
+  if(isPanning){ isPanning=false; startPanInertia(); return; }
 
   // 先移除临时字段，再保存历史（避免 circleCenter 残留入库）
   if(tempShape&&tempShape.circleCenter) delete tempShape.circleCenter;
@@ -2360,8 +2472,36 @@ if (!isViewMode) {
       document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentTool = btn.dataset.tool;
+      cancelPanInertia();
+      canvas.style.cursor = currentTool === 'pan' ? 'grab' : 'crosshair';
     });
   });
+
+  // 工具栏收起 / 展开（手机腾出画布空间；桌面同样可用）
+  const _tbBtn = document.getElementById('btnToggleToolbar');
+  if (_tbBtn) {
+    _tbBtn.addEventListener('click', () => {
+      const collapsed = document.body.classList.toggle('toolbar-collapsed');
+      _tbBtn.textContent = collapsed ? '展开工具栏' : '收起工具栏';
+      setTimeout(() => { try { resizeCanvas(); redraw(); } catch (e) {} }, 40);
+    });
+  }
+
+  // 触摸设备首次显示手势提示（localStorage 记住已读）
+  (function initTouchHint() {
+    if (!('ontouchstart' in window || navigator.maxTouchPoints > 0)) return;
+    try { if (localStorage.getItem('map_touch_hint_seen')) return; } catch (e) {}
+    const h = document.getElementById('touchHint');
+    if (!h) return;
+    h.style.display = 'flex';
+    const hide = function () {
+      h.style.display = 'none';
+      try { localStorage.setItem('map_touch_hint_seen', '1'); } catch (e) {}
+    };
+    const close = document.getElementById('touchHintClose');
+    if (close) close.addEventListener('click', hide);
+    setTimeout(hide, 9000);
+  })();
   document.getElementById('btnUndo').addEventListener('click', undo);
   document.getElementById('btnRedo').addEventListener('click', redo);
   document.getElementById('btnCopy').addEventListener('click', copyShape);
