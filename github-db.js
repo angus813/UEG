@@ -70,7 +70,7 @@
           method: 'POST', headers, body: JSON.stringify(body), signal: ctrl ? ctrl.signal : undefined
         });
       } catch (e) {
-        return { code: 500, msg: '无法连接 Supabase（' + SB.url + '）' };
+        return { code: 500, msg: '网络连接失败，请检查网络后重试' };
       } finally {
         if (timer) clearTimeout(timer);
       }
@@ -102,7 +102,7 @@
           signal: ctrl ? ctrl.signal : undefined
         });
       } catch (e) {
-        return { code: 500, msg: '无法连接 Supabase（' + SB.url + '）' };
+        return { code: 500, msg: '网络连接失败，请检查网络后重试' };
       } finally {
         if (timer) clearTimeout(timer);
       }
@@ -499,7 +499,7 @@
       } catch (e) {
         return (e && e.name === 'AbortError')
           ? { code: 504, msg: '上传超时（30 秒），请检查网络后重试' }
-          : { code: 500, msg: '上传失败：无法连接 Supabase' };
+          : { code: 500, msg: '网络连接失败，请检查网络后重试' };
       } finally {
         if (timer) clearTimeout(timer);
       }
@@ -525,7 +525,7 @@
           headers: { apikey: SB.publishableKey, Authorization: 'Bearer ' + t }
         });
       } catch (e) {
-        return { code: 500, msg: '删除失败：无法连接 Supabase' };
+        return { code: 500, msg: '网络连接失败，请检查网络后重试' };
       }
       if (!res.ok) {
         let j = null;
