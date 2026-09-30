@@ -15,6 +15,20 @@
 --  说明：全部使用 publishable key + 登录 JWT（RLS 生效），不含任何 secret。
 -- ============================================================
 
+-- ---------- 0) 身份函数（全站 RLS 判定基础；与线上定义一致，幂等可重复执行） ----------
+-- 此前脚本只引用不定义：干净库会在第一条策略处报 function does not exist。
+create or replace function public.current_username() returns text
+language sql stable
+as $$
+  select nullif(coalesce(auth.jwt() -> 'user_metadata' ->> 'username', ''), '');
+$$;
+
+create or replace function public.current_user_is_admin() returns boolean
+language sql stable
+as $$
+  select coalesce((select is_admin from public.users where username = public.current_username()), false);
+$$;
+
 -- ---------- 1. users 表扩展 ----------
 alter table public.users add column if not exists avatar_url  text;
 alter table public.users add column if not exists bubble_color text default '#3a7afe';

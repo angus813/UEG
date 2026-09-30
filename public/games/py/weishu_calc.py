@@ -1,6 +1,7 @@
 # 注意：本文件当前未被任何前端代码引用（前端卫戍协议走 JS 计算）。
 # 保留作为 Pyodide 引擎的备用计算模块；启用方式：仿 enhance.js 的 initPyEngine()
-# 加载本文件并调用其函数。文件内无 __main__ 自测，可安全被 Pyodide 执行。
+# 加载本文件并调用其函数。文件含 __main__ 自测（python weishu_calc.py --test），
+# 被 Pyodide 以模块方式执行时 __name__ != '__main__'，自测不会触发，可安全加载。
 # -*- coding: utf-8 -*-
 # ============================================================
 #  weishu_calc.py —— 卫戍协议 · 拉格朗日战斗计算引擎
@@ -258,6 +259,7 @@ def supply_level(wave):
 #  自检（python weishu_calc.py --test）
 # ============================================================
 def _self_test():
+    random.seed(42)  # 自测可复现（原依赖未播种 random 会偶发失败）
     ok = 0
     fail = 0
 
@@ -351,17 +353,6 @@ def _self_test():
     return fail == 0
 
 
-if __name__ == '__main__':
-    import sys
-    try:
-        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-    except Exception:
-        pass
-    if '--test' in sys.argv:
-        sys.exit(0 if _self_test() else 1)
-    else:
-        print('卫戍协议 Python 计算引擎（供 Pyodide 调用）')
-        print('自检: python weishu_calc.py --test')
 
 
 # ============================================================
@@ -457,7 +448,7 @@ def aa_efficiency(weapon_count):
 def aa_hit_rate(base_hit, efficiency, hit_mod, dodge=0, bonus=0, penalty=0):
     """防空实际命中率 = 基础命中率 × 防空协同效率 ×（1+强化命中加成-对方闪避-命中减益+己方增益）
     极限 10%~95%"""
-    rate = base_hit * efficiency * (1 + bonus - dodge - penalty)
+    rate = base_hit * efficiency * (1 + hit_mod + bonus - dodge - penalty)
     return max(0.10, min(0.95, rate))
 
 def aa_damage(dph, special_ammo, base_dph=None):
@@ -465,3 +456,16 @@ def aa_damage(dph, special_ammo, base_dph=None):
     增伤比 = 1 + 防空特种弹药值 / 基础单发伤害（文档示例：基础10+特种5→1.5，实际12→18）"""
     boost = aa_damage_boost(base_dph if base_dph is not None else dph, special_ammo)
     return dph * boost
+
+
+if __name__ == '__main__':
+    import sys
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+    if '--test' in sys.argv:
+        sys.exit(0 if _self_test() else 1)
+    else:
+        print('卫戍协议 Python 计算引擎（供 Pyodide 调用）')
+        print('自检: python weishu_calc.py --test')

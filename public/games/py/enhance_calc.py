@@ -46,7 +46,8 @@ def compute_enhancement(systems, levels):
     """
     acc = {'dmg': 0, 'aa': 0, 'siege': 0, 'cd': 0, 'hit': 0, 'crit': 0,
            'hp': 0, 'phys': 0, 'energy': 0, 'cruise': 0, 'warp': 0,
-           'atkSpeed': 0, 'freq': 0, 'dur': 0}
+           'atkSpeed': 0, 'freq': 0, 'dur': 0,
+           'hpAdd': 0, 'physAdd': 0, 'energyAdd': 0}
     for sys in systems:
         for t in sys.get('techs', []):
             lv = (levels.get(sys.get('name', ''), {}) or {}).get(t.get('name', ''), 0) or 0
@@ -55,7 +56,11 @@ def compute_enhancement(systems, levels):
             tmax = float(t.get('max') or 1) or 1
             for e in t.get('effects', []):
                 act = e.get('action', '')
-                if act not in ('比例加成', '比例减少'):
+                typ = e.get('type', '')
+                # 总排除（与 JS 降级版 enhance.js 同词表）：战斗机制类效果两边都不计
+                if re.search(r'集火|战略打击|子系统暴击|被武器命中|被导弹|被鱼雷|失效|自动维修|'
+                             r'拦截|锁定|目标选择|飞行时间|闪避|反击|警戒|战斗|站位|撤退|隐藏|'
+                             r'伪装|干扰|探测|识别', typ):
                     continue
                 try:
                     raw = float(e.get('value') or 0)
@@ -63,41 +68,62 @@ def compute_enhancement(systems, levels):
                     continue
                 if raw == 0:
                     continue
-                sign = -1.0 if act == '比例减少' else 1.0
-                per = sign * raw * lv / tmax
-                typ = e.get('type', '')
-                if '受到' in typ or '被武器' in typ or '被命中' in typ or '被拦截' in typ:
-                    continue
-                abs_v = abs(per)
-                dir_v = 1
-                if '降低' in typ or '减少' in typ:
-                    if '冷却' in typ or '持续时间' in typ or '攻击间隔' in typ:
-                        dir_v = 1
-                    else:
-                        dir_v = -1
-                if '攻城' in typ: acc['siege'] += abs_v * dir_v
-                elif '防空' in typ: acc['aa'] += abs_v * dir_v
-                elif '冷却' in typ: acc['cd'] += abs_v * dir_v
-                elif '暴击' in typ: acc['crit'] += abs_v * dir_v
-                elif '持续时间' in typ: acc['dur'] += per
-                elif '攻击间隔' in typ: acc['atkSpeed'] += abs_v * dir_v
-                elif '频率' in typ or '每轮攻击' in typ or '额外射击' in typ: acc['freq'] += abs_v * dir_v
-                elif '命中' in typ: acc['hit'] += abs_v * dir_v
-                elif '生命' in typ or '结构值' in typ: acc['hp'] += abs_v * dir_v
-                elif '装甲' in typ or '抗性' in typ:
-                    if '能量' in typ: acc['energy'] += abs_v * dir_v
-                    else: acc['phys'] += abs_v * dir_v
-                elif '巡航' in typ: acc['cruise'] += abs_v * dir_v
-                elif '曲速' in typ: acc['warp'] += abs_v * dir_v
-                elif '伤害' in typ: acc['dmg'] += abs_v * dir_v
+                if act in ('比例加成', '比例减少'):
+                    sign = -1.0 if act == '比例减少' else 1.0
+                    per = sign * raw * lv / tmax
+                    if '受到' in typ or '被武器' in typ or '被命中' in typ or '被拦截' in typ:
+                        continue
+                    abs_v = abs(per)
+                    dir_v = 1
+                    if '降低' in typ or '减少' in typ:
+                        if '冷却' in typ or '持续时间' in typ or '攻击间隔' in typ:
+                            dir_v = 1
+                        else:
+                            dir_v = -1
+                    if '攻城' in typ: acc['siege'] += abs_v * dir_v
+                    elif '防空' in typ: acc['aa'] += abs_v * dir_v
+                    elif '冷却' in typ: acc['cd'] += abs_v * dir_v
+                    elif '暴击' in typ: acc['crit'] += abs_v * dir_v
+                    elif '持续时间' in typ: acc['dur'] += per
+                    elif '攻击间隔' in typ: acc['atkSpeed'] += abs_v * dir_v
+                    elif '频率' in typ or '每轮攻击' in typ or '额外射击' in typ: acc['freq'] += abs_v * dir_v
+                    elif '命中' in typ: acc['hit'] += abs_v * dir_v
+                    elif '生命' in typ or '结构值' in typ: acc['hp'] += abs_v * dir_v
+                    elif '装甲' in typ or '抗性' in typ:
+                        if '能量' in typ: acc['energy'] += abs_v * dir_v
+                        else: acc['phys'] += abs_v * dir_v
+                    elif '巡航' in typ: acc['cruise'] += abs_v * dir_v
+                    elif '曲速' in typ: acc['warp'] += abs_v * dir_v
+                    elif '伤害' in typ: acc['dmg'] += abs_v * dir_v
+                elif '增加' in act or '减少' in act:
+                    # 绝对加成（对齐 enhance.js L360-367）：此前被整段跳过
+                    add = (-raw if '减' in act else raw) * lv / tmax
+                    if '装甲' in typ or '抗性' in typ or '物理抵抗' in typ:
+                        if '能量' in typ:
+                            acc['energyAdd'] += add
+                        else:
+                            acc['physAdd'] += add
+                    elif '生命' in typ or '结构值' in typ:
+                        acc['hpAdd'] += add
+                    elif '伤害' in typ:
+                        # 效果值为百分点（如「伤害+X%」），直接累加，勿再 /100
+                        acc['dmg'] += add
+    # 暴击/攻速/频率近似计入伤害倍率（与 JS 降级版 enhance.js L372-378 一致；
+    # 命中率 hit 与 DPM 无简单折算，仅保留计算）
+    crit_m = 1 + acc['crit'] / 100
+    atk_m = 1 + acc['atkSpeed'] / 100
+    freq_m = 1 + acc['freq'] / 100
     return {
-        'fireMul': 1 + acc['dmg'] / 100,
-        'aaMul': 1 + (acc['dmg'] + acc['aa']) / 100,
-        'siegeMul': 1 + (acc['dmg'] + acc['siege']) / 100,
+        'fireMul': (1 + acc['dmg'] / 100) * crit_m * atk_m * freq_m,
+        'aaMul': (1 + (acc['dmg'] + acc['aa']) / 100) * crit_m * atk_m * freq_m,
+        'siegeMul': (1 + (acc['dmg'] + acc['siege']) / 100) * crit_m * atk_m * freq_m,
         'cdMul': 1 - acc['cd'] / 100,
         'hpMul': 1 + acc['hp'] / 100,
+        'hpAdd': acc['hpAdd'],
         'physMul': 1 + acc['phys'] / 100,
+        'physAdd': acc['physAdd'],
         'energyMul': 1 + acc['energy'] / 100,
+        'energyAdd': acc['energyAdd'],
         'cruiseMul': 1 + acc['cruise'] / 100,
         'warpMul': 1 + acc['warp'] / 100,
         'durMul': 1 + acc['dur'] / 100,

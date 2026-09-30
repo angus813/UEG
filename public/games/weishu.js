@@ -1555,7 +1555,8 @@ function startBattle() {
     if (top) top.swiftTop = true;
   }
   clockLeft = state.finalRound && state.finalRound.active ? 180 : CONFIG.ROUND_CLOCK;
-  state.battleFocusMul = 1;
+  // battleFocusMul 不能在这里清：集火指令是备战阶段点的，开战场清会让它永远无效；
+  // 重置放在战斗结算（settleRound），保证本场生效、下场不带
   state.attackEvents = [];
   state.breakthroughUntil = Date.now() + 30000;
   state.roundLifeLost = 0;
@@ -1766,8 +1767,29 @@ function enemyAttack(now) {
   });
 }
 
+// ---------- 射程判定（方案A：排位差 ≤ floor(射程)-1） ----------
+// 战场是排位制：我方 row 0前/1中/2后，敌方 zone front/mid/back（同序号=同排）。
+// 射程 2.x（约 57% 的船）打不到隔排（前排够不到敌后排），3+ 全排可打；
+// 射程科技 +1（2.4→3.4）即从两排限制变全排。无排位（要塞）或没配射程
+//（敌方数据无 range 字段）的单位不拦，保持原行为。
+function posIndexOf(u) {
+  if (typeof u.row === 'number') return u.row;
+  if (u.zone === 'front') return 0;
+  if (u.zone === 'mid') return 1;
+  if (u.zone === 'back') return 2;
+  return null;
+}
+function inAttackRange(attacker, target) {
+  const r = typeof attacker.range === 'number' ? attacker.range : 99;
+  const maxGap = Math.max(0, Math.floor(r) - 1);
+  const a = posIndexOf(attacker);
+  const b = posIndexOf(target);
+  if (a === null || b === null) return true;
+  return Math.abs(a - b) <= maxGap;
+}
+
 function acquireTarget(attacker, candidates) {
-  const list = candidates.filter(function (c) { return c.alive; });
+  const list = candidates.filter(function (c) { return c.alive && inAttackRange(attacker, c); });
   if (!list.length) return null;
   const fortress = list.filter(function (c) { return c.fortress && !(c.lockUntil && Date.now() < c.lockUntil); });
   if (fortress.length) return fortress[0];
@@ -1816,6 +1838,9 @@ function settleRound(win, timeout) {
   if (state.phase !== 'battle') return;
   state.phase = 'settle';
   stopBattleLoop();
+  // 集火指令（battleFocusMul）只对本场战斗生效：结算时重置，
+  // 下一轮备战再点才会重新 +30%（startBattle 里不再清，否则永远无效）
+  state.battleFocusMul = 1;
   if (state.recycle && state.roundKills >= 30) {
     const bonus = 2 + Math.floor(Math.random() * 2);
     state.funds += bonus;

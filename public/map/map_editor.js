@@ -2177,7 +2177,11 @@ function isPointInShape(wx, wy, shape) {
     ctx.rotate(shape.rotation);
     ctx.translate(-bCx, -bCy);
   }
-  let result = ctx.isPointInPath(path, wx, wy);
+  // isPointInPath 的 x/y 不受当前变换影响，必须传屏幕坐标；
+  // 上面的变换栈是「世界→屏」（y 翻转 + 偏移缩放），把世界坐标换算过去：
+  const sx = (wx - offsetX) * scale;
+  const sy = canvas.height - (wy - offsetY) * scale;
+  let result = ctx.isPointInPath(path, sx, sy);
   ctx.restore();
   if (result) return true;
   return (wx >= bounds.minX && wx <= bounds.maxX &&
@@ -2516,16 +2520,16 @@ async function init() {
     document.getElementById('saveBtn').style.display = 'none';
   }
 
-  // 先建工具栏与画布：它们不依赖地图数据。
-  // loadMap 失败（网络/鉴权/表结构问题）时不能中断后续初始化，
-  // 否则编辑器会停在空白状态、工具栏也出不来。
-  if (!isViewMode) {
-    createShapeButtons();
-  }
   try {
     await loadMap();
   } catch (e) {
     console.warn('[map_editor] 地图数据加载失败，降级为空白画布：', e && e.message);
+  }
+  // 工具栏必须在 loadMap 之后建：星系标记 isGalaxyMode 在 loadMap 里才赋值，
+  // 提前建会漏掉「标记」分类（防御线/目标/敌情/矿区…）。
+  // loadMap 失败已 catch，这里照样建得出工具栏，降级不空白的语义不变。
+  if (!isViewMode) {
+    createShapeButtons();
   }
 
   resizeCanvas();
