@@ -167,7 +167,7 @@
       // 如果修改的是当前登录用户，同步更新 localStorage 中的记录（保持界面一致）
       const currentUser = getCurrentUser();
       if (currentUser && currentUser.username === username) {
-        currentUser.highestRecord = record;
+        currentUser.highest_record = record;
         localStorage.setItem('ueg_current_user', JSON.stringify(currentUser));
       }
 
@@ -185,7 +185,11 @@
       }
     }
 
-    init();
+    // 等会话恢复完成再初始化：token 过期回来的首屏先 401 会被误判非管理员
+    (async function () {
+      try { if (window.UEG_SESSION_READY) await window.UEG_SESSION_READY; } catch (e) {}
+      await init();
+    })();
   </script>
 </body>
 </html>

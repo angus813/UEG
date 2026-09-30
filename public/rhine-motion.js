@@ -182,9 +182,12 @@
     } catch (e) {}
   }
 
+  // 脚本自身的 src 只在同步执行期能从 document.currentScript 拿到；
+  // rollingAsset 是异步调用（此时 currentScript 恒 null），先存下来再用
+  var rlScriptBase = document.currentScript ? document.currentScript.src : '';
   var rollingReady = null;
   function rollingAsset(rel) {
-    try { return new URL('vendor/' + rel, document.currentScript ? document.currentScript.src : location.href).href; }
+    try { return new URL('vendor/' + rel, rlScriptBase || location.href).href; }
     catch (e) { return 'vendor/' + rel; }
   }
   function ensureRollingCss() {

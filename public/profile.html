@@ -129,13 +129,14 @@
         document.getElementById('adminEntry').style.display = 'block';
       }
 
-      // 同步更新 localStorage 中的用户信息（保持会话数据最新，不存密码明文）
-      const updatedUser = {
+      // 同步更新 localStorage：键名用全站一致的 snake_case，且在原对象上合并更新 ——
+      // 此前整对象替换成 camelCase 三字段，会把 is_admin/is_owner/is_official 等抹掉
+      const prevUser = JSON.parse(localStorage.getItem('ueg_current_user') || '{}');
+      setCurrentUser(Object.assign({}, prevUser, {
         username: user.username,
-        isAdmin: user.is_admin || false,
-        highestRecord: user.highest_record || 0
-      };
-      setCurrentUser(updatedUser);
+        is_admin: user.is_admin || false,
+        highest_record: user.highest_record || 0
+      }));
     }
 
     // ==================== 修改用户名 ====================
@@ -272,7 +273,12 @@
     })();
 
     // ==================== 初始化 ====================
-    loadProfile();
+    // 等会话恢复完成再拉数据：access token 1 小时过期，隔一阵回来
+    // 首屏若带过期 token 会 401 被误判为未登录/无权限（forum/mata 等页都已等）
+    (async function () {
+      try { if (window.UEG_SESSION_READY) await window.UEG_SESSION_READY; } catch (e) {}
+      loadProfile();
+    })();
   </script>
 </body>
 </html>

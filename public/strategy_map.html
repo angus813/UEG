@@ -488,7 +488,9 @@
         .eq('username', username)
         .maybeSingle();
       const result = !error && data && data.is_admin === true;
-      if (cacheKey) localStorage.setItem(cacheKey, JSON.stringify({ isAdmin: result, timestamp: Date.now() }));
+      // 查询失败（网络抖动/token 过期）不写缓存：否则会把「非管理员」缓存 5 分钟，
+      // 期间真管理员也看不到管理入口
+      if (cacheKey && !error) localStorage.setItem(cacheKey, JSON.stringify({ isAdmin: result, timestamp: Date.now() }));
       return result;
     }
     // 登出时清除当前用户的管理员缓存（供登出流程调用）
@@ -722,7 +724,11 @@
         if (!isLoading && hasMore) loadMaps(currentPage + 1, true);
       });
     }
-    init();
+    // 等会话恢复再初始化：token 过期回来的首屏先 401，会被误判成非管理员
+    (async function () {
+      try { if (window.UEG_SESSION_READY) await window.UEG_SESSION_READY; } catch (e) {}
+      await init();
+    })();
   </script>
 </body>
 </html>

@@ -741,7 +741,9 @@
     resetBtn.addEventListener('click', () => { selectedContracts.clear(); lastSelectedId = null; updateUI(); });
 
     // ---------- 初始化 ----------
-    (function init() {
+    (async function init() {
+      // 等会话恢复再查：token 过期回来的首屏不等会 401，最高记录查空
+      try { if (window.UEG_SESSION_READY) await window.UEG_SESSION_READY; } catch (e) {}
       initTabs();
       renderContracts();
       updateUI();

@@ -1694,7 +1694,8 @@ function redraw() {
       } else if (isArc) {
         drawArcShape(ctx, shape);
       } else {
-        ctx.globalAlpha = 1;
+        // 透明度滑块对该分支（line/arrow 等纯描边形状）生效
+        ctx.globalAlpha = shape.opacity !== undefined ? shape.opacity : 1;
         if (!isText) {
           ctx.strokeStyle = shape.strokeColor || '#ffffff';
           ctx.lineWidth = Math.max(1.5 / scale, (shape.strokeWidth || 2) / scale);
@@ -1804,7 +1805,9 @@ function drawSelectionHandles(shape) {
   const handles = [
     {type:'tl', x:minX, y:maxY}, {type:'tr', x:maxX, y:maxY}, {type:'br', x:maxX, y:minY}, {type:'bl', x:minX, y:minY},
     {type:'tm', x:cx, y:maxY}, {type:'bm', x:cx, y:minY}, {type:'lm', x:minX, y:cy}, {type:'rm', x:maxX, y:cy},
-    {type:'rot', x:cx, y:maxY + 20}
+    // rot 手柄偏移按缩放换算（20/scale ≈ 屏幕恒 20px）：写死世界 +20 时缩小视图
+    // 会与 tm 手柄的命中区重叠（hitRadius=8/scale），旋转手柄基本点不到
+    {type:'rot', x:cx, y:maxY + 20 / scale}
   ].map(h => {
     let wx = h.x, wy = h.y;
     if (rotation) {
@@ -2095,7 +2098,7 @@ function hitHandle(shape, wx, wy) {
   const hitRadius=8/scale, cx=(bounds.minX+bounds.maxX)/2, cy=(bounds.minY+bounds.maxY)/2, rotation=shape.rotation||0;
   const handles = [
     {type:'tl',x:bounds.minX,y:bounds.maxY},{type:'tr',x:bounds.maxX,y:bounds.maxY},{type:'br',x:bounds.maxX,y:bounds.minY},{type:'bl',x:bounds.minX,y:bounds.minY},
-    {type:'tm',x:cx,y:bounds.maxY},{type:'bm',x:cx,y:bounds.minY},{type:'lm',x:bounds.minX,y:cy},{type:'rm',x:bounds.maxX,y:cy},{type:'rot',x:cx,y:bounds.maxY+20}
+    {type:'tm',x:cx,y:bounds.maxY},{type:'bm',x:cx,y:bounds.minY},{type:'lm',x:bounds.minX,y:cy},{type:'rm',x:bounds.maxX,y:cy},{type:'rot',x:cx,y:bounds.maxY+20/scale}
   ];
   for(let h of handles){ let hx=h.x,hy=h.y; if(rotation){ const cos=Math.cos(rotation),sin=Math.sin(rotation); const dx=h.x-cx,dy=h.y-cy; hx=cx+dx*cos-dy*sin; hy=cy+dx*sin+dy*cos; } if(Math.hypot(wx-hx,wy-hy)<hitRadius) return h.type; }
   return null;
@@ -2298,8 +2301,9 @@ if (!isViewMode) {
     }
   });
 
-  // 属性面板修改（颜色/粗细/透明度/备注）在 change/blur 时写入撤销历史
-  ['fillColor', 'strokeColor', 'strokeWidth', 'opacity', 'remarkInput'].forEach(id => {
+  // 属性面板修改（颜色/粗细/透明度/备注/填充类型）在 change/blur 时写入撤销历史
+  // （fillType 此前只 redraw，不进历史也不置 dirty：撤回回不去、离开不提示未保存）
+  ['fillColor', 'strokeColor', 'strokeWidth', 'opacity', 'remarkInput', 'fillType'].forEach(id => {
     document.getElementById(id).addEventListener('change', saveState);
   });
 
