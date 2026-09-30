@@ -222,14 +222,13 @@ def generate_enemy_squad(faction, wave, strat, hp_mul=1.0, rng=None):
 # ============================================================
 #  5. 卫戍协议经济与抽取
 # ============================================================
-def next_round_funds(wave):
-    """回合资金：入门协议 第1回合5、第2回合13、之后每回合10"""
+def next_round_funds(wave, funds=None):
+    """回合资金（对齐 weishu.js fundsOfRound）：min(cap, start + (wave-1)*incr)
+    funds 同 JS CONFIG.MODES[].funds 三元组；缺省取入门协议 [60, 70, 9999]。
+    （原实现硬编码 5/13/10，与现行 JS 完全不同——备用引擎会算错钱）"""
+    start, incr, cap = (60, 70, 9999) if funds is None else tuple(funds)
     wave = int(wave)
-    if wave <= 1:
-        return 5
-    if wave == 2:
-        return 13
-    return 10
+    return min(int(cap), int(start) + (wave - 1) * int(incr))
 
 def roll_pool(level, blueprints, rng=None):
     """补给池 3 选 1（不高于当前补给等级），返回蓝图对象列表"""
@@ -325,9 +324,10 @@ def _self_test():
     T('残血击杀', len(res['killed']) == 1)
 
     print('== 经济与抽取 ==')
-    T('回合资金 1→5', next_round_funds(1) == 5)
-    T('回合资金 2→13', next_round_funds(2) == 13)
-    T('回合资金 3→10', next_round_funds(3) == 10)
+    # 与 weishu.js fundsOfRound 一致：入门协议 funds=[60,70,9999]
+    T('回合资金 1→60', next_round_funds(1) == 60)
+    T('回合资金 2→130', next_round_funds(2) == 130)
+    T('回合资金 3→200', next_round_funds(3) == 200)
     T('强化波次 3/6/10/12/14', all(upgrade_wave_active(w) for w in (3, 6, 10, 12, 14))
       and not upgrade_wave_active(4))
     T('补给等级 Lv1→2', supply_level(1) == 1 and supply_level(3) == 2 and supply_level(12) == 6)

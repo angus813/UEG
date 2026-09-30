@@ -37,7 +37,7 @@
     <!-- 修改用户名 -->
     <div class="password-section">
       <button class="btn-toggle-pw" id="btnToggleUsername">修改用户名</button>
-      <div class="pw-form" id="usernameForm">
+      <div class="pw-form" id="usernameForm" style="display:none">
         <input type="text" id="newUsername" placeholder="新用户名（2-20位中文/字母/数字/下划线）" maxlength="20">
         <div class="form-actions">
           <button class="btn-save" id="btnSaveUsername">保存</button>
@@ -49,7 +49,7 @@
     <!-- 修改密码 -->
     <div class="password-section">
       <button class="btn-toggle-pw" id="btnTogglePassword">修改密码</button>
-      <div class="pw-form" id="pwForm">
+      <div class="pw-form" id="pwForm" style="display:none">
         <input type="password" id="oldPassword" placeholder="旧密码">
         <input type="password" id="newPassword" placeholder="新密码">
         <input type="password" id="confirmPassword" placeholder="确认新密码">
@@ -93,7 +93,17 @@
     }
 
     // ==================== 加载个人资料 ====================
-    async function loadProfile() {
+    function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function loadProfile() {
       const currentUser = getCurrentUser();
       if (!currentUser) {
         alert('请先登录');
@@ -121,7 +131,7 @@
       else if (user.is_official) _pn.insertAdjacentHTML('beforeend', ' 【官员】');
       var _av = document.getElementById('avatarBox');
       if (user.avatar_url && _av) {
-        _av.innerHTML = '<img src="' + user.avatar_url + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+        _av.innerHTML = '<img src="' + esc(user.avatar_url) + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
       }
 
       // 显示管理员入口
@@ -141,7 +151,7 @@
 
     // ==================== 修改用户名 ====================
     document.getElementById('btnToggleUsername').addEventListener('click', () => {
-      document.getElementById('usernameForm').style.display = 'block';
+      document.getElementById('usernameForm').style.display = 'flex';
       document.getElementById('newUsername').focus();
     });
     document.getElementById('btnCancelUsername').addEventListener('click', () => {
@@ -209,7 +219,7 @@
 
     // ==================== 事件绑定 ====================
     document.getElementById('btnTogglePassword').addEventListener('click', () => {
-      document.getElementById('pwForm').style.display = 'block';
+      document.getElementById('pwForm').style.display = 'flex';
     });
 
     document.getElementById('btnCancelPassword').addEventListener('click', () => {
@@ -267,7 +277,7 @@
         if (up.code !== 200) { alert('上传失败：' + (up.msg || '')); return; }
         var w = await DB.updateMyProfile({ avatar_url: up.url });
         if (w.code !== 200) { alert('保存失败：' + (w.msg || '')); return; }
-        box.innerHTML = '<img src="' + up.url + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+        box.innerHTML = '<img src="' + esc(up.url) + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
         alert('头像已更新');
       });
     })();

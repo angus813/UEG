@@ -258,9 +258,8 @@
       var r = await DB.rest('/rest/v1/users?select=username,avatar_url&username=in.(' + q + ')');
       if (r.code === 200 && Array.isArray(r.data)) {
         r.data.forEach(function (u) { EMO_CACHE[u.username] = { avatar: u.avatar_url || '' }; });
-      } else {
-        names.forEach(function (n) { EMO_CACHE[n] = {}; });
       }
+      // 请求失败时不写缓存：原来失败也写空值，本次会话就不再重试，头像永远缺
     }
 
     // ---------- 发送 ----------

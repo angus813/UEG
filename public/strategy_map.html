@@ -682,7 +682,7 @@
         });
         selectedProtocol = null;
       }
-      document.getElementById('mapModal').style.display = 'flex';
+      document.getElementById('mapModal').style.display = 'flex'; document.getElementById('mapModal').classList.add('open');
     }
 
     // ==================== 初始化 ====================
@@ -703,7 +703,7 @@
       });
 
       document.getElementById('btnCancel').addEventListener('click', () => {
-        document.getElementById('mapModal').style.display = 'none';
+        document.getElementById('mapModal').style.display = 'none'; document.getElementById('mapModal').classList.remove('open');
       });
 
       document.getElementById('btnSave').addEventListener('click', async () => {
@@ -716,7 +716,7 @@
         }
         const success = await createMap(name, currentMapType, selectedProtocol, templateId);
         if (success) {
-          document.getElementById('mapModal').style.display = 'none';
+          document.getElementById('mapModal').style.display = 'none'; document.getElementById('mapModal').classList.remove('open');
         }
       });
 

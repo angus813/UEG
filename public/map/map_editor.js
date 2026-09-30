@@ -1114,7 +1114,9 @@ function drawShapeIcon(ictx, type, x, y, w, h) {
     } catch (e) { /* 回退到下方专用绘制 */ }
   }
   const shape = { type, x, y, w, h };
-  if (type === 'arrow') {
+  if (type === 'arrow' || type === 'line') {
+    // line 也要补两端点：getPath 只有在 x1/x2 存在时才画线段，
+    // 否则落到通用形状分支被画成矩形（工具栏「直线」图标曾显示成矩形）
     shape.x1 = x; shape.y1 = y; shape.x2 = x+w; shape.y2 = y+h;
   } else if (type === 'text') {
     shape.text = 'T'; shape.fontSize = 12;

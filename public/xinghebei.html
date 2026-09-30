@@ -657,19 +657,19 @@
       const code = generateShareCode();
       if (!code) { alert('请先选择至少一个指标'); return; }
       document.getElementById('shareCode').value = code;
-      document.getElementById('shareModal').style.display = 'flex';
+      document.getElementById('shareModal').style.display = 'flex'; document.getElementById('shareModal').classList.add('open');
     });
     document.getElementById('copyBtn').addEventListener('click', () => {
       const ta = document.getElementById('shareCode');
       ta.select(); document.execCommand('copy'); alert('已复制！');
     });
-    window.closeShareModal = () => document.getElementById('shareModal').style.display = 'none';
+    window.closeShareModal = () => document.getElementById('shareModal').style.display = 'none'; document.getElementById('shareModal').classList.remove('open');
 
     document.getElementById('importBtn').addEventListener('click', () => {
       document.getElementById('importCode').value = '';
-      document.getElementById('importModal').style.display = 'flex';
+      document.getElementById('importModal').style.display = 'flex'; document.getElementById('importModal').classList.add('open');
     });
-    window.closeImportModal = () => document.getElementById('importModal').style.display = 'none';
+    window.closeImportModal = () => document.getElementById('importModal').style.display = 'none'; document.getElementById('importModal').classList.remove('open');
     document.getElementById('confirmImport').addEventListener('click', () => {
       const code = document.getElementById('importCode').value.trim();
       if (code && importFromCode(code)) closeImportModal();
@@ -700,9 +700,9 @@
         html += '</table>';
         content.innerHTML = html;
       }
-      document.getElementById('leaderboardModal').style.display = 'flex';
+      document.getElementById('leaderboardModal').style.display = 'flex'; document.getElementById('leaderboardModal').classList.add('open');
     });
-    window.closeLeaderboard = () => document.getElementById('leaderboardModal').style.display = 'none';
+    window.closeLeaderboard = () => document.getElementById('leaderboardModal').style.display = 'none'; document.getElementById('leaderboardModal').classList.remove('open');
 
     // ---------- 标签切换 ----------
     // 单击与双击逻辑分离：单击延迟 250ms 后切换分类；
