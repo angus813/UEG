@@ -218,7 +218,7 @@
         var cu = getCurrentUser();
         if (!cu) { alert('请先登录'); return; }
         var ext = (f.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
-        var path = cu.username + '/avatar_' + Date.now() + '.' + ext;
+        var path = DB.folderOf(cu.username) + '/avatar_' + Date.now() + '.' + ext;
         var up = await DB.upload('avatars', path, f, f.type);
         if (up.code !== 200) { alert('上传失败：' + (up.msg || '')); return; }
         var w = await DB.updateMyProfile({ avatar_url: up.url });

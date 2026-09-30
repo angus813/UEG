@@ -481,6 +481,9 @@
       if (!t) return { code: 401, msg: '请先登录' };
       const url = (SB.url || '').replace(/\/+$/, '') + '/storage/v1/object/' + bucket + '/' + filePath;
       let res;
+      // 30 秒超时：裸 fetch 没有超时，网络差时会无限卡在「上传中」不给结果
+      const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = ac ? setTimeout(function () { ac.abort(); }, 30000) : null;
       try {
         res = await fetch(url, {
           method: 'POST',
@@ -490,10 +493,15 @@
             'Content-Type': contentType || (file && file.type) || 'application/octet-stream',
             'x-upsert': 'true'
           },
-          body: file
+          body: file,
+          signal: ac ? ac.signal : undefined
         });
       } catch (e) {
-        return { code: 500, msg: '上传失败：无法连接 Supabase' };
+        return (e && e.name === 'AbortError')
+          ? { code: 504, msg: '上传超时（30 秒），请检查网络后重试' }
+          : { code: 500, msg: '上传失败：无法连接 Supabase' };
+      } finally {
+        if (timer) clearTimeout(timer);
       }
       if (!res.ok) {
         let j = null;
@@ -691,6 +699,20 @@
   };
 
   window.DB = MODE === 'local' ? LOCAL_IMPL : SB_IMPL;
+
+  // storage 目录段安全化：Supabase 的 object key 不接受非 ASCII（服务端直接
+  // 400 InvalidKey），而写策略已改为按 owner 校验、不再要求目录=用户名。
+  // 纯 ASCII 用户名原样返回（存量路径完全不变）；含中文等非 ASCII 时整段转
+  // UTF-8 hex（如「雨羽」→ u+hex），与策略解耦、无需数据库函数。
+  window.DB.folderOf = function (name) {
+    name = String(name == null ? '' : name);
+    if (!name || !/[^\x00-\x7F]/.test(name)) return name;
+    var bytes = new TextEncoder().encode(name), hex = '';
+    for (var i = 0; i < bytes.length; i++) {
+      hex += (bytes[i] < 16 ? '0' : '') + bytes[i].toString(16);
+    }
+    return 'u' + hex;
+  };
 
   // ---- 免登录：打开网站自动恢复会话（access token 过期则用 refresh token 续期） ----
   try {

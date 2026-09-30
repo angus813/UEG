@@ -289,7 +289,7 @@
       if (!file) return;
       tip('上传中…');
       var ext = (file.name.split('.').pop() || (kind === 'video' ? 'mp4' : 'png')).toLowerCase().replace(/[^a-z0-9]/g, '');
-      var path = me.username + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
+      var path = DB.folderOf(me.username) + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '.' + ext;
       var up = await DB.upload('forum-media', path, file, file.type);
       if (up.code !== 200) { tip('上传失败：' + (up.msg || ''), true); return; }
       await send(kind, null, path);
