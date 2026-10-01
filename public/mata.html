@@ -270,9 +270,10 @@
         btn.disabled = false;
       }
       files = []; renderPreview();
-      setStatus('完成：成功 ' + okCount + ' 个' +
-                (failCount ? '，失败 ' + failCount + ' 个（' + (firstErr || '未知原因') + '）' : '') +
-                '。已计入排行榜。', failCount === 0);
+      // 原来无论成功失败都拼一句「已计入排行榜」，失败的那几个其实没进榜
+      setStatus(failCount
+        ? '完成：成功 ' + okCount + ' 个（只有成功的计入排行榜），失败 ' + failCount + ' 个（' + (firstErr || '未知原因') + '）'
+        : '完成：成功 ' + okCount + ' 个，已计入排行榜。', failCount === 0);
       refreshLoginState();
       loadBoard();
     });
