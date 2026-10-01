@@ -440,6 +440,23 @@ const ShapeGenerator = {
 };
 
 // ---------- 辅助绘图函数 ----------
+/* 颜色合法性兜底：数据里 fillColor/fillColor2 可能为 null/空串/脏值。
+   喂给 fillStyle 尚可（浏览器会忽略），但 addColorStop 遇非法颜色会抛错，
+   进而中断整帧渲染、让该图形之后的图形全部不显示。故统一校验后再用。 */
+const _vcCtx = document.createElement('canvas').getContext('2d');
+function validColor(c, fallback) {
+  if (typeof c !== 'string') return fallback;
+  const s = c.trim();
+  if (!s) return fallback;
+  try {
+    _vcCtx.fillStyle = '#123456';
+    _vcCtx.fillStyle = s;
+    // 赋非法值时 fillStyle 保持不变
+    return _vcCtx.fillStyle === '#123456' && s.toLowerCase() !== '#123456' ? fallback : s;
+  } catch (e) {
+    return fallback;
+  }
+}
 /* 公式形状：用旋转矩形/path 构造，避免依赖描边宽度 */
 function drawMultiplyPath(p, x, y, w, h) {
   const t = Math.min(w, h) * 0.18, cx = x + w / 2, cy = y + h / 2;
@@ -1725,6 +1742,7 @@ function redraw() {
     const isPin = shape.type === 'pin';
 
     ctx.save();
+    try {
     const bounds = getShapeBounds(shape);
     const cx = (bounds.minX + bounds.maxX) / 2;
     const cy = (bounds.minY + bounds.maxY) / 2;
@@ -1759,7 +1777,8 @@ function redraw() {
           const grad = shape.fill === 'linear' ?
             ctx.createLinearGradient(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY) :
             ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY)/2);
-          grad.addColorStop(0, shape.fillColor); grad.addColorStop(1, shape.fillColor2 || '#000000');
+          grad.addColorStop(0, validColor(shape.fillColor, '#00c8ff'));
+          grad.addColorStop(1, validColor(shape.fillColor2, '#000000'));
           ctx.fillStyle = grad;
         } else if (shape.fill === 'texture') ctx.fillStyle = textureImage ? ctx.createPattern(textureImage, 'repeat') : '#8a8a8a';
         if (isCity) drawCityShape(ctx, shape);
@@ -1789,6 +1808,14 @@ function redraw() {
       }
     }
     ctx.restore();
+    } catch (err) {
+      // 如渐变填充色非法致 addColorStop 抛错：只跳过这一个图形。
+      // 不兜住的话异常会中断整个 forEach，它后面的图形全部不显示
+      // （曾表现为「圆规画的圆，部分不见了」）。
+      ctx.restore();
+      console.warn('[map_editor] 形状渲染失败：' + shape.type, err && err.message);
+      return;
+    }
 
     // 文本绘制
     if (isText && shape.text) drawTextOnCanvas(shape);
@@ -1799,7 +1826,7 @@ function redraw() {
       drawSelectionHandles(shape);
     }
     // 用户名+备注标签
-    drawShapeLabel(ctx, shape);
+    try { drawShapeLabel(ctx, shape); } catch (e) { /* 标签失败不影响图形 */ }
   });
 
   // 中心红点
