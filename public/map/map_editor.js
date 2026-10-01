@@ -1591,11 +1591,16 @@ function fitToShapes() {
     return;
   }
   const pad = 50;
-  scale = clampScale(Math.min(canvas.width / (maxX - minX + pad * 2), canvas.height / (maxY - minY + pad * 2)));
+  // 适配全部图形时不能用 clampScale 的下界：它按整个世界(10000)算最小缩放，
+  // 图形范围一接近或超过当前可见世界，缩放就被卡在这个下界，视野比图形集窄，
+  // 边缘图形被推出画布（表现为「部分图案消失」）。这里只保留上限（防过度放大）。
+  const maxScale = Math.min(canvas.width / 10, canvas.height / 10);
+  scale = Math.min(maxScale, Math.min(canvas.width / (maxX - minX + pad * 2), canvas.height / (maxY - minY + pad * 2)));
   const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  // 这里不调用 clampOffset()：它把视野强行夹回世界 [0,10000]，
+  // 而「装下全部图形」本身可能需要超出世界边界的视野，一夹图形又被推出画布。
   offsetX = cx - canvas.width / (2 * scale);
   offsetY = cy - canvas.height / (2 * scale);
-  clampOffset();
   initialScale = scale;
 }
 
