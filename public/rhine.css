@@ -700,6 +700,25 @@ label { font-size: 11px; letter-spacing: 0.08em; color: var(--rl-muted); }
   flex: none;
 }
 .profile-avatar > * { filter: grayscale(0.9); opacity: 0.9; }
+/* 头像上传：label 负责触发，input 不能 display:none（iOS Safari 不响应） */
+.avatar-picker { display: block; cursor: pointer; width: fit-content; margin: 0 auto; }
+.avatar-picker > .profile-avatar { display: flex; }
+.avatar-picker .avatar-file-input {
+  position: absolute;
+  width: 1px; height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+}
+.avatar-picker .avatar-hint {
+  display: block;
+  font-size: 12px;
+  opacity: .6;
+  text-align: center;
+  margin-top: 6px;
+}
 .profile-username { font-family: var(--rl-font-title); font-size: 1.35rem; font-weight: 700; color: var(--rl-ink); letter-spacing: 0.04em; }
 .profile-mark { font-size: 11px; letter-spacing: 0.12em; color: var(--rl-muted); }
 .info-card { padding: 4px 0; margin-bottom: 22px; border: 1px solid var(--rl-line-soft); }

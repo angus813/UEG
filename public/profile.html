@@ -15,9 +15,12 @@
 <body>
   <div class="profile-page">
     <div class="profile-header">
-      <div class="profile-avatar" id="avatarBox" title="点击更换头像" style="cursor:pointer;"></div>
-      <input type="file" id="avatarFile" accept="image/*" style="display:none">
-      <div style="font-size:12px;opacity:.6;text-align:center;margin-top:6px;">点头像可更换（jpg/png，建议方形）</div>
+      <!-- iOS Safari 不响应隐藏 input 的 click()，改为用 label 包住头像与提示文字 -->
+      <label class="avatar-picker" for="avatarFile" id="avatarLabel">
+        <input type="file" id="avatarFile" accept="image/*" class="avatar-file-input">
+        <span class="profile-avatar" id="avatarBox" title="点击更换头像" style="cursor:pointer;"></span>
+        <span class="avatar-hint">点头像可更换（jpg/png，建议方形）</span>
+      </label>
       <div class="profile-username" id="profileUsername">用户名</div>
       <div class="profile-mark"></div>
     </div>
@@ -261,10 +264,18 @@ async function loadProfile() {
     (function initAvatar() {
       var box = document.getElementById('avatarBox');
       var fi = document.getElementById('avatarFile');
+      var label = document.getElementById('avatarLabel');
       if (!box || !fi) return;
-      box.addEventListener('click', function () { fi.click(); });
+      // 优先用 label[for] 触发（iOS Safari 只认这个）。
+      // label 已把头像和提示文字都包住，点哪都能换。
+      // 桌面端也保留 box 的 click 兜底，防止 label 渲染异常时无入口。
+      if (!label) {
+        box.addEventListener('click', function () { fi.click(); });
+      }
       fi.addEventListener('change', async function () {
         var f = fi.files && fi.files[0];
+        // 先把 File 引用取出来再清空 input：iOS 上 fi.files 是活引用，
+        // 先清空会让同一个 File 的 name/type/size 失效，导致上传被判为非图片。
         fi.value = '';
         if (!f) return;
         if (!/^image\//.test(f.type)) { alert('请选择图片文件'); return; }
