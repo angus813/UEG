@@ -696,10 +696,12 @@ label { font-size: 11px; letter-spacing: 0.08em; color: var(--rl-muted); }
   color: var(--rl-paper);
   font-family: var(--rl-font-title);
   font-size: 1.7rem; font-weight: 700;
-  border-radius: 0;
+  border-radius: 50%;
   flex: none;
 }
 .profile-avatar > * { filter: grayscale(0.9); opacity: 0.9; }
+/* 内层图片跟随外框圆角，避免方形图片溢出圆框 */
+.profile-avatar > img { border-radius: 50%; }
 /* 头像上传：label 负责触发，input 不能 display:none（iOS Safari 不响应） */
 .avatar-picker { display: block; cursor: pointer; width: fit-content; margin: 0 auto; }
 .avatar-picker > .profile-avatar { display: flex; }
