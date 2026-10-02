@@ -165,7 +165,9 @@
           return true;
         }
         showError('注册成功，请登录', 2000);
-        setTimeout(() => openModal('login'), 500);
+        // 引导回登录模式，但保留刚注册的用户名、密码留空，
+        // 不回填「记住密码」里的旧账号（否则像把注册换成了登录）。
+        setTimeout(() => openModal('login', username), 500);
         return true;
       } else {
         showError(result.msg);
@@ -221,7 +223,7 @@
       }
     }
 
-    function openModal(mode) {
+    function openModal(mode, prefillUser) {
       modalMode = mode;
       if (mode === 'login') {
         modalTitle.textContent = '登录';
@@ -233,10 +235,21 @@
         modalConfirm.textContent = '注册';
       }
       // 勾选了「记住密码」就回填账号密码，方便直接点登录；否则留空。
-      const remembered = mode === 'login' ? loadRemembered() : null;
-      usernameInput.value = remembered ? remembered.u : '';
-      passwordInput.value = remembered ? remembered.p : '';
-      if (rememberMe) rememberMe.checked = !!remembered;
+      // 显式传入 prefillUser 时（如注册成功后引导去登录）只带用户名，
+      // 不回填密码、不勾记忆 —— 否则会把记忆里的旧账号密码填进来，
+      // 看起来就像「正在注册却被换成登录」。
+      let fillUser = '', fillPass = '', wasChecked = false;
+      if (prefillUser !== undefined && prefillUser !== null) {
+        fillUser = prefillUser;
+      } else {
+        const remembered = mode === 'login' ? loadRemembered() : null;
+        fillUser = remembered ? remembered.u : '';
+        fillPass = remembered ? remembered.p : '';
+        wasChecked = !!remembered;
+      }
+      usernameInput.value = fillUser;
+      passwordInput.value = fillPass;
+      if (rememberMe) rememberMe.checked = wasChecked;
       document.getElementById('errorMessage').textContent = '';
       modal.style.display = 'flex';
       setTimeout(() => usernameInput.focus(), 100);
@@ -339,6 +352,10 @@
     (function bootstrap() {
       const done = function (r) {
         if (r && r.code === 200) { updateUI(); return; }
+        // 用户已经在登录/注册框里动手输入了（如正在注册），
+        // 就不要用「记住的密码」自动登录去覆盖他的输入。
+        const typing = (usernameInput.value || passwordInput.value);
+        if (typing) return;
         // 会话恢复失败：再试一次「记住的密码」自动登录，仍失败才让用户手动登录
         autoLoginWithRemembered().then(function (ok) {
           if (!ok) updateUI();
