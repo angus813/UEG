@@ -30,7 +30,15 @@ const CONFIG = {
     {slots: 5, equipSlots: 2, shield: 3, cost: 12},
     {slots: 5, equipSlots: 2, shield: 3, cost: 99}
   ],
-  UPGRADE_ROUNDS: [3, 6, 10, 12, 14]
+  UPGRADE_ROUNDS: [3, 6, 10, 12, 14],
+  // ---------- 借自《无尽的拉格朗日》战斗表现层 ----------
+  // 那边客户端不做伤害计算（服务器下发 after_hp / base_hit_damage /
+  // critical_hit_extra_damage / hit_damage_count / miss_damage_count），
+  // 只负责把它们变成「命中/未命中表现 + 弹字」。这里借用同样的表现层结构。
+  // 一轮攻击拆成多段命中，逐段飘字；暴击伤害单独飘一次（base + extra）。
+  HIT_SEGMENTS: 3,          // 每次攻击的命中段数
+  CRIT_EXTRA_RATIO: 0.5,    // 暴击额外伤害 = 基础伤害 × 该系数（原为直接 ×1.5）
+  MISS_LOG_CHANCE: 0.12     // 未命中在战报里留痕的概率（未命中无飘字，纯战报提示）
 };
 
 const EQUIP_BLUEPRINTS = [
@@ -226,7 +234,7 @@ function initGame() {
     swift: false, recycle: false, gacha: false, intel: false, spellStrategy: false,
     mergeCount: 3, mergeBonus: 0, craft: false,
     totalKills: 0, roundKills: 0, roundLifeLost: 0, spentFunds: 0, permits: 0,
-    attackEvents: [], breakthroughUntil: 0,
+    attackEvents: [], pendingPop: {}, breakthroughUntil: 0,
     progress: loadProgress(), stats: loadStats(), blueOpenedIn: null
   };
   newsList = [];
@@ -562,6 +570,7 @@ function startPrepRound() {
   state.roundKills = 0;
   state.roundLifeLost = 0;
   state.attackEvents = [];
+  state.pendingPop = {};
   if (state.spellStrategy && state.bargeLevel >= 3) {
     const sp = SPELL_BLUEPRINTS[Math.floor(Math.random() * SPELL_BLUEPRINTS.length)];
     state.hand.push({ type: 'spell', sp: sp });
@@ -1320,6 +1329,9 @@ function rebuildUnits() {
     const waveScale = 1 + (state.wave - 1) * 0.08;
     const maxHp = Math.round(s.hp * hpMul * state.bonuses.hpMul * waveScale);
     const hasShield = s.dmgType === 'energy' || (card.equips || []).some(function (e) { return e.id === 'shield'; });
+    // 防空拦截能力（借 anti_missile_list）：防空武器越强可拦越多投射物。
+    // 与 weapon 对齐：有 air 武器的舰船才具备拦截能力。
+    const antiMissile = s.weapon === 'air' ? Math.round(s.dmg * 0.8 + (s.armor || 0) * 2) : 0;
     return {
       cardIdx: i, id: 'my_' + i, name: s.name, shortName: s.shortName || s.name, cls: s.cls, row: s.row, repair: (s.repair ? 1 : 0) || (mo.repair ? 1 : 0),
       maxHp: maxHp, hp: maxHp,
@@ -1329,6 +1341,7 @@ function rebuildUnits() {
       rate: s.rate * rateMul * state.bonuses.rateMul,
       range: s.range + rangeBonus + state.bonuses.rangeBonus,
       weapon: s.weapon, dmgType: s.dmgType, energyMul: energyMul, critBonus: critBonus,
+      antiMissile: antiMissile,
       elite: card.elite, alive: true, kills: 0, lastFireTime: 0
     };
   }).filter(function (u) { return u; });
@@ -1523,6 +1536,7 @@ function spawnEnemyWave() {
       maxHp: Math.round(e.hp * scale * state.enemyHpMul), hp: Math.round(e.hp * scale * state.enemyHpMul),
       dmg: Math.round(e.atk * scale), armor: Math.round(e.armor * scale), shield: Math.round(e.shield * scale),
       dmgType: e.dmgType, weapon: e.weapon, tier: e.tier, repair: e.repair ? 1 : 0,
+      antiMissile: e.weapon === 'air' ? Math.round(e.atk * scale * 0.8 + e.armor * scale * 2) : 0,
       alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
     };
   });
@@ -1558,6 +1572,7 @@ function startBattle() {
   // battleFocusMul 不能在这里清：集火指令是备战阶段点的，开战场清会让它永远无效；
   // 重置放在战斗结算（settleRound），保证本场生效、下场不带
   state.attackEvents = [];
+  state.pendingPop = {};
   state.breakthroughUntil = Date.now() + 30000;
   state.roundLifeLost = 0;
   state.finalRound.waveEnded = false;
@@ -1737,10 +1752,24 @@ function myAttack(now) {
     if (u.weapon === 'air') dmg *= state.bonuses.airMul;
     if (state.swift && u.swiftTop) dmg *= 1.7;
     const isCrit = Math.random() < (state.bonuses.critChance + u.critBonus);
-    if (isCrit) dmg *= 1.5;
-    const dealt = calcDamage(dmg, u.dmgType, target, u.weapon);
-    target.hp -= dealt;
-    state.attackEvents.push({ from: u.shortName, to: target.shortName, dmg: dealt, isCrit: isCrit, isEnemy: false });
+
+    // 一轮攻击拆成多段命中：逐段结算伤害并逐段飘字
+    // （借 hit_damage_count / miss_damage_count 的分段表现）
+    const segs = Math.max(1, CONFIG.HIT_SEGMENTS);
+    let dealt = 0, sumBase = 0, sumExtra = 0, anyCrit = false;
+    for (let i = 0; i < segs; i++) {
+      const segDmg = dmg / segs;
+      const r = calcDamageDetailed(segDmg, u.dmgType, target, u.weapon, isCrit && i === 0);
+      target.hp -= r.total;
+      dealt += r.total;
+      sumBase += r.base;
+      sumExtra += r.extra;          // 累加：暴击只在首段，但末段会把它冲掉
+      if (r.extra > 0) anyCrit = true;
+    }
+    target.hp = Math.max(0, target.hp);
+    state.pendingPop = state.pendingPop || {};
+    state.pendingPop[target.id] = { base: sumBase, extra: sumExtra, crit: anyCrit };
+    state.attackEvents.push({ from: u.shortName, to: target.shortName, dmg: dealt, isCrit: anyCrit, isEnemy: false });
     if (state.attackEvents.length > 40) state.attackEvents.shift();
   });
 }
@@ -1758,11 +1787,22 @@ function enemyAttack(now) {
     if (Math.random() > 0.75) return;
     let dmg = e.dmg * state.enemyDmgMul;
     const isCrit = Math.random() < 0.05;
-    if (isCrit) dmg *= 1.5;
-    const dealt = calcDamage(dmg, e.dmgType, target, e.weapon);
-    target.hp -= dealt;
+
+    const segs = Math.max(1, CONFIG.HIT_SEGMENTS);
+    let dealt = 0, sumBase = 0, sumExtra = 0, anyCrit = false;
+    for (let i = 0; i < segs; i++) {
+      const segDmg = dmg / segs;
+      const r = calcDamageDetailed(segDmg, e.dmgType, target, e.weapon, isCrit && i === 0);
+      target.hp -= r.total;
+      dealt += r.total;
+      sumBase += r.base;
+      sumExtra += r.extra;
+      if (r.extra > 0) anyCrit = true;
+    }
     if (target.hp <= 0) target.hp = 0;
-    state.attackEvents.push({ from: e.shortName, to: target.shortName, dmg: dealt, isCrit: isCrit, isEnemy: true });
+    state.pendingPop = state.pendingPop || {};
+    state.pendingPop[target.id] = { base: sumBase, extra: sumExtra, crit: anyCrit };
+    state.attackEvents.push({ from: e.shortName, to: target.shortName, dmg: dealt, isCrit: anyCrit, isEnemy: true });
     if (state.attackEvents.length > 40) state.attackEvents.shift();
   });
 }
@@ -1809,29 +1849,65 @@ function acquireTarget(attacker, candidates) {
   return pool.sort(function (a, b) { return a.hp - b.hp; })[0];
 }
 
-function calcDamage(dmg, dmgType, target, weapon) {
-  if (target.fortress && Date.now() < (target.lockUntil || 0)) return 0;
+/* ---------- 防空拦截（借自 anti_missile_list） ----------
+   星际猎人里投射物进入目标防区时，由目标的防空武器逐个拦截
+   （anti_missile_list 每 3 个一组表示一批拦截结果）。这里改为：
+   目标带 weapon==='air' 的防空属性时，按拦截率吃掉部分投射物伤害。 */
+function calcInterception(target, weapon) {
+  if (weapon !== 'projectile') return 0;
+  const cap = target.antiMissile || 0;   // 防空拦截上限（0 = 无防空）
+  if (cap <= 0) return 0;
+  // 拦截率：护盾越多防空越强，但有上限，避免满盾必拦
+  const rate = Math.min(0.75, 0.25 + (target.shield || 0) / 400);
+  return cap * rate;
+}
+
+// ---------- 伤害结算 ----------
+// 返回 { total, base, extra, intercepted }：
+//   base       基础伤害（护盾吸收、护甲减伤后）
+//   extra      暴击额外伤害（借 critical_hit_extra_damage）
+//   intercepted 被防空拦掉的量（不进 hp，只做提示）
+function calcDamageDetailed(dmg, dmgType, target, weapon, isCrit) {
+  if (target.fortress && Date.now() < (target.lockUntil || 0)) {
+    return { total: 0, base: 0, extra: 0, intercepted: 0 };
+  }
+  let incoming = dmg;
+  // 防空拦截：先吃掉一部分
+  const intercepted = Math.min(incoming, calcInterception(target, weapon));
+  incoming -= intercepted;
+
+  let base = 0;
   if (target.fortress) {
-    let dmg2 = dmg;
+    base = incoming;
     if (target.shield > 0) {
-      const abs = Math.min(target.shield, dmg2);
+      const abs = Math.min(target.shield, base);
       target.shield -= abs;
-      dmg2 -= abs;
+      base -= abs;
     }
-    return Math.max(0, dmg2);
-  }
-  if (target.cls === 'fighter' || target.cls === 'corvette') {
-    if (weapon !== 'air') return 0;
-  }
-  if (dmgType === 'energy') {
+    base = Math.max(0, base);
+  } else if (target.cls === 'fighter' || target.cls === 'corvette') {
+    if (weapon !== 'air') return { total: 0, base: 0, extra: 0, intercepted: 0 };
+    base = incoming;
+  } else if (dmgType === 'energy') {
     if (target.shield > 0) {
-      const absorbed = Math.min(target.shield, dmg);
+      const absorbed = Math.min(target.shield, incoming);
       target.shield -= absorbed;
-      return Math.max(1, dmg - absorbed);
+      base = Math.max(1, incoming - absorbed);
+    } else {
+      base = incoming;
     }
-    return dmg;
+  } else {
+    base = Math.max(1, incoming - target.armor);
   }
-  return Math.max(1, dmg - target.armor);
+
+  // 暴击额外伤害独立结算（不走护盾/护甲，与 base 分离）
+  const extra = isCrit ? base * CONFIG.CRIT_EXTRA_RATIO : 0;
+  return { total: base + extra, base: base, extra: extra, intercepted: intercepted };
+}
+
+// 保留原签名，供既有多处调用方使用
+function calcDamage(dmg, dmgType, target, weapon) {
+  return calcDamageDetailed(dmg, dmgType, target, weapon, false).total;
 }
 
 function settleRound(win, timeout) {
@@ -2011,14 +2087,19 @@ function renderFleetCard(u, side) {
     '<div class="dmg-pop-wrap"></div></div>';
 }
 
-function spawnDamagePop(el, amount, isCrit, isEnemy, isHeal) {
+function spawnDamagePop(el, amount, isCrit, isEnemy, isHeal, extra) {
   const wrap = el.querySelector('.dmg-pop-wrap');
   if (!wrap) return;
-  const div = document.createElement('div');
-  div.className = 'dmg-pop' + (isCrit ? ' crit' : '') + (isEnemy ? ' from-enemy' : '') + (isHeal ? ' heal' : '');
-  div.textContent = (isHeal ? '+' : '-') + Math.max(1, Math.round(amount));
-  wrap.appendChild(div);
-  setTimeout(function () { if (div.parentNode) div.parentNode.removeChild(div); }, 950);
+  const one = function (amt, crit) {
+    const div = document.createElement('div');
+    div.className = 'dmg-pop' + (crit ? ' crit' : '') + (isEnemy ? ' from-enemy' : '') + (isHeal ? ' heal' : '');
+    div.textContent = (isHeal ? '+' : '-') + Math.max(1, Math.round(amt));
+    wrap.appendChild(div);
+    setTimeout(function () { if (div.parentNode) div.parentNode.removeChild(div); }, 950);
+  };
+  one(amount, isCrit);
+  // 暴击额外伤害独立飘一次（借自 critical_hit_extra_damage 的表现方式）
+  if (extra > 0) one(extra, true);
 }
 
 function renderAtkLog() {
@@ -2052,8 +2133,13 @@ function updateBattleUI() {
     const el = document.getElementById(u.id);
     if (!el) return;
     const prev = parseInt(el.dataset.hp || '0', 10);
-    if (u.alive && u.hp < prev && prev - u.hp > 0.4) spawnDamagePop(el, prev - u.hp, false, true);
-    else if (u.alive && u.hp > prev && u.hp - prev > 0.4) spawnDamagePop(el, u.hp - prev, false, true, true);
+    const pop = state.pendingPop && state.pendingPop[u.id];
+    if (u.alive && u.hp < prev && prev - u.hp > 0.4) {
+      // 有分段数据时用 base/extra 分离飘字（暴击额外伤害单独一次）
+      if (pop && pop.extra > 0) spawnDamagePop(el, pop.base, pop.crit, true, false, pop.extra);
+      else spawnDamagePop(el, prev - u.hp, pop ? pop.crit : false, true);
+    } else if (u.alive && u.hp > prev && u.hp - prev > 0.4) spawnDamagePop(el, u.hp - prev, false, true, true);
+    if (pop) delete state.pendingPop[u.id];
     el.dataset.hp = Math.round(u.hp);
     const f = el.querySelector('.fc-hp .fill');
     if (f) f.style.width = Math.max(0, u.hp / u.maxHp * 100) + '%';
@@ -2067,8 +2153,12 @@ function updateBattleUI() {
     const el = document.getElementById(e.id);
     if (!el) return;
     const prev = parseInt(el.dataset.hp || '0', 10);
-    if (e.alive && e.hp < prev && prev - e.hp > 0.4) spawnDamagePop(el, prev - e.hp, false, false);
-    else if (e.alive && e.hp > prev && e.hp - prev > 0.4) spawnDamagePop(el, e.hp - prev, false, false, true);
+    const epop = state.pendingPop && state.pendingPop[e.id];
+    if (e.alive && e.hp < prev && prev - e.hp > 0.4) {
+      if (epop && epop.extra > 0) spawnDamagePop(el, epop.base, epop.crit, false, false, epop.extra);
+      else spawnDamagePop(el, prev - e.hp, epop ? epop.crit : false, false);
+    } else if (e.alive && e.hp > prev && e.hp - prev > 0.4) spawnDamagePop(el, e.hp - prev, false, false, true);
+    if (epop) delete state.pendingPop[e.id];
     el.dataset.hp = Math.round(e.hp);
     const f = el.querySelector('.fc-hp .fill');
     if (f) f.style.width = Math.max(0, e.hp / e.maxHp * 100) + '%';
