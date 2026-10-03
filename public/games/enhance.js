@@ -195,21 +195,30 @@
       '<div class="a"><span>强化项</span><b>' + maxAdd + '</b></div>' + chip +
       '</div>';
 
-    h += '<div class="tree-wrap"><svg class="tree-svg" id="treeSvg"></svg><div class="tree" id="tree">';
-    // 按官方链式分组分行：ch = 链序号，ri = 行内序号；ly=-1 的特殊项排最后
-    var rows = {};
+    // 官方排版：rw=行(cl=列) 来自 traverse_enhance_tree 的「列=DFS深度、行=列内ui_level分组」
+    // ul=-1 六边形（adjust），ul=-2 树外节点（自维修/集火，官方不进树，不渲染）
+    var show = [], hx = [], ncol = 0;
     for (var j = 0; j < list.length; j++) {
-      var key = (list[j].ly === -1) ? 'spec' : ('c' + list[j].ch);
-      (rows[key] = rows[key] || []).push(list[j]);
+      var ul = list[j].ul === undefined ? -2 : list[j].ul;
+      if (ul === -1) { hx.push(list[j]); continue; }
+      if (ul === -2) continue;
+      show.push(list[j]);
+      if ((list[j].cl || 0) + 1 > ncol) ncol = (list[j].cl || 0) + 1;
     }
-    var rk = Object.keys(rows).filter(function (k) { return k !== 'spec'; })
-      .sort(function (a, b) { return Number(a.slice(1)) - Number(b.slice(1)); });
-    if (rows.spec) rk.push('spec');
-    for (var r = 0; r < rk.length; r++) {
-      var arr = rows[rk[r]];
-      h += '<div class="trow' + (rk[r] === 'spec' ? ' special' : '') + '" data-row="' + rk[r] + '">';
-      for (var q = 0; q < arr.length; q++) h += nodeHtml(arr[q], list);
-      h += '</div>';
+    var nrow = 0;
+    for (var j2 = 0; j2 < show.length; j2++) {
+      if ((show[j2].rw || 0) + 1 > nrow) nrow = (show[j2].rw || 0) + 1;
+    }
+    if (hx.length) nrow++;                       // 六边形行排在最后
+    h += '<div class="tree-wrap"><svg class="tree-svg" id="treeSvg"></svg>' +
+         '<div class="tree" id="tree" style="grid-template-columns:repeat(' + ncol + ',76px)">';
+    for (var q = 0; q < show.length; q++) {
+      var tq = show[q];
+      h += nodeHtml(tq, list, ((tq.rw || 0) + 1) + '/' + ((tq.cl || 0) + 1));
+    }
+    var hrow = nrow - (hx.length ? 1 : 0);
+    for (var q2 = 0; q2 < hx.length; q2++) {
+      h += nodeHtml(hx[q2], list, nrow + '/' + (q2 + 1));
     }
     h += '</div></div>';
     h += detailHtml(list);
@@ -224,14 +233,14 @@
     bindMain(list);
   }
 
-  function nodeHtml(t, list) {
+  function nodeHtml(t, list, gridArea) {
     var l = lvOf(sysName, t.id);
     var maxed = t.mx <= 0 || l >= t.mx;
     var pq = prereqOf(list, t);
     var blocked = !!(pq && pq.some(function (x) { return !x.ok; }));
     var cls = 'node';
-    // 特殊项（系统调校 / 自维修 / 系统损坏 等）按官方样式显示为六边形斜纹块
-    if (t.ly < 0) cls += ' hex';
+    // 六边形 = 官方 adjust 项（UNLOCK_TYPE != 0），对应游戏底部那行斜纹块
+    if (t.ul === -1) cls += ' hex';
     if (t.mx > 0) cls += ' addable';
     if (maxed && t.mx > 0) cls += ' maxed';
     if (blocked) cls += ' locked';
@@ -245,11 +254,11 @@
     else if (t.c === 2) flag = '<span class="flag">模</span>';
     else if (t.ut) flag = '<span class="flag">稀</span>';
 
-    return '<div class="' + cls + '" data-id="' + t.id + '" data-sys="' + esc(sysName) + '">' +
+    return '<div class="' + cls + '"' + (gridArea ? ' style="grid-area:' + gridArea + '"' : '') +
+      ' data-id="' + t.id + '" data-sys="' + esc(sysName) + '">' +
       '<div class="box">' + flag + icon(t.ic) +
       '<span class="lb">' + esc(t.lb || t.n) + '</span>' + lvTxt +
       (cost ? '<span class="cost">' + cost + '</span>' : '') + '</div>' +
-      (t.ly < 0 ? '' : '') +
       '</div>';
   }
 
@@ -303,48 +312,69 @@
     svg.style.height = wr.height + 'px';
     var pos = {};
     var nodes = wrap.querySelectorAll('.node');
+    var rowOf = {};
+    for (var li = 0; li < list.length; li++) rowOf[list[li].id] = list[li].rw;
     for (var i = 0; i < nodes.length; i++) {
       var r = nodes[i].getBoundingClientRect();
-      pos[nodes[i].getAttribute('data-id')] = {
+      var nid = nodes[i].getAttribute('data-id');
+      pos[nid] = {
         x: r.left - wr.left + r.width / 2,
         y: r.top - wr.top + r.height / 2,
         cx: r.left - wr.left + r.width / 2,
         cy: r.top - wr.top + r.height / 2,
         l: r.left - wr.left, t: r.top - wr.top,
         r: r.right - wr.left,
+        row: rowOf[nid] === undefined ? -1 : rowOf[nid],
         w: r.width, h: r.height
       };
     }
     var parts = [];
-    // 主干：左侧竖线贯通首尾，每条链的行首节点短横线接入
-    var chains = [];
-    var byChain = {};
+    // 主干：左侧竖线贯通首尾，每行最左节点短横线接入
+    var rowsMap = {};
     for (var i2 = 0; i2 < list.length; i2++) {
-      if (!pos[list[i2].id]) continue;
-      var ck = list[i2].ly === -1 ? 'spec' : 'c' + list[i2].ch;
-      (byChain[ck] = byChain[ck] || []).push({ t: list[i2], p: pos[list[i2].id] });
+      var t2 = list[i2];
+      if (!pos[t2.id] || t2.ul === -2) continue;
+      var key = (t2.ul === -1) ? 'spec' : ('r' + t2.rw);
+      (rowsMap[key] = rowsMap[key] || []).push({ t: t2, p: pos[t2.id] });
     }
-    for (var ck2 in byChain) chains.push(byChain[ck2]);
-    chains.sort(function (a, b) {
-      var ka = a[0].t.ly === -1 ? 'spec' : 'c' + a[0].t.ch;
-      var kb = b[0].t.ly === -1 ? 'spec' : 'c' + b[0].t.ch;
-      return ka === kb ? 0 : (ka === 'spec' ? 1 : kb === 'spec' ? -1 : Number(ka.slice(1)) - Number(kb.slice(1)));
+    var rowKeys = Object.keys(rowsMap).sort(function (a, b) {
+      if (a === 'spec') return 1;
+      if (b === 'spec') return -1;
+      return Number(a.slice(1)) - Number(b.slice(1));
     });
-
-    if (chains.length) {
-      var mainX = Math.min.apply(null, chains.map(function (c) { return c[0].p.l; })) - 26;
+    var heads = [];
+    for (var ri = 0; ri < rowKeys.length; ri++) {
+      var arr0 = rowsMap[rowKeys[ri]];
+      arr0.sort(function (a, b) {
+        if (a.t.ul === -1) return a.t.cl - b.t.cl;
+        return a.t.cl - b.t.cl;
+      });
+      heads.push(arr0[0].p);
+    }
+    if (heads.length) {
+      var mainX = Math.min.apply(null, heads.map(function (p) { return p.l; })) - 26;
       var allY = [];
-      chains.forEach(function (c) { c.forEach(function (x) { allY.push(x.p.y); }); });
+      for (var k2 in rowsMap) rowsMap[k2].forEach(function (x) { allY.push(x.p.y); });
       var yTop = Math.min.apply(null, allY), yBot = Math.max.apply(null, allY);
       parts.push('<line x1="' + mainX + '" y1="' + yTop + '" x2="' + mainX + '" y2="' + yBot +
         '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
-      chains.forEach(function (c) {
-        var head = c[0].p;
+      heads.forEach(function (head) {
         parts.push('<line x1="' + mainX + '" y1="' + head.y + '" x2="' + head.l +
           '" y2="' + head.y + '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
         parts.push('<circle cx="' + head.l + '" cy="' + head.y +
           '" r="2.6" fill="rgba(255,255,255,.78)"/>');
       });
+    }
+    // 六边形链：官方 add_unlock_adjust_node 传 next_enhance_id，adjacent 之间画横线
+    if (rowsMap.spec) {
+      var hxa = rowsMap.spec.slice().sort(function (a, b) { return a.t.cl - b.t.cl; });
+      for (var h1 = 0; h1 + 1 < hxa.length; h1++) {
+        var hp = hxa[h1].p, hc = hxa[h1 + 1].p;
+        parts.push('<line x1="' + hp.r + '" y1="' + hp.cy + '" x2="' + hc.l +
+          '" y2="' + hc.cy + '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
+        parts.push('<circle cx="' + ((hp.r + hc.l) / 2) + '" cy="' + hp.cy +
+          '" r="2.2" fill="rgba(255,255,255,.62)"/>');
+      }
     }
     // 前置关系：只在「后者直接以前者为前置」时连线，一对一，绝不多连
     var pqSet = {};
@@ -367,13 +397,18 @@
           '" r="2.2" fill="rgba(255,255,255,.62)"/>');
         return;
       }
-      // 跨行：斜线。官方是从前置节点的右下角斜拉到后继节点的右上角，
-      // 两个端点分别落在行间空隙的上沿和下沿，整条线都在空隙里，不会压到任何节点。
+      // 跨行：官方形态是「前置右下角 → 后继右上角」的斜线，两端分别落在行间空隙的
+      // 下沿和上沿。只有相邻行能直接斜拉；跨多行时改走折线，每段仍留在空隙里。
       var up = child.cy < par.cy ? child : par;
       var dn = child.cy < par.cy ? par : child;
-      parts.push('<line x1="' + up.r + '" y1="' + (up.t + up.h) + '" x2="' +
-        dn.r + '" y2="' + dn.t +
-        '" stroke="rgba(255,255,255,.40)" stroke-width="1.1"/>');
+      var stroke = 'stroke="rgba(255,255,255,.40)" stroke-width="1.1"';
+      if (Math.abs(up.row - dn.row) === 1) {
+        parts.push('<line x1="' + up.r + '" y1="' + (up.t + up.h) + '" x2="' +
+          dn.r + '" y2="' + dn.t + '" ' + stroke + '/>');
+      } else {
+        parts.push('<path d="M' + up.r + ' ' + (up.t + up.h) + ' H' + dn.r +
+          ' V' + dn.t + '" ' + stroke + ' fill="none"/>');
+      }
       parts.push('<circle cx="' + up.r + '" cy="' + (up.t + up.h) +
         '" r="2" fill="rgba(255,255,255,.55)"/>');
     });
