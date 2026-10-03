@@ -164,6 +164,21 @@ body {
   .col-sys { max-height: 18vh; }
   .tree-wrap { padding: 20px 16px 30px 40px; }
 }
+
+/* 方案码弹窗 */
+.mask { position: fixed; inset: 0; background: rgba(10, 12, 14, .72); z-index: 120;
+        display: flex; align-items: center; justify-content: center; }
+.mask[hidden] { display: none; }
+.plan-box { width: min(620px, 92vw); background: #1b1f22; border: 1px solid rgba(255, 255, 255, .16);
+            border-left: 3px solid #ffd24a; border-radius: 3px; padding: 16px 18px 14px; }
+.plan-t { font-weight: 700; font-size: .92rem; margin-bottom: 8px; }
+.plan-hint { color: #b6bbbd; font-size: .78rem; line-height: 1.6; margin-bottom: 10px; }
+.plan-box textarea { width: 100%; box-sizing: border-box; background: #101315; color: #d8e2e6;
+                     border: 1px solid rgba(255, 255, 255, .18); border-radius: 2px;
+                     padding: 8px 10px; font: 12px/1.6 Consolas, "Courier New", monospace;
+                     resize: vertical; word-break: break-all; }
+.plan-ops { display: flex; gap: 8px; margin-top: 10px; }
+.plan-msg { color: #ffd24a; font-size: .78rem; margin-top: 8px; min-height: 1.2em; }
 </style>
 <!-- 仅管理员/会长可进：先整页隐藏，避免未授权时闪出内容；判定见页尾守卫脚本 -->
 <script>document.documentElement.style.visibility = 'hidden';</script>
@@ -176,8 +191,9 @@ body {
     <span class="ttl" id="shipTitle">系统强化</span>
     <span class="pts" id="ptsBox">技术值(强化点) <b id="ptsNum">0</b></span>
     <button class="tbtn" id="btnReset">重置本舰</button>
-    <button class="tbtn" id="btnPlan">导出方案</button>
-    <button class="tbtn" id="btnAddPts" title="技术值是模拟用的，可自行调整">+500</button>
+    <button class="tbtn" id="btnPlan">导出方案码</button>
+    <button class="tbtn" id="btnImport">导入方案码</button>
+    <button class="tbtn" id="btnAddPts" title="技术值只用于记账，不限制加点">+500</button>
   </div>
   <div class="main">
     <div class="col-ship"><div class="ss">
@@ -191,9 +207,23 @@ body {
   </div>
 </div>
 
-<script src="ships_data.js?v=20261003f"></script>
-<script src="official_enhance_data.js?v=20261003f"></script>
-<script src="enhance.js?v=20261003f"></script>
+<div class="mask" id="planMask" hidden>
+  <div class="plan-box">
+    <div class="plan-t" id="planTitle">导出方案码</div>
+    <div class="plan-hint" id="planHint"></div>
+    <textarea id="planCode" rows="6" spellcheck="false"></textarea>
+    <div class="plan-ops">
+      <button class="tbtn" id="planCopy">复制</button>
+      <button class="tbtn" id="planApply">导入并应用</button>
+      <button class="tbtn" id="planClose">关闭</button>
+    </div>
+    <div class="plan-msg" id="planMsg"></div>
+  </div>
+</div>
+
+<script src="ships_data.js?v=20261003g"></script>
+<script src="official_enhance_data.js?v=20261003g"></script>
+<script src="enhance.js?v=20261003g"></script>
 
 <div id="flashTip" style="position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:rgba(30,34,36,.95);color:#fff;font-weight:700;border:1px solid rgba(255,255,255,.3);border-left:3px solid #ffd24a;padding:9px 20px;z-index:99;opacity:0;transition:opacity .3s;font-size:.82rem;border-radius:2px"></div>
 

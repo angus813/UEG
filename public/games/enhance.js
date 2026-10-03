@@ -17,6 +17,8 @@
   const DATA = window.SHIPS_DATA || {};
   const OFF = window.OFFICIAL_ENHANCE || {};
   const ICON = 'enhance_icons/';
+  // 图标文件同名换图（旧版 system_intensify → 当前版 system_intensify_new），带版本号防止读到旧缓存
+  const ICON_VER = '20261003g';
   const LS_POINTS = 'ueg_tree_points';
   const LS_LV = 'ueg_tree_lv';
 
@@ -45,7 +47,7 @@
     e.textContent = msg; e.style.opacity = '1';
     clearTimeout(tip._t); tip._t = setTimeout(function () { e.style.opacity = '0'; }, 2400);
   }
-  function icon(f) { return f ? '<img src="' + ICON + esc(f) + '" alt="">' : ''; }
+  function icon(f) { return f ? '<img src="' + ICON + esc(f) + '?v=' + ICON_VER + '" alt="">' : ''; }
 
   // ---------- 等级 ----------
   function lvOf(sn, tid) {
@@ -483,7 +485,6 @@
     var pq = prereqOf(list, t);
     if (pq && unmetTxt(pq)) { tip('需先满足：' + unmetTxt(pq)); return; }
     var c = costOf(t, baseOf(t) + l + 1);
-    if (c > 0 && points < c) { tip('技术值(强化点)不足，还差 ' + (c - points)); return; }
     points -= c;
     setLv(sysName, t.id, l + 1);
     save(); renderAll();
@@ -553,13 +554,113 @@
     save(); renderAll();
     tip('已重置，返还 ' + sp + ' 点');
   });
-  $('btnPlan').addEventListener('click', function () {
-    var mine = levels[shipKey];
-    if (!mine || !Object.keys(mine).length) { tip('还没有加点'); return; }
-    var blob = JSON.stringify({ v: 1, ship: shipKey, levels: mine }, null, 2);
-    try { localStorage.setItem('ueg_tree_plan', blob); tip('方案已存到 ueg_tree_plan'); console.log(blob); }
-    catch (e) { tip('保存失败'); }
+  // ---------- 方案码 ----------
+  // 一艘船各系统各强化项的等级 → 一行文本 → base64url。
+  // 明文格式：UEG1|舰船名|系统id:节点数:等级串|系统id:节点数:等级串...
+  // 等级串按节点 id 升序逐位记录，0-9 与 A-Z 对应 0-35 级；只写入有加点的系统。
+  var LV_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  var PLAN_PREFIX = 'E1-';
+
+  function b64e(s) {
+    var by = new TextEncoder().encode(s), bin = '';
+    for (var i = 0; i < by.length; i++) bin += String.fromCharCode(by[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function b64d(s) {
+    s = s.replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    var bin = atob(s), by = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) by[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(by);
+  }
+  function techsOrdered(sysv) {
+    return sysv.techs.slice().sort(function (a, b) { return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0); });
+  }
+  function makePlanCode() {
+    if (!ship) return '';
+    var part = [], names = Object.keys(ship.systems);
+    for (var i = 0; i < names.length; i++) {
+      var sn = names[i], sysv = ship.systems[sn], techs = techsOrdered(sysv), s = '', any = false;
+      for (var j = 0; j < techs.length; j++) {
+        var v = lvOf(sn, techs[j].id);
+        if (v > 0) any = true;
+        s += LV_CHARS.charAt(Math.min(v, 35));
+      }
+      if (any) part.push(String(sysv.id || '') + ':' + techs.length + ':' + s);
+    }
+    if (!part.length) return '';
+    return PLAN_PREFIX + b64e('UEG1|' + shipKey + '|' + part.join('|'));
+  }
+  function applyPlanCode(code) {
+    code = String(code || '').replace(/\s+/g, '');
+    if (!code) { planMsg('码是空的'); return; }
+    var raw = code;
+    if (code.indexOf(PLAN_PREFIX) === 0) {
+      try { raw = b64d(code.slice(PLAN_PREFIX.length)); }
+      catch (e) { planMsg('这个码无法识别，检查是否复制完整'); return; }
+    }
+    var f = raw.split('|');
+    if (f[0] !== 'UEG1' || f.length < 3) { planMsg('不是本站的方案码'); return; }
+    var key = f[1], target = OFF[key];
+    if (!target || !target.systems) { planMsg('这个码对应的舰船「' + key + '」站内没有数据'); return; }
+    var src = target.systems, put = {}, skip = [], total = 0;
+    for (var i = 2; i < f.length; i++) {
+      var seg = f[i].split(':'), sid = seg[0], cnt = parseInt(seg[1], 10), lvs = seg[2] || '';
+      var sysv = null, sysn = null, key2;
+      for (key2 in src) if (String(src[key2].id) === sid) { sysv = src[key2]; sysn = key2; break; }
+      if (!sysv) { skip.push(sid + '（无此系统）'); continue; }
+      var techs = techsOrdered(sysv);
+      if (!isFinite(cnt) || cnt !== techs.length || lvs.length !== cnt) { skip.push(sid + '（节点数已变）'); continue; }
+      var m = {};
+      for (var j = 0; j < cnt; j++) {
+        var v = LV_CHARS.indexOf(lvs.charAt(j));
+        if (v > 0) { m[techs[j].id] = Math.min(v, techs[j].mx); total++; }
+      }
+      if (Object.keys(m).length) put[sysn] = m;
+    }
+    if (key !== shipKey) pickShip(key);
+    levels[shipKey] = put;
+    selTech = null;
+    save(); renderAll();
+    var w = DATA[key] || {};
+    planMsg('已导入「' + ((w.name || key) + (w.model ? '·' + w.model : '')) + '」' +
+            total + ' 个强化项' + (skip.length ? '，跳过 ' + skip.length + ' 个系统：' + skip.join('、') : ''));
+  }
+  function planMsg(t) {
+    var e = $('planMsg');
+    e.textContent = t;
+    tip(t);
+  }
+  function openPlan(importing) {
+    var mask = $('planMask'), ta = $('planCode');
+    if (importing) {
+      ta.value = '';
+      $('planTitle').textContent = '导入方案码';
+      $('planHint').textContent = '把别人给的码粘贴到下面，点「导入并应用」。码里带舰船名，会自动切到那艘船。';
+    } else {
+      var code = makePlanCode();
+      if (!code) { tip('当前舰船还没有加点'); return; }
+      ta.value = code;
+      $('planTitle').textContent = '导出方案码';
+      $('planHint').textContent = '复制这段码发给别人，对方粘进「导入方案码」即可看到同样的加点。共 ' + code.length + ' 字符。';
+    }
+    mask.hidden = false;
+    ta.focus(); ta.select();
+  }
+
+  $('planClose').addEventListener('click', function () { $('planMask').hidden = true; });
+  $('planMask').addEventListener('click', function (e) { if (e.target === this) this.hidden = true; });
+  $('planCopy').addEventListener('click', function () {
+    var ta = $('planCode');
+    ta.focus(); ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    if (!ok && navigator.clipboard) navigator.clipboard.writeText(ta.value).then(function () {}, function () {});
+    planMsg(ok ? '已复制' : '请手动复制框里的码');
   });
+  $('planApply').addEventListener('click', function () { applyPlanCode($('planCode').value); });
+  $('btnPlan').addEventListener('click', function () { openPlan(false); });
+  $('btnImport').addEventListener('click', function () { openPlan(true); });
   window.addEventListener('resize', function () {
     if (ship && sysName) {
       var s = ship.systems[sysName];
