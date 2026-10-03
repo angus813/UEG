@@ -421,7 +421,10 @@
         else link([[par.l, yRow], [child.r, yRow]]);
         return;
       }
-      if (known && Math.abs(drw) === 1 && Math.abs(dcl) === 1) {
+      // 相邻列：不管隔几行都走同一形态 —— 两个面对面的角直接连。
+      // 跨多行时它退化成一条更长的斜线，但始终落在两列之间的缝里，不压节点，
+      // 也不会像多段折线那样拐点落在别的斜线上（旧的兜底折线就是这么叉上的）。
+      if (known && drw !== 0 && Math.abs(dcl) === 1) {
         var upD = drw > 0 ? par : child;
         var dnD = drw > 0 ? child : par;
         var p1 = [dnD.cx > upD.cx ? upD.r : upD.l, upD.b];
