@@ -1,706 +1,488 @@
-
-
-
-
-
-
-
-
-
-
+/* 系统强化 —— 树形强化界面
+ *
+ * 界面照官方《无尽的拉格朗日》舰船蓝图 · 系统强化 重做：
+ *   顶栏  舰船名 / 技术值(强化点) / 重置 / 方案
+ *   左一  舰船清单
+ *   左二  系统图标竖栏（M 标记 + 官方系统图标 + 类别名 + 等级点阵）
+ *   主体  系统标题条 → 属性条 → 强化树（节点方块 + 连线 + 底部详情卡）
+ *
+ * 数据 window.OFFICIAL_ENHANCE 来自 official_enhance_data.js（自动生成）：
+ *   名称/分类/描述/详细说明/逐级消耗/前置依赖 全部取自官方配置表，
+ *   强化项与各模块系统按官方 system_id 对应，不做名称猜测。
+ *   描述里的 [Lv.N] / [周期] 等是官方模板中由服务器下发的数值，本站未内置。
+ */
 (function () {
+  'use strict';
+
   const DATA = window.SHIPS_DATA || {};
-  const TYPE_ORDER = ['战列巡洋舰', '航空母舰', '巡洋舰', '驱逐舰', '护卫舰', '护航艇', '战机', '支援舰'];
-  const ICONS = {
-  '航空母舰': 'photo/微信图片_20260731000935_177_7.jpg',
-  '支援舰': 'photo/微信图片_20260731113333_179_7.jpg',
-  '战列巡洋舰': 'photo/微信图片_20260731113857_181_7.jpg',
-  '巡洋舰': 'photo/微信图片_20260731113858_182_7.jpg',
-  '驱逐舰': 'photo/微信图片_20260731114137_183_7.jpg',
-  '护卫舰': 'photo/微信图片_20260731114208_184_7.jpg',
-  '护航艇': 'photo/微信图片_20260731114434_185_7.jpg',
-  '战机': 'photo/微信图片_20260731114451_186_7.jpg'
-};
-  const LS_POINTS = 'ueg_enhance_points';
-  const LS_STATE = 'ueg_enhance_state';
-  
-  let weaponChoice = {};
-  try { weaponChoice = JSON.parse(localStorage.getItem('ueg_weapon_choice') || '{}'); } catch (e) { weaponChoice = {}; }
-  function saveWeaponChoice() { localStorage.setItem('ueg_weapon_choice', JSON.stringify(weaponChoice)); }
-  function getWeaponChoice(shipKey, sysName, option, list) {
-    const saved = (weaponChoice[shipKey] || {})[sysName] && weaponChoice[shipKey][sysName][option];
-    if (saved && list.some(w => w.name === saved)) return saved;
-    return (list[0] || {}).name;
+  const OFF = window.OFFICIAL_ENHANCE || {};
+  const ICON = 'enhance_icons/';
+  const LS_POINTS = 'ueg_tree_points';
+  const LS_LV = 'ueg_tree_lv';
+
+  let shipKey = null, ship = null, sysName = null, selTech = null;
+  let points = 0, levels = {};
+
+  try { points = parseInt(localStorage.getItem(LS_POINTS) || '0', 10) || 0; } catch (e) { points = 0; }
+  try { levels = JSON.parse(localStorage.getItem(LS_LV) || '{}') || {}; } catch (e) { levels = {}; }
+  function save() {
+    try {
+      localStorage.setItem(LS_POINTS, String(points));
+      localStorage.setItem(LS_LV, JSON.stringify(levels));
+    } catch (e) {}
   }
-  function setWeaponChoice(shipKey, sysName, option, weaponName) {
-    weaponChoice[shipKey] = weaponChoice[shipKey] || {};
-    weaponChoice[shipKey][sysName] = weaponChoice[shipKey][sysName] || {};
-    weaponChoice[shipKey][sysName][option] = weaponName;
-    saveWeaponChoice();
+
+  const $ = function (id) { return document.getElementById(id); };
+  const shipList = $('shipList'), sysCol = $('sysCol'), mainCol = $('mainCol');
+  const ptsNum = $('ptsNum'), ptsBox = $('ptsBox'), shipTitle = $('shipTitle');
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
-  function getSelectedWeapons() {
-    // 按 option 槽位过滤：同一槽位内多武器为互斥选择，只计入 getWeaponChoice 选中的那一把，
-    // 避免武器合计把互斥槽位的所有武器全部计入导致数值虚高
-    const sysMap = (window.SYSTEM_STATS || {})[currentKey];
-    const out = [];
-    if (!sysMap) return out;
-    Object.keys(sysMap).forEach(sysName => {
-      const sys = sysMap[sysName] || {};
-      const slots = {};
-      (sys.weapons || []).forEach(w => {
-        const o = w.option || w.name;
-        (slots[o] = slots[o] || []).push(w);
-      });
-      Object.keys(slots).forEach(option => {
-        const list = slots[option];
-        const chosen = getWeaponChoice(currentKey, sysName, option, list);
-        const picked = list.filter(w => w.name === chosen)[0] || list[0];
-        if (picked) out.push(picked);
-      });
-    });
+  function tip(msg) {
+    const e = $('flashTip');
+    e.textContent = msg; e.style.opacity = '1';
+    clearTimeout(tip._t); tip._t = setTimeout(function () { e.style.opacity = '0'; }, 2400);
+  }
+  function icon(f) { return f ? '<img src="' + ICON + esc(f) + '" alt="">' : ''; }
+
+  // ---------- 等级 ----------
+  function lvOf(sn, tid) {
+    var s = levels[shipKey];
+    if (!s || !s[sn]) return 0;
+    var v = parseInt(s[sn][tid], 10);
+    return isNaN(v) ? 0 : v;
+  }
+  function setLv(sn, tid, v) {
+    var s = levels[shipKey] = levels[shipKey] || {};
+    var m = s[sn] = s[sn] || {};
+    if (v <= 0) delete m[tid]; else m[tid] = v;
+  }
+  function baseOf(t) { return t.dl || 0; }
+  function absLv(t) { return baseOf(t) + lvOf(sysName, t.id); }
+  function absMax(t) { return baseOf(t) + t.mx; }
+  function costOf(t, abs) {
+    var i = abs - baseOf(t) - 1;
+    if (i < 0 || i >= t.ct.length) return 0;
+    var c = t.ct[i];
+    return (typeof c === 'number' && c > 0) ? c : 0;
+  }
+
+  // ---------- 前置 ----------
+  function techById(list, id) {
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+    return null;
+  }
+  function prereqOf(list, t) {
+    if (!t.pq || !t.pq.length) return null;
+    var out = [];
+    for (var i = 0; i < t.pq.length; i++) {
+      var p = techById(list, t.pq[i][0]);
+      if (!p || p.id === t.id) continue;
+      var need = t.pq[i][1] || 1;
+      out.push({ t: p, need: need, ok: absLv(p) >= need });
+    }
+    return out.length ? out : null;
+  }
+  function dependentsOf(list, t) {
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      if (c.id === t.id || !c.pq) continue;
+      for (var j = 0; j < c.pq.length; j++) if (c.pq[j][0] === t.id) { out.push(c); break; }
+    }
     return out;
   }
-  function flashTip(msg) {
-    const t = document.getElementById('flashTip');
-    if (t) { t.textContent = msg; t.style.opacity = '1'; setTimeout(() => { t.style.opacity = '0'; }, 2600); }
-    else console.log('[提示]', msg);
+  function unmetTxt(pq) {
+    return pq.filter(function (x) { return !x.ok; })
+      .map(function (x) { return x.t.n + ' 达 ' + x.need + ' 级'; }).join('、');
   }
-    
-  let pyEngine = null, pyMode = false, pyInitPromise = null;
-  function loadScriptAsync(src, timeoutMs) {
-    return new Promise(function (resolve) {
-      var s = document.createElement('script');
-      s.src = src;
-      s.onload = function () { resolve(true); };
-      s.onerror = function () { resolve(false); };
-      setTimeout(function () { resolve(false); }, timeoutMs || 6000);
-      document.head.appendChild(s);
+
+  // ---------- 舰船栏 ----------
+  var TYPE_ORDER = ['战列舰', '战列巡洋舰', '航空母舰', '巡洋舰', '驱逐舰', '护卫舰',
+                    '登陆舰', '护航艇', '战机', '支援舰'];
+  function renderShips(q) {
+    q = (q || '').trim();
+    var groups = {}, order = [];
+    for (var k in DATA) {
+      var w = DATA[k];
+      var nm = (w.name || '') + ' ' + (w.model || '') + ' ' + (w.type || '');
+      if (q && nm.indexOf(q) < 0) continue;
+      var g = w.type || '其它';
+      if (!groups[g]) { groups[g] = []; order.push(g); }
+      groups[g].push(k);
+    }
+    order.sort(function (a, b) {
+      var ia = TYPE_ORDER.indexOf(a), ib = TYPE_ORDER.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
     });
-  }
-  async function initPyEngine() {
-    if (pyInitPromise) return pyInitPromise;
-    pyInitPromise = (async function () {
-      try {
-        var cdn = ['pyodide/pyodide.js', 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js', 'https://unpkg.com/pyodide@0.26.4/full/pyodide.js'];
-        var loaded = false, loadedSrc = '';
-        for (var i = 0; i < cdn.length; i++) { loaded = await loadScriptAsync(cdn[i], 6000); if (loaded) { loadedSrc = cdn[i]; break; } }
-        if (!loaded || typeof loadPyodide !== 'function') throw new Error('Pyodide CDN 不可用');
-        pyEngine = await loadPyodide(loadedSrc === 'pyodide/pyodide.js' ? { indexURL: 'pyodide/' } : undefined);
-        var resp = await fetch('py/enhance_calc.py');
-        if (!resp.ok) throw new Error('py 模块加载失败');
-        await pyEngine.runPythonAsync(await resp.text());
-        pyMode = true;
-        console.log('Python 数据处理引擎已启动');
-      } catch (e) {
-        pyEngine = null; pyMode = false;
-        console.warn('Python 引擎不可用，使用 JS 计算引擎：' + e.message);
+    var h = '', n = 0;
+    for (var i = 0; i < order.length; i++) {
+      var arr = groups[order[i]]; n += arr.length;
+      h += '<div class="ss-grp">' + esc(order[i]) + ' · ' + arr.length + '</div>';
+      for (var j = 0; j < arr.length; j++) {
+        var k2 = arr[j], w2 = DATA[k2];
+        var cnt = OFF[k2] ? Object.keys(OFF[k2].systems || {}).length : 0;
+        h += '<div class="ss-it' + (k2 === shipKey ? ' on' : '') + '" data-k="' + esc(k2) + '">' +
+             '<span>' + esc(w2.name + '·' + w2.model) + '</span>' +
+             '<span class="c">' + cnt + '</span></div>';
       }
-      return pyMode;
-    })();
-    return pyInitPromise;
+    }
+    if (!n) h = '<div class="ss-grp">无匹配</div>';
+    shipList.innerHTML = h;
   }
-  function py(fnName) {
-    if (!pyMode || !pyEngine) return null;
-    var args = Array.prototype.slice.call(arguments, 1);
-    try {
-      var r = pyEngine.globals.get(fnName).apply(null, args);
-      if (r && typeof r.toJs === 'function') return r.toJs({ create_proxies: false, dict_converter: Object.fromEntries });
-      return r;
-    } catch (e) { console.warn('Python 计算失败，降级 JS：' + fnName + ' ' + e.message); return null; }
+
+  // ---------- 系统图标栏 ----------
+  function renderSysCol() {
+    if (!ship) { sysCol.innerHTML = ''; return; }
+    var sys = ship.systems, keys = Object.keys(sys);
+    var h = '';
+    for (var i = 0; i < keys.length; i++) {
+      var s = sys[keys[i]];
+      var maxAdd = 0, on = 0;
+      for (var k = 0; k < s.techs.length; k++) {
+        if (s.techs[k].mx <= 0) continue;
+        maxAdd++;
+        if (lvOf(keys[i], s.techs[k].id) >= s.techs[k].mx) on++;
+      }
+      var pips = '';
+      var shown = Math.min(maxAdd, 12);
+      for (var p = 0; p < shown; p++) pips += '<i class="' + (p < on ? 'on' : '') + '"></i>';
+      var isMain = /主武器|机库|轨道炮|舰首/.test(s.officialName || s.name);
+      h += '<div class="sy' + (keys[i] === sysName ? ' on' : '') + '" data-s="' + esc(keys[i]) + '" title="' +
+           esc((s.officialName || s.name) + '（' + (s.label || '') + '）') + '">' +
+           (isMain ? '<span class="m">M</span>' : '') +
+           '<span class="ex">⌃</span>' + icon(s.icon) +
+           '<div class="nm">' + esc(s.label || s.officialName || s.name) + '</div>' +
+           '<div class="pips">' + pips + '</div>' +
+           (on ? '<span class="cnt">' + on + '/' + maxAdd + '</span>' : '') +
+           '</div>';
+    }
+    sysCol.innerHTML = h;
   }
-    
-  function shipClass(type) {
-    const t = type || '';
-    if (['航空母舰', '支援舰', '战列巡洋舰'].includes(t)) return '超主力舰';
-    if (['巡洋舰', '驱逐舰', '护卫舰'].includes(t)) return '主力舰';
-    if (['护航艇', '战机'].includes(t)) return '舰载机';
-    if (['战列舰'].includes(t)) return '超主力舰';
-    return '其他';
-  }
-  function shipScale(type) {
-    const t = type || '';
-    if (['航空母舰', '支援舰', '战列巡洋舰', '巡洋舰'].includes(t)) return '大型舰船';
-    if (['驱逐舰', '护卫舰'].includes(t)) return '小型舰船';
-    return '';
-  }
-  
-  function getVariants(ship) {
-    return Object.keys(DATA).filter(k => DATA[k].name === ship.name)
-      .map((k, i) => ({ key: k, model: DATA[k].model, letter: i === 0 ? 'A' : String.fromCharCode(66 + i - 1), main: i === 0 }));
-  }
-  function renderBlueprint(ship) {
-    const vs = getVariants(ship);
-    if (!vs.length) return '';
-    const cls = shipClass(ship.type);
-    if (cls === '超主力舰') return renderModules(ship);
-    let h = '<div class="bp-sec"><div class="sec-title">蓝图 · ' + cls + '（' + ship.type + '）</div>';
-    h += '<div class="bp-tip">主型号 + ' + (vs.length - 1) + '个子型号</div>';
-    vs.forEach(v => {
-      const letter = v.letter;
-      const special = (v.model || '').includes('离子炮') || (v.model || '').includes('英雄');
-      h += '<div class="bp-variant ok">';
-      h += '<span class="bp-letter">' + letter + '.' + (v.main ? '主型号' : '子型号') + '</span>';
-      h += '<span class="bp-model">' + (v.model || '') + (special ? ' <em>特殊子型号</em>' : '') + '</span>';
-      h += '<span class="bp-status">已获得</span>';
-      h += '</div>';
+
+  // ---------- 主体 ----------
+  function renderMain() {
+    if (!ship || !sysName) { mainCol.innerHTML = '<div class="empty">← 请选择舰船与系统</div>'; return; }
+    var s = ship.systems[sysName];
+    var list = s.techs;
+    var maxAdd = 0, lvSum = 0, spent = 0;
+    for (var i = 0; i < list.length; i++) {
+      var t = list[i];
+      if (t.mx <= 0) continue;
+      maxAdd++;
+      var l = lvOf(sysName, t.id);
+      lvSum += l;
+      for (var c = 1; c <= l; c++) spent += costOf(t, baseOf(t) + c);
+    }
+
+    var h = '<div class="sys-head">' +
+      '<div class="bar"><span class="t">' + esc(s.officialName || s.name) + '</span>' +
+      '<span class="m">(' + lvSum + '/' + maxAdd + ')</span></div>' +
+      '<span class="sp">' +
+      '<span class="tbtn" style="cursor:default">' + esc(s.label || '系统') + '</span>' +
+      '</span></div>';
+
+    var chip = '';
+    if (selTech) {
+      var ct = techById(list, selTech.id);
+      if (ct) chip = '<div class="chip">' + esc(ct.n) + ' ' + absLv(ct) + '/' + absMax(ct) + '</div>';
+    }
+    h += '<div class="attr-bar">' +
+      '<div class="a"><span>已投入</span><b>' + spent + '</b></div>' +
+      '<div class="a"><span>剩余</span><b>' + (points - spent) + '</b></div>' +
+      '<div class="a"><span>强化项</span><b>' + maxAdd + '</b></div>' + chip +
+      '</div>';
+
+    h += '<div class="tree-wrap"><svg class="tree-svg" id="treeSvg"></svg><div class="tree" id="tree">';
+    // 按分层分行；ly=-1 的特殊项（系统调校/自维修/系统损坏等）排在最后一行，按官方样式显示为六边形
+    var rows = {};
+    for (var j = 0; j < list.length; j++) {
+      var ly = list[j].ly;
+      var key = ly < 0 ? '-1' : String(ly);
+      (rows[key] = rows[key] || []).push(list[j]);
+    }
+    var rk = Object.keys(rows).sort(function (a, b) {
+      if (a === '-1') return 1; if (b === '-1') return -1;
+      return parseInt(a, 10) - parseInt(b, 10);
     });
-    h += '<div class="bp-tip">▷ 特殊子型号：对接（如AC721-C离子炮←离子科技研究中心）· 副本/市场（如AC720艾格勒姆未名者·英雄舰）</div>';
-    h += '</div>';
+    for (var r = 0; r < rk.length; r++) {
+      var arr = rows[rk[r]];
+      h += '<div class="trow' + (rk[r] === '-1' ? ' special' : '') + '" data-row="' + rk[r] + '">';
+      for (var q = 0; q < arr.length; q++) h += nodeHtml(arr[q], list);
+      h += '</div>';
+    }
+    h += '</div></div>';
+    h += detailHtml(list);
+    h += '<div class="hint">节点方块＝官方强化项，图标与文字取自官方 <b>cfg_system_effect</b>；' +
+      '连线＝官方 <b>cfg_system_enhance_tree</b> 的前置关系（要求前置达到指定等级，未满足则锁定）。' +
+      '底部六边形为特殊/巅峰类强化项。点击节点查看详情，详情卡内可加减等级。<br>' +
+      '描述中的 <b>[Lv.N]</b>、<b>[周期]</b>、<b>[持续]</b> 是官方模板里由服务器按舰船实际数据下发的数值，' +
+      '本站未内置，故以标记显示，不代表最终数值。</div>';
+
+    mainCol.innerHTML = h;
+    scheduleLines(list);
+    bindMain(list);
+  }
+
+  function nodeHtml(t, list) {
+    var l = lvOf(sysName, t.id);
+    var maxed = t.mx <= 0 || l >= t.mx;
+    var pq = prereqOf(list, t);
+    var blocked = !!(pq && pq.some(function (x) { return !x.ok; }));
+    var cls = 'node';
+    // 特殊项（系统调校 / 自维修 / 系统损坏 等）按官方样式显示为六边形斜纹块
+    if (t.ly < 0) cls += ' hex';
+    if (t.mx > 0) cls += ' addable';
+    if (maxed && t.mx > 0) cls += ' maxed';
+    if (blocked) cls += ' locked';
+    if (selTech && selTech.id === t.id) cls += ' sel';
+
+    var cost = (t.mx > 0 && !maxed) ? costOf(t, baseOf(t) + l + 1) : 0;
+    var lvTxt = '';
+    if (t.mx > 0) lvTxt = '<span class="lv">' + (baseOf(t) + l) + '/' + absMax(t) + '</span>';
+    var flag = '';
+    if (t.c === 1) flag = '<span class="flag">互</span>';
+    else if (t.c === 2) flag = '<span class="flag">模</span>';
+    else if (t.ut) flag = '<span class="flag">稀</span>';
+
+    return '<div class="' + cls + '" data-id="' + t.id + '" data-sys="' + esc(sysName) + '">' +
+      '<div class="box">' + flag + icon(t.ic) +
+      '<span class="lb">' + esc(t.lb || t.n) + '</span>' + lvTxt +
+      (cost ? '<span class="cost">' + cost + '</span>' : '') + '</div>' +
+      (t.ly < 0 ? '' : '') +
+      '</div>';
+  }
+
+  function detailHtml(list) {
+    var t = selTech && techById(list, selTech.id);
+    if (!t) return '<div class="detail"><div class="d">点击上方任一强化节点查看详情、加减等级。</div></div>';
+    var l = lvOf(sysName, t.id);
+    var pq = prereqOf(list, t);
+    var blocked = !!(pq && pq.some(function (x) { return !x.ok; }));
+    var maxed = t.mx <= 0 || l >= t.mx;
+    var h = '<div class="detail" data-d="' + t.id + '">';
+    h += '<div class="h">' + esc(t.n) +
+      (t.lb ? '<em>' + esc(t.lb) + '</em>' : '') +
+      (t.c === 1 ? '<em>调整</em>' : '') + (t.c === 2 ? '<em>模组</em>' : '') +
+      (baseOf(t) ? '<em>默认 ' + baseOf(t) + ' 级</em>' : '') +
+      (t.ut ? '<em>稀有度解锁</em>' : '') +
+      '<span style="margin-left:auto;font-size:.68rem;color:#9aa0a2">节点 ' + esc(t.id) + '</span></div>';
+    if (t.ds) h += '<div class="d">' + esc(t.ds).replace(/\[([^\]]+)\]/g, '<span class="mk">[$1]</span>') + '</div>';
+    if (t.d) h += '<details class="dt"><summary>详细说明</summary>' + esc(t.d) + '</details>';
+    if (pq && unmetTxt(pq)) h += '<div class="pq">需先满足：' + esc(unmetTxt(pq)) + '</div>';
+    h += '<div class="ops">';
+    h += '<button class="tbtn" data-act="minus"' + (l <= 0 ? ' disabled' : '') + '>− 降 1 级</button>';
+    h += '<button class="tbtn" data-act="plus"' +
+      ((t.mx <= 0 || maxed || blocked) ? ' disabled' : '') + '>＋ 升 1 级</button>';
+    h += '<span class="t">当前 ' + absLv(t) + ' / ' + absMax(t) + ' 级' +
+      (maxed || t.mx <= 0 ? '' : ' · 下一级消耗 ' + costOf(t, baseOf(t) + l + 1) + ' 点') + '</span>';
+    h += '</div></div>';
     return h;
   }
-  
-  let moduleState = {};
-  try { moduleState = JSON.parse(localStorage.getItem('ueg_module_state') || '{}'); } catch (e) { moduleState = {}; }
-  window._pickModule = function (cls, opt) {
-    moduleState[cls] = opt;
-    localStorage.setItem('ueg_module_state', JSON.stringify(moduleState));
-    renderPanel();
-  };
-  function renderModules(ship) {
-    const sysMap = (window.SYSTEM_STATS || {})[currentKey];
-    if (!sysMap) return '<div class="bp-sec"><div class="sec-title">模块系统</div><div class="bp-tip">暂无模块数据</div></div>';
-    let groups = py('module_groups', sysMap, moduleState);
-    if (!groups) {
-      groups = [];
-      const gmap = {};
-      Object.entries(sysMap).forEach(([sysName, sys]) => {
-        (sys.weapons || []).forEach(w => {
-          const opt = w.option || w.name;
-          const g = (opt.match(/^([MABCDE])/) || [null, '?'])[1];
-          (gmap[g] = gmap[g] || []).push({ opt: opt, sys: sysName, weapon: w });
-        });
-      });
-      Object.keys(gmap).sort().forEach(g => {
-        const lst = gmap[g];
-        const chosen = moduleState[g] || lst[0].opt;
-        groups.push({ cls: g, chosen: chosen, options: lst.map(x => ({ opt: x.opt, sys: x.sys, selected: x.opt === chosen })) });
+
+  // ---------- 连线 ----------
+  // 注意：必须在图标/字体完成布局后再测量，否则量到的是塌陷尺寸
+  var lineRaf = 0;
+  function scheduleLines(list) {
+    if (lineRaf) cancelAnimationFrame(lineRaf);
+    lineRaf = requestAnimationFrame(function () {
+      lineRaf = requestAnimationFrame(function () { drawLines(list); });
+    });
+  }
+
+  function drawLines(list) {
+    var svg = $('treeSvg');
+    var wrap = svg && svg.parentNode;
+    if (!svg || !wrap) return;
+    var wr = wrap.getBoundingClientRect();
+    if (!wr.width || !wr.height) return;
+    svg.setAttribute('viewBox', '0 0 ' + wr.width + ' ' + wr.height);
+    svg.setAttribute('width', wr.width);
+    svg.setAttribute('height', wr.height);
+    svg.style.width = wr.width + 'px';
+    svg.style.height = wr.height + 'px';
+    var pos = {};
+    var nodes = wrap.querySelectorAll('.node');
+    for (var i = 0; i < nodes.length; i++) {
+      var r = nodes[i].getBoundingClientRect();
+      pos[nodes[i].getAttribute('data-id')] = {
+        x: r.left - wr.left + r.width / 2,
+        y: r.top - wr.top + r.height / 2,
+        l: r.left - wr.left, t: r.top - wr.top,
+        r: r.right - wr.left,
+        w: r.width, h: r.height
+      };
+    }
+    var parts = [];
+    // 主干：左侧竖线贯通首尾，每行首节点短横线接入。
+    // 行内不画横线 —— 同一行的节点是「同一前置层」的并列项，彼此没有先后关系，
+    // 画横线会暗示错误的解锁顺序（游戏里行内横线表示的是链式先后）。
+    var rows = [];
+    var byRow = {};
+    for (var i2 = 0; i2 < list.length; i2++) {
+      if (!pos[list[i2].id]) continue;
+      var ly = list[i2].ly;
+      (byRow[ly] = byRow[ly] || []).push({ t: list[i2], p: pos[list[i2].id] });
+    }
+    for (var rk in byRow) rows.push({ ly: rk, items: byRow[rk] });
+    rows.sort(function (a, b) { return a.ly - b.ly; });
+
+    if (rows.length) {
+      var mainX = Math.min.apply(null, rows.map(function (r) { return r.items[0].p.l; })) - 26;
+      var allY = [];
+      rows.forEach(function (r) { r.items.forEach(function (x) { allY.push(x.p.y); }); });
+      var yTop = Math.min.apply(null, allY), yBot = Math.max.apply(null, allY);
+      parts.push('<line x1="' + mainX + '" y1="' + yTop + '" x2="' + mainX + '" y2="' + yBot +
+        '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
+      rows.forEach(function (r) {
+        var head = r.items[0].p;
+        parts.push('<line x1="' + mainX + '" y1="' + head.y + '" x2="' + head.l +
+          '" y2="' + head.y + '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
+        parts.push('<circle cx="' + head.l + '" cy="' + head.y +
+          '" r="2.6" fill="rgba(255,255,255,.78)"/>');
       });
     }
-    let h = '<div class="bp-sec"><div class="sec-title">模块系统（蓝图+模块 · 同分类只能安装1个）</div>';
-    h += '<div class="bp-tip">超主力舰蓝图由蓝图+模块组成，无子型号。模块分 M/A/B/C（D/E）类，同分类只能安装1个，首次获得自带2-4个初始模块，其余需抽取（新增系统需10技术值）</div>';
-    groups.forEach(g => {
-      h += '<div class="mod-group"><span class="mod-class">' + g.cls + '类</span>';
-      g.options.forEach(m => {
-        h += '<span class="mod-chip ' + (m.selected ? 'on' : '') + '" onclick="window._pickModule(\'' + g.cls + '\',\'' + String(m.opt).replace(/'/g, '') + '\')">' + m.opt + ' ' + m.sys + (m.selected ? ' ' : '') + '</span>';
+    // 前置关系：父节点 -> 子节点，一父一条，绝不多连
+    var seenPair = {};
+    for (var j = 0; j < list.length; j++) {
+      var t = list[j];
+      if (!t.pq) continue;
+      var a = pos[t.id];
+      if (!a) continue;
+      for (var m = 0; m < t.pq.length; m++) {
+        var b = pos[t.pq[m][0]];
+        if (!b) continue;
+        var key = t.pq[m][0] + '>' + t.id;
+        if (seenPair[key]) continue;
+        seenPair[key] = 1;
+        parts.push('<line x1="' + (b.l + b.w / 2) + '" y1="' + b.y + '" x2="' +
+          (a.l + a.w / 2) + '" y2="' + a.y +
+          '" stroke="rgba(255,255,255,.40)" stroke-width="1.1"/>');
+      }
+    }
+    svg.innerHTML = parts.join('');
+  }
+
+  // ---------- 交互 ----------
+  function bindMain(list) {
+    var ns = mainCol.querySelectorAll('.node');
+    for (var i = 0; i < ns.length; i++) {
+      ns[i].addEventListener('click', function () {
+        var id = this.getAttribute('data-id');
+        selTech = techById(list, id);
+        renderMain();
       });
-      h += '</div>';
-    });
-    h += '<div class="bp-tip">▷ 点击模块切换安装（同分类只能安装1个，默认安装初始模块）</div>';
-    h += '</div>';
-    return h;
-  }
-    function computeFirepowerDpm() {
-    const r = py('firepower_dpm', getSelectedWeapons());
-    if (r) return { antiShip: r.antiShip || 0, antiAir: r.antiAir || 0, siege: r.siege || 0 };
-        const f = { antiShip: 0, antiAir: 0, siege: 0 };
-    getSelectedWeapons().forEach(w => {
-      if (w.dpmShip) f.antiShip += w.dpmShip;
-      if (w.dpmAA) f.antiAir += w.dpmAA;
-      if (w.dpmSiege) f.siege += w.dpmSiege;
-    });
-    return f;
-  }
-    function computeWeaponTotals() {
-    const list = getSelectedWeapons();
-    const r = py('weapon_totals', list);
-    if (r) return { damage: r.damage || 0, cycle: r.cycle || 0, lockOn: r.lockOn || 0, rounds: r.rounds || 0, cooldown: r.cooldown || 0, duration: r.duration || 0, weapons: r.weapons || 0 };
-        const t = { damage: 0, cycle: 0, lockOn: 0, rounds: 0, cooldown: 0, duration: 0, weapons: 0 };
-    getSelectedWeapons().forEach(w => {
-      if (w.damage !== undefined) t.damage += w.damage;
-      if (w.cycle !== undefined) t.cycle += w.cycle;
-      if (w.lockOn !== undefined) t.lockOn += w.lockOn;
-      if (w.rounds !== undefined) t.rounds += w.rounds;
-      if (w.cooldown !== undefined) t.cooldown += w.cooldown;
-      if (w.duration !== undefined) t.duration += w.duration;
-      t.weapons++;
-    });
-    return t;
+    }
+    var ops = mainCol.querySelectorAll('.detail .ops .tbtn');
+    for (var j = 0; j < ops.length; j++) {
+      ops[j].addEventListener('click', function () {
+        if (!selTech) return;
+        if (this.getAttribute('data-act') === 'plus') doPlus(list, selTech);
+        else doMinus(list, selTech);
+      });
+    }
   }
 
-
-  
-  var storedPoints = localStorage.getItem(LS_POINTS);
-  // parseInt("0") 为 0（falsy），不能用 || 兜底，否则技术点为 0 时刷新被重置为 300
-  let points = storedPoints === null ? 300 : (parseInt(storedPoints, 10) || 0);
-  let state = {};
-  try { state = JSON.parse(localStorage.getItem(LS_STATE)) || {}; } catch (e) { state = {}; }
-  let currentKey = null;
-  let collapsedSys = {}; 
-
-  function saveState() { localStorage.setItem(LS_STATE, JSON.stringify(state)); }
-  function savePoints() { localStorage.setItem(LS_POINTS, String(points)); }
-  function getLevel(shipKey, sys, tech) {
-    // 避免存储的字符串值（如 "0"）污染等级：强制 parseInt 归一为数字
-    var v = state[shipKey] && state[shipKey][sys] ? state[shipKey][sys][tech] : undefined;
-    var n = parseInt(v, 10);
-    return isNaN(n) ? 0 : n;
+  function doPlus(list, t) {
+    if (t.mx <= 0) { tip('该项不可加点'); return; }
+    var l = lvOf(sysName, t.id);
+    if (l >= t.mx) return;
+    var pq = prereqOf(list, t);
+    if (pq && unmetTxt(pq)) { tip('需先满足：' + unmetTxt(pq)); return; }
+    var c = costOf(t, baseOf(t) + l + 1);
+    if (c > 0 && points < c) { tip('技术值(强化点)不足，还差 ' + (c - points)); return; }
+    points -= c;
+    setLv(sysName, t.id, l + 1);
+    save(); renderAll();
   }
-  function setLevel(shipKey, sys, tech, lv) {
-    state[shipKey] = state[shipKey] || {};
-    state[shipKey][sys] = state[shipKey][sys] || {};
-    if (lv <= 0) delete state[shipKey][sys][tech];
-    else state[shipKey][sys][tech] = lv;
-    saveState();
-  }
-  
-  function costOf(tech, level) {
-    const p = tech.progress && tech.progress[level - 1];
-    return (typeof p === 'number' && p > 0) ? p : (tech.points || 5);
+  function doMinus(list, t) {
+    var l = lvOf(sysName, t.id);
+    if (l <= 0) return;
+    var dep = dependentsOf(list, t).filter(function (d) { return lvOf(sysName, d.id) > 0; });
+    if (dep.length) { tip('降级将使以下强化项失效：' + dep.map(function (d) { return d.n; }).join('、')); return; }
+    var c = costOf(t, baseOf(t) + l);
+    if (c > 0) points += c;
+    setLv(sysName, t.id, l - 1);
+    save(); renderAll();
   }
 
-  // 升到 lv 级的总投入 = 每级 costOf 逐级累加（progress 数组可能每级价格不同）
-  function investedFor(tech, lv) {
-    var sum = 0;
-    for (var l = 1; l <= lv; l++) sum += costOf(tech, l);
+  function spentOf() {
+    if (!ship || !sysName) return 0;
+    var s = ship.systems[sysName], sum = 0;
+    for (var i = 0; i < s.techs.length; i++) {
+      var t = s.techs[i], l = lvOf(sysName, t.id);
+      for (var c = 1; c <= l; c++) sum += costOf(t, baseOf(t) + c);
+    }
     return sum;
   }
-  
-  function effValue(effect, level, max) {
-    if (typeof effect.value !== 'number' || !max) return effect.value;
-    const v = effect.value * level / max;
-    return Math.round(v * 10) / 10;
+
+  function renderAll() {
+    ptsNum.textContent = String(points);
+    ptsBox.className = 'pts' + (points < 0 ? ' neg' : '');
+    renderSysCol();
+    renderMain();
   }
 
-  
-  const listEl = document.getElementById('shipList');
-  const panelEl = document.getElementById('panel');
-  const pointsEl = document.getElementById('pointsNum');
+  function pickShip(k) {
+    shipKey = k;
+    var w = DATA[k], o = OFF[k];
+    ship = o ? o : null;
+    sysName = ship && Object.keys(ship.systems).length ? Object.keys(ship.systems)[0] : null;
+    selTech = null;
+    shipTitle.textContent = w ? (w.name + '·' + w.model + (w.type ? '　' + w.type : '')) : '系统强化';
+    renderShips($('q').value);
+    renderSysCol();
+    renderMain();
+  }
 
-  function renderPoints() { pointsEl.textContent = points; }
-
-  
-  function renderShipList() {
-    const grouped = {};
-    for (const key of Object.keys(DATA)) {
-      const t = DATA[key].type || '未知';
-      if (!grouped[t]) grouped[t] = [];
-      grouped[t].push(key);
+  shipList.addEventListener('click', function (e) {
+    var it = e.target.closest ? e.target.closest('.ss-it') : null;
+    if (it) pickShip(it.getAttribute('data-k'));
+  });
+  $('q').addEventListener('input', function () { renderShips(this.value); });
+  sysCol.addEventListener('click', function (e) {
+    var it = e.target.closest ? e.target.closest('.sy') : null;
+    if (!it) return;
+    sysName = it.getAttribute('data-s');
+    selTech = null;
+    renderAll();
+  });
+  $('btnAddPts').addEventListener('click', function () { points += 500; save(); renderAll(); });
+  $('btnReset').addEventListener('click', function () {
+    if (!ship || !sysName) { tip('请先选择系统'); return; }
+    var sp = spentOf();
+    if (sp <= 0) { tip('当前系统没有已加点的强化项'); return; }
+    if (!confirm('重置「' + (ship.systems[sysName].officialName || sysName) + '」？返还 ' + sp + ' 点')) return;
+    var m = levels[shipKey][sysName];
+    for (var tid in m) delete m[tid];
+    points += sp;
+    selTech = null;
+    save(); renderAll();
+    tip('已重置，返还 ' + sp + ' 点');
+  });
+  $('btnPlan').addEventListener('click', function () {
+    var mine = levels[shipKey];
+    if (!mine || !Object.keys(mine).length) { tip('还没有加点'); return; }
+    var blob = JSON.stringify({ v: 1, ship: shipKey, levels: mine }, null, 2);
+    try { localStorage.setItem('ueg_tree_plan', blob); tip('方案已存到 ueg_tree_plan'); console.log(blob); }
+    catch (e) { tip('保存失败'); }
+  });
+  window.addEventListener('resize', function () {
+    if (ship && sysName) {
+      var s = ship.systems[sysName];
+      if (selTech) selTech = techById(s.techs, selTech.id);
+      scheduleLines(s.techs);
     }
-    let html = '';
-    for (const type of TYPE_ORDER) {
-      const keys = grouped[type] || [];
-      if (!keys.length) continue;
-      html += `<div class="type-group">
-        <div class="type-header">${ICONS[type] ? '<img class="type-ico" src="' + ICONS[type] + '" alt="">' : ''} ${type}<span class="cnt">${keys.length}</span></div>`;
-      keys.forEach(key => {
-        const s = DATA[key];
-        const active = key === currentKey ? 'active' : '';
-        const disp = s.model ? `${s.name}·${s.model}` : s.name;
-        html += `<div class="ship-item ${active}" data-key="${escapeHtml(key)}">
-          <span class="ico">${ICONS[s.type] ? '<img src="' + ICONS[s.type] + '" alt="">' : ''}</span>
-          <div><div class="nm">${s.name}</div>${s.model ? `<div class="model">${s.model}</div>` : ''}</div>
-          <span class="co">${s.company || ''}</span>
-        </div>`;
-      });
-      html += '</div>';
-    }
-    listEl.innerHTML = html || '<div class="empty">暂无舰船数据</div>';
-    listEl.querySelectorAll('.ship-item').forEach(el => {
-      el.addEventListener('click', () => {
-        currentKey = el.dataset.key;
-        renderShipList();
-        renderPanel();
-      });
-    });
-  }
+  });
+  window.addEventListener('load', function () {
+    if (ship && sysName) scheduleLines(ship.systems[sysName].techs);
+  });
 
-  
-  
-  
-  function computeEnhancement(ship) {
-    const levels = {};
-    ((ship && ship.systems) || []).forEach(sys => {
-      levels[sys.name] = {};
-      (sys.techs || []).forEach(t => { const lv = getLevel(currentKey, sys.name, t.name); if (lv > 0) levels[sys.name][t.name] = lv; });
-    });
-    const pr = py('compute_enhancement', ship.systems, levels);
-    if (pr) {
-      let invested = 0;
-      Object.keys(levels).forEach(sn => Object.keys(levels[sn]).forEach(tn => {
-        const s = (ship.systems || []).find(x => x.name === sn);
-        const t = s && s.techs.find(x => x.name === tn);
-        if (t) invested += investedFor(t, levels[sn][tn]);
-      }));
-      return { fireMul: pr.fireMul, aaMul: pr.aaMul, siegeMul: pr.siegeMul, cdMul: pr.cdMul === undefined ? 1 : pr.cdMul, hpMul: pr.hpMul, physMul: pr.physMul, energyMul: pr.energyMul, cruiseMul: pr.cruiseMul, warpMul: pr.warpMul, durMul: pr.durMul === undefined ? 1 : pr.durMul, invested: invested, hpAdd: pr.hpAdd || 0, physAdd: pr.physAdd || 0, energyAdd: pr.energyAdd || 0 };
-    }
-        const acc = { dmg: 0, aa: 0, siege: 0, cd: 0, hit: 0, crit: 0, hp: 0, phys: 0, energy: 0, cruise: 0, warp: 0, atkSpeed: 0, freq: 0, dur: 0, physAdd: 0, energyAdd: 0, hpAdd: 0, invested: 0 };
-    ((ship && ship.systems) || []).forEach(sys => (sys.techs || []).forEach(t => {
-      const lv = getLevel(currentKey, sys.name, t.name);
-      if (lv <= 0) return;
-      acc.invested += investedFor(t, lv);
-      (t.effects || []).forEach(e => {
-        const raw = Number(e.value);
-        if (!isFinite(raw) || raw === 0) return;
-        const type = e.type || '';
-        
-        if (/集火|战略打击|子系统暴击|被武器命中|被导弹|被鱼雷|失效|自动维修|拦截|锁定|目标选择|飞行时间|闪避|反击|警戒|战斗|站位|撤退|隐藏|伪装|干扰|探测|识别/.test(type)) return;
-        const frac = lv / Math.max(1, t.max);
-        if (e.action === '比例加成' || e.action === '比例减少') {
-          const per = (e.action === '比例减少' ? -raw : raw) * frac;
-          const T = type;
-          const absV = Math.abs(per);
-          if (/受到|被武器|被命中|被拦截/.test(T)) return;
-          let dirV = 1;
-          if (/降低|减少/.test(T)) {
-            if (/冷却|持续时间|攻击间隔/.test(T)) dirV = 1; else dirV = -1;
-          }
-          if (/攻城/.test(T)) acc.siege += absV * dirV;
-          else if (/防空/.test(T)) acc.aa += absV * dirV;
-          else if (/冷却/.test(T)) acc.cd += absV * dirV;
-          else if (/暴击/.test(T)) acc.crit += absV * dirV;
-          else if (/持续时间/.test(T)) acc.dur += per;
-          else if (/攻击间隔/.test(T)) acc.atkSpeed += absV * dirV;
-          else if (/频率|每轮攻击|额外射击/.test(T)) acc.freq += absV * dirV;
-          else if (/命中/.test(T)) acc.hit += absV * dirV;
-          else if (/生命|结构值/.test(T)) acc.hp += absV * dirV;
-          else if (/装甲|抗性/.test(T)) { if (/能量/.test(T)) acc.energy += absV * dirV; else acc.phys += absV * dirV; }
-          else if (/巡航/.test(T)) acc.cruise += absV * dirV;
-          else if (/曲速/.test(T)) acc.warp += absV * dirV;
-          else if (/伤害/.test(T)) acc.dmg += absV * dirV;
-        } else if (/增加|减少/.test(e.action || '')) {
-          
-          const add = (e.action.indexOf('减') >= 0 ? -raw : raw) * frac;
-          if (/装甲|抗性|物理抵抗/.test(type)) {
-            if (/能量/.test(type)) acc.energyAdd += add; else acc.physAdd += add;
-          } else if (/生命|结构值/.test(type)) acc.hpAdd += add;
-          else if (/伤害/.test(type)) acc.dmg += add; // 效果值为百分点（如“伤害+X%”），直接累加，勿再 /100
-        }
-      });
-    }));
-    // 暴击/攻速（攻击间隔、持续时间缩减）/频率（每轮攻击、额外射击）强化此前只计算未使用，
-    // 现近似计入伤害倍率（线性估算；命中率 hit 与 DPM 无简单折算关系，仅保留计算）
-    const critMul = 1 + acc.crit / 100;
-    const atkSpdMul = 1 + acc.atkSpeed / 100;
-    const freqMul = 1 + acc.freq / 100;
-    return {
-      fireMul: (1 + acc.dmg / 100) * critMul * atkSpdMul * freqMul,
-      aaMul: (1 + (acc.dmg + acc.aa) / 100) * critMul * atkSpdMul * freqMul,
-      siegeMul: (1 + (acc.dmg + acc.siege) / 100) * critMul * atkSpdMul * freqMul,
-      cdMul: 1 - acc.cd / 100,
-      hpMul: 1 + acc.hp / 100, hpAdd: acc.hpAdd,
-      physMul: 1 + acc.phys / 100, physAdd: acc.physAdd,
-      energyMul: 1 + acc.energy / 100, energyAdd: acc.energyAdd,
-      cruiseMul: 1 + acc.cruise / 100,
-      warpMul: 1 + acc.warp / 100,
-      durMul: 1 + acc.dur / 100,
-      invested: acc.invested
-    };
-  }
-
-  
-  const sec1 = n => Math.round(n * 10) / 10;
-  function fmtStat(base, mul, add, fmtFn) {
-    // hasMul 允许 <1（如冷却缩减 cdMul），否则循环/持续这类降值系数不生效
-    const hasMul = mul && Math.abs(mul - 1) > 0.0001;
-    const hasAdd = add && Math.abs(add) >= 0.5;
-    if (!hasMul && !hasAdd) {
-      if (!base) return '<b>—</b>';
-      return `<b>${fmtFn(base)}</b>`;
-    }
-    const boosted = base * (hasMul ? mul : 1) + (hasAdd ? add : 0);
-    return `<b class="boost">${fmtFn(boosted)}</b>`;
-  }
-
-  
-  function resolveStats(ship) {
-    const S = window.SHIP_STATS || {};
-    const A = window.SHIP_STATS_ALIAS || {};
-    const list = S[ship.name] || S[A[ship.name]];
-    if (!list || !list.length) return null;
-    if (!ship.model) return list[0];
-    const m = ship.model.replace(/[型级]$/, '');
-    const hit = list.find(s => s.name.includes(m));
-    if (hit) return hit;
-    const sub = m.slice(0, 2);
-    const hit2 = list.find(s => s.name.includes(sub));
-    if (hit2) return hit2;
-    return list[0];
-  }
-
-  function renderStatsPanel(ship) {
-    const st = resolveStats(ship);
-    const variantCount = Object.keys(DATA).filter(k => DATA[k].name === ship.name).length;
-    const enh = computeEnhancement(ship);
-    const invested = enh.invested;
-    const fmt = n => Math.round(n).toLocaleString('zh-CN');
-    const wt = computeWeaponTotals();
-    const dpm = computeFirepowerDpm();
-    const wtHTML = wt.weapons ? `<div class="stat-sec"><div class="sec-title">武器系统合计（${wt.weapons} 槽 · 全部武器）</div>
-        <div class="stat-grid">
-          <span>伤害 <b>${fmt(Math.round(wt.damage * enh.fireMul))}</b></span>
-          <span>循环 ${fmtStat(wt.cycle, enh.cdMul, 0, sec1)}</span>
-          <span>锁定 <b>${wt.lockOn}</b></span>
-          <span>轮数 <b>${wt.rounds}</b></span>
-          <span>冷却 <b>${enh.cdMul && enh.cdMul < 1 ? (Math.round(wt.cooldown * enh.cdMul * 10) / 10) : wt.cooldown}s</b></span>
-          <span>持续 ${fmtStat(wt.duration, enh.durMul, 0, sec1)}s</span>
-        </div></div>` : '';
-    const r = st.ratings || {};
-    const fp = st.firepower || {};
-    return `<div class="stat-panel">
-      <div class="stat-top">
-        <span><b>${st.type || ship.type}</b>${st.position ? ' · ' + st.position : ''}</span>
-        <span class="cls-badge">${shipClass(ship.type)}</span><span class="scale-badge">${shipScale(ship.type)}</span>
-        <span>指挥值 <b>${st.commandValue}</b></span>
-        <span>变体 <b>${variantCount}</b></span>
-        <span>已投入科技点 <b>${invested}</b></span>
-        <span>服役上限 <b>${st.serviceLimit}</b></span>
-      </div>
-      <div class="stat-sec"><div class="sec-title">火力属性</div>
-        <div class="stat-grid">
-          <span>反舰 ${dpm.antiShip ? fmtStat(dpm.antiShip, enh.fireMul, 0, fmt) : '—'}<i class="src">DPM</i></span>
-          <span>防空 ${dpm.antiAir ? fmtStat(dpm.antiAir, enh.aaMul, 0, fmt) : '—'}<i class="src">DPM</i></span>
-          <span>攻城 ${dpm.siege ? fmtStat(dpm.siege, enh.siegeMul, 0, fmt) : '—'}<i class="src">DPM</i></span>
-        </div>
-      </div>
-      <div class="stat-sec"><div class="sec-title">基础属性</div>
-        <div class="stat-grid">
-          <span>舰船生命 ${fmtStat(st.hp || 0, enh.hpMul, enh.hpAdd, fmt)}</span>
-          <span>巡航速度 ${(() => { const cv = st.cruise || '—'; const m = enh.cruiseMul || 1; if (cv !== '—' && /^\d+$/.test(String(cv)) && m > 1.0001) return `<b class="boost">${Math.round(Number(cv) * m)}</b>`; return `<b>${cv}</b>`; })()}</span>
-          <span>曲速 ${fmtStat(st.warp || 0, enh.warpMul, 0, fmt)}</span>
-          <span>物理装甲 ${fmtStat(st.physicalArmor || 0, enh.physMul, enh.physAdd, fmt)}</span>
-          <span>能量装甲 ${fmtStat(st.energyArmor || 0, enh.energyMul, enh.energyAdd, fmt)}</span>
-          <span>尺寸 <b>${st.size ? fmt(st.size) + 'm' : '—'}</b></span>
-        </div>
-      </div>
-      ${st.build ? `<div class="stat-sec"><div class="sec-title">建造</div>
-        <div class="stat-grid">
-          <span>金属 <b>${fmt(st.build.metal || 0)}</b></span>
-          <span>晶体 <b>${fmt(st.build.crystal || 0)}</b></span>
-          <span>重氢 <b>${fmt(st.build.deuterium || 0)}</b></span>
-          <span>时间 <b>${(st.build.time || 0).toFixed(2)}天</b></span>
-          <span>容量 <b>${fmt(st.build.capacity || 0)}</b></span>
-        </div>
-      </div>` : ''}
-${wtHTML}
-${renderBlueprint(ship)}
-${st.desc ? `<div class="stat-sec"><div class="sec-title">舰船描述</div><div class="stat-desc">${st.desc}</div></div>` : ''}
-      ${st.quote ? `<details class="ship-lore"><summary>舰船语录（原文）</summary><div class="lore-text">${st.quote}</div></details>` : ''}
-      ${st.story ? `<details class="ship-lore"><summary>舰船档案（原文）</summary><div class="lore-text">${st.story}</div></details>` : ''}
-      <div class="stat-sec"><div class="sec-title">同级别排名</div>
-        <div class="stat-grid">
-          <span>反舰 <b>${r.antiShip || '—'}</b></span>
-          <span>防空 <b>${r.antiAir || '—'}</b></span>
-          <span>攻城 <b>${r.siege || '—'}</b></span>
-          <span>支援 <b>${r.support || '—'}</b></span>
-          <span>生存 <b>${r.survival || '—'}</b></span>
-          <span>战略 <b>${r.strategy || '—'}</b></span>
-        </div>
-      </div>
-      <div class="stat-sec"><div class="sec-title">系统（${st.modules.length}）</div>
-        <div class="mod-tags">${st.modules.map(m => `<span>${m}</span>`).join('')}</div>
-      </div>
-    </div>`;
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  // ---------- 强化面板 ----------
-  function renderPanel() {
-    const ship = DATA[currentKey];
-    // 判空提前：computeEnhancement 会访问 ship.systems，未选舰船时先返回避免空白屏崩溃
-    if (!ship) { panelEl.innerHTML = '<div class="empty">← 请选择一艘舰船开始强化</div>'; return; }
-    const enh = computeEnhancement(ship);
-
-    let html = '';
-    html += `<div class="ship-head">
-      <span class="big-ico">${ICONS[ship.type] ? '<img src="' + ICONS[ship.type] + '" alt="">' : ''}</span>
-      <div>
-        <span class="nm">${ship.name}</span>
-        ${ship.model ? `<span class="model">${ship.model}</span>` : ''}
-        <div class="meta">${ship.type}${ship.company ? ' · ' + ship.company : ''}</div>
-      </div>
-      <span class="tag">${ship.systems.length} 个系统</span>
-    </div>`;
-
-    // ---------- 舰船属性面板（ship_stats.js，中文） ----------
-    html += renderStatsPanel(ship);
-
-    if (!ship.systems.length) {
-      html += '<div class="empty">该舰船暂无科技数据</div>';
-    } else {
-      ship.systems.forEach((sys, si) => {
-        const sysKey = ship.name + '|' + ship.model + '|' + sys.name;
-        const open = collapsedSys[sysKey] !== true;
-        const techCount = sys.techs.length;
-        html += `<div class="sys-block">
-          <div class="sys-header ${open ? 'open' : ''}" data-sys="${si}">
-            <span class="arrow">▶</span>
-            <span class="nm">${sys.name}</span>
-            <span class="wn">${sys.weapons.length ? '' + sys.weapons.length + ' 武器' : ''} · ${techCount} 项科技</span>
-          </div>`;
-        if (open) {
-          html += `<div class="sys-body">`;
-          // 系统属性数据（来自 system_stats.js：武器动作效果）
-          const sysStats = (window.SYSTEM_STATS || {})[currentKey] ? (window.SYSTEM_STATS || {})[currentKey][sys.name] : null;
-          if (sysStats && sysStats.weapons && sysStats.weapons.length) {
-            html += `<div class="sys-props">`;
-            // 按 option 槽位分组（同槽多武器 = 互斥选择）
-            const slots = {};
-            sysStats.weapons.forEach(w => {
-              const o = w.option || w.name;
-              (slots[o] = slots[o] || []).push(w);
-            });
-            Object.entries(slots).forEach(([option, list]) => {
-              const chosen = getWeaponChoice(currentKey, sys.name, option, list);
-              list.forEach(w => {
-                const selected = w.name === chosen;
-                html += `<div class="sp-item ${selected ? 'selected' : ''}">`;
-                html += `<div class="sp-head"><span class="sp-name">${w.name}</span>`;
-                // 互斥槽位（同 option 多武器）生成切换按钮；data-pick 格式与 panelEl.onclick 委托解析一致：key|s系统|o槽位|w武器
-                if (list.length > 1) {
-                  html += `<button class="sp-pick ${selected ? 'on' : ''}" data-pick="${escapeHtml(currentKey)}|s${escapeHtml(sys.name)}|o${escapeHtml(option)}|w${escapeHtml(w.name)}" ${selected ? 'disabled' : ''}>${selected ? '已选' : '选择'}</button>`;
-                }
-                                html += `</div>`;
-                html += `<div class="sp-stats">${w.type ? `<span class="tag">${w.type}</span>` : ''}${w.weaponType ? `<span class="tag">${w.weaponType}</span>` : ''}${w.damage !== undefined ? `<span>伤害 ${Math.round(w.damage * (enh.fireMul || 1))}</span>` : ''}${w.cycle !== undefined ? `<span>循环 ${fmtStat(w.cycle, enh.cdMul, 0, sec1)}</span>` : ''}${w.lockOn !== undefined ? `<span>锁定 ${w.lockOn}</span>` : ''}${w.rounds !== undefined ? `<span>轮数 ${w.rounds}</span>` : ''}${w.cooldown !== undefined ? `<span>冷却 ${enh.cdMul && enh.cdMul < 1 ? (Math.round(w.cooldown * enh.cdMul * 10) / 10) : w.cooldown}s</span>` : ''}${w.duration !== undefined ? `<span>持续 ${fmtStat(w.duration, enh.durMul, 0, sec1)}s</span>` : ''}</div>`;
-                w.actions.forEach(a => {
-                  let info = a.name || '';
-                  if (a.effect && a.act) info += ` <i>·</i> ${a.effect}${a.act}${a.value !== undefined ? ' <b>+' + a.value + '</b>' : ''}`;
-                  if (a.cond && a.condValue !== undefined) info += `（${a.cond}${a.condValue}）`;
-                  html += `<div class="sp-act"><span class="sp-act-name">${info}</span>${a.desc ? `<div class="sp-desc">${a.desc}</div>` : ''}</div>`;
-                });
-                html += `</div>`;
-              });
-            });
-            html += `</div>`;
-          }
-          sys.techs.forEach((tech, ti) => {
-            html += renderTechItem(ship, sys, tech, ti);
-          });
-          if (sys.weapons.length) {
-            html += `<div class="weapon-tags">`;
-            sys.weapons.forEach(w => { html += `<span class="wp-tag">${w.name}</span>`; });
-            html += `</div>`;
-          }
-          html += `</div>`;
-        }
-        html += `</div>`;
-      });
-    }
-
-    html += `<div class="panel-foot">数据来源：data/ 舰船功能·系统·效果表格（build-ships.js 自动生成，全中文）</div>`;
-
-    // 武器选定按钮事件委托（覆盖式绑定）
-    panelEl.onclick = function (e) {
-      const btn = e.target && e.target.closest ? e.target.closest('.sp-pick') : null;
-      if (!btn || !btn.dataset || !btn.dataset.pick) return;
-      const parts = btn.dataset.pick.split('|');
-      setWeaponChoice(parts[0], parts[1].slice(1), parts[2].slice(1), parts[3].slice(1));
-      renderPanel();
-    };
-
-    panelEl.innerHTML = html;
-
-    // 系统折叠
-    panelEl.querySelectorAll('.sys-header').forEach(h => {
-      h.addEventListener('click', () => {
-        const sys = ship.systems[parseInt(h.dataset.sys)];
-        const sysKey = ship.name + '|' + ship.model + '|' + sys.name;
-        collapsedSys[sysKey] = collapsedSys[sysKey] !== true ? true : false;
-        renderPanel();
-      });
-    });
-
-    // 加点 / 降级（事件委托到面板）
-    panelEl.querySelectorAll('.op-btn.plus').forEach(b => {
-      b.addEventListener('click', () => {
-        const ti = parseInt(b.dataset.ti), si = parseInt(b.dataset.si);
-        const tech = ship.systems[si].techs[ti];
-        const cur = getLevel(currentKey, ship.systems[si].name, tech.name);
-        if (cur >= tech.max) return;
-        const cost = costOf(tech, cur + 1);
-        if (points < cost) { flashPoints('技术点不足！'); return; }
-        points -= cost;
-        savePoints(); // 升级后立即持久化，否则刷新回滚（可刷点）
-        setLevel(currentKey, ship.systems[si].name, tech.name, cur + 1);
-        renderPoints(); renderPanel();
-      });
-    });
-    panelEl.querySelectorAll('.op-btn.minus').forEach(b => {
-      b.addEventListener('click', () => {
-        const ti = parseInt(b.dataset.ti), si = parseInt(b.dataset.si);
-        const tech = ship.systems[si].techs[ti];
-        const cur = getLevel(currentKey, ship.systems[si].name, tech.name);
-        if (cur <= 0) return;
-        points += costOf(tech, cur); // 返还当前等级消耗
-        savePoints(); // 降级后立即持久化，否则刷新回滚
-        setLevel(currentKey, ship.systems[si].name, tech.name, cur - 1);
-        renderPoints(); renderPanel();
-      });
-    });
-  }
-
-  // 单个科技项卡片
-  function renderTechItem(ship, sys, tech, ti) {
-    const si = ship.systems.indexOf(sys);
-    const lv = getLevel(currentKey, sys.name, tech.name);
-    const maxed = lv >= tech.max;
-    let dots = '';
-    for (let i = 0; i < tech.max; i++) {
-      dots += `<span class="lv-dot ${i < lv ? (maxed ? 'maxed' : 'on') : ''}"></span>`;
-    }
-    // 实际效果标签（按当前等级线性估算）
-    let fxHtml = '';
-    if (tech.effects && tech.effects.length) {
-      fxHtml = `<div class="fx-tags">`;
-      tech.effects.forEach(e => {
-        const v = effValue(e, Math.max(lv, 0), tech.max); // 未强化（lv=0）显示 0 加成，而非按 1 级估算
-        const valStr = typeof v === 'number' ? (v % 1 === 0 ? v : v.toFixed(1)) : v;
-        let tag = `<span class="fx-tag">${e.type}`;
-        if (e.action) tag += ` <b>${e.action} ${valStr}</b>`;
-        if (e.weapon) tag += `<span class="w">${e.weapon}</span>`;
-        tag += `</span>`;
-        fxHtml += tag;
-      });
-      fxHtml += `</div>`;
-    }
-    return `<div class="tech-item">
-      <div class="tech-head">
-        <span class="tech-name">${tech.name}</span>
-        <span class="tech-max">最高 ${tech.max} 级 · ${tech.points || 5} 点/级</span>
-        <span class="tech-ops">
-          <button class="op-btn minus" data-si="${si}" data-ti="${ti}" ${lv <= 0 ? 'disabled' : ''}>−</button>
-          <span class="lv-text">Lv.${lv}/${tech.max}</span>
-          <button class="op-btn plus" data-si="${si}" data-ti="${ti}" ${maxed ? 'disabled' : ''}>＋</button>
-        </span>
-      </div>
-      <div class="lv-dots">${dots}</div>
-      ${tech.desc ? `<div class="tech-desc">${tech.desc}</div>` : ''}
-      ${fxHtml}
-      ${tech.detail ? `<details class="tech-detail"><summary>详细说明</summary>${tech.detail}</details>` : ''}
-    </div>`;
-  }
-
-  function flashPoints(msg) {
-    const el = pointsEl;
-    const old = el.textContent;
-    const flash = '' + msg;
-    el.textContent = flash;
-    setTimeout(() => {
-      // 仅当仍显示本次提示时才恢复，避免连点时旧定时器把新提示覆盖掉
-      if (el.textContent === flash) el.textContent = old;
-    }, 1200);
-  }
-
-  // ---------- 技术点 ----------
-  // 调试按钮已移除：生产环境不应暴露“+100 技术点”入口（enhance.html 中对应按钮已注释）
-  // document.getElementById('btnAddPoints').addEventListener('click', () => {
-  //   points += 100;
-  //   savePoints();
-  //   renderPoints();
-  // });
-
-  // ---------- 初始化 ----------
-  renderPoints();
-  renderShipList();
-  if (!currentKey && Object.keys(DATA).length) {
-    currentKey = Object.keys(DATA)[0];
-    renderShipList();
-    renderPanel();
-  } else {
-    renderPanel();
-  }
-  initPyEngine();
-  console.log('舰船强化系统已加载：' + Object.keys(DATA).length + ' 艘舰船');
+  renderShips('');
+  var keys = Object.keys(DATA);
+  for (var i = 0; i < keys.length; i++) if (OFF[keys[i]]) { pickShip(keys[i]); break; }
+  if (!shipKey) { mainCol.innerHTML = '<div class="empty">没有已对齐官方数据的舰船</div>'; }
+  console.log('官方强化数据：' + Object.keys(OFF).length + ' 艘舰船');
 })();
