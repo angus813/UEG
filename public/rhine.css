@@ -792,6 +792,7 @@ label { font-size: 11px; letter-spacing: 0.08em; color: var(--rl-muted); }
   display: flex; align-items: center; justify-content: center;
   background: var(--rl-paper);
   border: 1px solid var(--rl-line-soft);
+  border-radius: 50%;
   font-size: 12px; font-weight: 600;
   color: var(--rl-ink);
   flex: none;
