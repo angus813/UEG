@@ -196,20 +196,18 @@
       '</div>';
 
     h += '<div class="tree-wrap"><svg class="tree-svg" id="treeSvg"></svg><div class="tree" id="tree">';
-    // 按分层分行；ly=-1 的特殊项（系统调校/自维修/系统损坏等）排在最后一行，按官方样式显示为六边形
+    // 按官方链式分组分行：ch = 链序号，ri = 行内序号；ly=-1 的特殊项排最后
     var rows = {};
     for (var j = 0; j < list.length; j++) {
-      var ly = list[j].ly;
-      var key = ly < 0 ? '-1' : String(ly);
+      var key = (list[j].ly === -1) ? 'spec' : ('c' + list[j].ch);
       (rows[key] = rows[key] || []).push(list[j]);
     }
-    var rk = Object.keys(rows).sort(function (a, b) {
-      if (a === '-1') return 1; if (b === '-1') return -1;
-      return parseInt(a, 10) - parseInt(b, 10);
-    });
+    var rk = Object.keys(rows).filter(function (k) { return k !== 'spec'; })
+      .sort(function (a, b) { return Number(a.slice(1)) - Number(b.slice(1)); });
+    if (rows.spec) rk.push('spec');
     for (var r = 0; r < rk.length; r++) {
       var arr = rows[rk[r]];
-      h += '<div class="trow' + (rk[r] === '-1' ? ' special' : '') + '" data-row="' + rk[r] + '">';
+      h += '<div class="trow' + (rk[r] === 'spec' ? ' special' : '') + '" data-row="' + rk[r] + '">';
       for (var q = 0; q < arr.length; q++) h += nodeHtml(arr[q], list);
       h += '</div>';
     }
@@ -310,58 +308,69 @@
       pos[nodes[i].getAttribute('data-id')] = {
         x: r.left - wr.left + r.width / 2,
         y: r.top - wr.top + r.height / 2,
+        cx: r.left - wr.left + r.width / 2,
+        cy: r.top - wr.top + r.height / 2,
         l: r.left - wr.left, t: r.top - wr.top,
         r: r.right - wr.left,
         w: r.width, h: r.height
       };
     }
     var parts = [];
-    // 主干：左侧竖线贯通首尾，每行首节点短横线接入。
-    // 行内不画横线 —— 同一行的节点是「同一前置层」的并列项，彼此没有先后关系，
-    // 画横线会暗示错误的解锁顺序（游戏里行内横线表示的是链式先后）。
-    var rows = [];
-    var byRow = {};
+    // 主干：左侧竖线贯通首尾，每条链的行首节点短横线接入
+    var chains = [];
+    var byChain = {};
     for (var i2 = 0; i2 < list.length; i2++) {
       if (!pos[list[i2].id]) continue;
-      var ly = list[i2].ly;
-      (byRow[ly] = byRow[ly] || []).push({ t: list[i2], p: pos[list[i2].id] });
+      var ck = list[i2].ly === -1 ? 'spec' : 'c' + list[i2].ch;
+      (byChain[ck] = byChain[ck] || []).push({ t: list[i2], p: pos[list[i2].id] });
     }
-    for (var rk in byRow) rows.push({ ly: rk, items: byRow[rk] });
-    rows.sort(function (a, b) { return a.ly - b.ly; });
+    for (var ck2 in byChain) chains.push(byChain[ck2]);
+    chains.sort(function (a, b) {
+      var ka = a[0].t.ly === -1 ? 'spec' : 'c' + a[0].t.ch;
+      var kb = b[0].t.ly === -1 ? 'spec' : 'c' + b[0].t.ch;
+      return ka === kb ? 0 : (ka === 'spec' ? 1 : kb === 'spec' ? -1 : Number(ka.slice(1)) - Number(kb.slice(1)));
+    });
 
-    if (rows.length) {
-      var mainX = Math.min.apply(null, rows.map(function (r) { return r.items[0].p.l; })) - 26;
+    if (chains.length) {
+      var mainX = Math.min.apply(null, chains.map(function (c) { return c[0].p.l; })) - 26;
       var allY = [];
-      rows.forEach(function (r) { r.items.forEach(function (x) { allY.push(x.p.y); }); });
+      chains.forEach(function (c) { c.forEach(function (x) { allY.push(x.p.y); }); });
       var yTop = Math.min.apply(null, allY), yBot = Math.max.apply(null, allY);
       parts.push('<line x1="' + mainX + '" y1="' + yTop + '" x2="' + mainX + '" y2="' + yBot +
         '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
-      rows.forEach(function (r) {
-        var head = r.items[0].p;
+      chains.forEach(function (c) {
+        var head = c[0].p;
         parts.push('<line x1="' + mainX + '" y1="' + head.y + '" x2="' + head.l +
           '" y2="' + head.y + '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
         parts.push('<circle cx="' + head.l + '" cy="' + head.y +
           '" r="2.6" fill="rgba(255,255,255,.78)"/>');
       });
     }
-    // 前置关系：父节点 -> 子节点，一父一条，绝不多连
-    var seenPair = {};
+    // 前置关系：只在「后者直接以前者为前置」时连线，一对一，绝不多连
+    var pqSet = {};
     for (var j = 0; j < list.length; j++) {
       var t = list[j];
       if (!t.pq) continue;
-      var a = pos[t.id];
-      if (!a) continue;
-      for (var m = 0; m < t.pq.length; m++) {
-        var b = pos[t.pq[m][0]];
-        if (!b) continue;
-        var key = t.pq[m][0] + '>' + t.id;
-        if (seenPair[key]) continue;
-        seenPair[key] = 1;
-        parts.push('<line x1="' + (b.l + b.w / 2) + '" y1="' + b.y + '" x2="' +
-          (a.l + a.w / 2) + '" y2="' + a.y +
-          '" stroke="rgba(255,255,255,.40)" stroke-width="1.1"/>');
-      }
+      for (var m = 0; m < t.pq.length; m++) pqSet[t.pq[m][0] + '>' + t.id] = 1;
     }
+    Object.keys(pqSet).forEach(function (k) {
+      var ab = k.split('>');
+      var a = pos[ab[1]], b = pos[ab[0]];
+      if (!a || !b) return;
+      var sameRow = Math.abs(a.cy - b.cy) < 1;
+      if (sameRow) {
+        // 行内：短横线 + 中点圆点（游戏里行内横线就是链上的先后关系）
+        var x1 = Math.min(a.l, b.l), x2 = Math.max(a.r, b.r);
+        parts.push('<line x1="' + x1 + '" y1="' + a.cy + '" x2="' + x2 +
+          '" y2="' + a.cy + '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
+        parts.push('<circle cx="' + ((x1 + x2) / 2) + '" cy="' + a.cy +
+          '" r="2.2" fill="rgba(255,255,255,.62)"/>');
+      } else {
+        // 跨行：斜线
+        parts.push('<line x1="' + b.cx + '" y1="' + b.cy + '" x2="' + a.cx +
+          '" y2="' + a.cy + '" stroke="rgba(255,255,255,.40)" stroke-width="1.1"/>');
+      }
+    });
     svg.innerHTML = parts.join('');
   }
 
