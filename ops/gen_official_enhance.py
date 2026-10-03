@@ -180,6 +180,18 @@ def load_cfg():
     return tree, enh
 
 
+def load_effect_table():
+    """读效果表：节点图标只能用它的 PATH 字段。
+
+    用 SYSTEM_EFFECT_PREFIX 拼 icon_system_intensify_<prefix>.png 是错的，
+    实测 2987 个节点里有 512 个拼错、132 个文件根本不存在。
+    """
+    path = os.path.join(CFG_DIR, '_Tb_cfg_system_effect.json')
+    if not os.path.exists(path):
+        return {}
+    return json.load(open(path, encoding='utf-8')).get('_Tb_cfg_system_effect') or {}
+
+
 def load_official_text():
     """读游戏官方文案（res_4.npk 里的 language/zh_CN/tb_cfg_system_effect.txt）。
 
@@ -381,6 +393,7 @@ def main():
 
     tree, enh = load_cfg()
     official = load_official_text()
+    effects = load_effect_table()
     xrows = read_xlsx_enhancements(XLSX)
     cur = json.load(open(TEXT_BASE if os.path.exists(TEXT_BASE) else JSON_OUT, encoding='utf-8'))
     namemap = json.load(open(os.path.join(ROOT, 'public', 'games', 'ship_name_map.json'), encoding='utf-8'))['映射']
@@ -540,6 +553,12 @@ def main():
                         if off_detail and not PLACEHOLDER_RE.search(off_detail):
                             t['d'] = off_detail
                             report['official-fill-detail'] += 1
+                    # 图标：官方效果表的 PATH 才是准的
+                    icon = (effects.get(eid) or {}).get('PATH')
+                    if icon:
+                        if t.get('ic') != icon:
+                            report['official-fix-icon'] += 1
+                        t['ic'] = icon
 
                 t['ul'] = li['ul']
                 t['cl'] = li['cl']

@@ -337,20 +337,33 @@
     var colGap = tcs ? (parseFloat(tcs.columnGap) || 46) : 46;
     var rowGap = tcs ? (parseFloat(tcs.rowGap) || 14) : 14;
     var parts = [];
-    var STROKE = 'stroke="rgba(255,255,255,.45)" stroke-width="1.2"';
-    var DOT_FILL = 'rgba(255,255,255,.62)';
+    // 官方连线用一个颜色画线、两端标记和环：线 2px、环外径 11px、方块 4x4（相对节点 71px）。
+    // 站内节点 76px，按同比例取：线 1.5、环外径 9.2、方块 4x4。
+    var LINE_C = 'rgba(255,255,255,.5)';
+    var STROKE = 'stroke="' + LINE_C + '" stroke-width="1.5"';
+    var PORT = 'fill="none" stroke="' + LINE_C + '" stroke-width="1.5"';
+    var CAP_FILL = LINE_C;
+    var CAP_LEN = 4, CAP_W = 4, PORT_BACK = 8;
 
-    // 画一条折线并在「后继」一端的接入点内侧 6px 画端口点（官方端口环的位置）
+    // 画一条折线：源端加方块（Node_line_start）、目标端加空心环（img_round）
     function link(pts) {
       var d = 'M' + pts[0][0] + ' ' + pts[0][1];
       for (var q = 1; q < pts.length; q++) d += ' L' + pts[q][0] + ' ' + pts[q][1];
       parts.push('<path d="' + d + '" fill="none" ' + STROKE + '/>');
+
+      var s0 = pts[0], s1 = pts[1];
+      var sdx = s1[0] - s0[0], sdy = s1[1] - s0[1];
+      var slen = Math.sqrt(sdx * sdx + sdy * sdy) || 1;
+      parts.push('<line x1="' + s0[0] + '" y1="' + s0[1] +
+        '" x2="' + (s0[0] + sdx / slen * CAP_LEN) + '" y2="' + (s0[1] + sdy / slen * CAP_LEN) +
+        '" stroke="' + CAP_FILL + '" stroke-width="' + CAP_W + '" stroke-linecap="butt"/>');
+
       var a = pts[pts.length - 2], b = pts[pts.length - 1];
       var dx = b[0] - a[0], dy = b[1] - a[1];
       var len = Math.sqrt(dx * dx + dy * dy) || 1;
-      var back = Math.min(6, len / 2);
+      var back = Math.min(PORT_BACK, len / 2);
       parts.push('<circle cx="' + (b[0] - dx / len * back) + '" cy="' + (b[1] - dy / len * back) +
-        '" r="2.2" fill="' + DOT_FILL + '"/>');
+        '" r="4.6" ' + PORT + '/>');
     }
 
     // 主干：官方只在「根节点（单父为 0）且 ui_level != COMMON」时显示 panel_left_dot
@@ -370,7 +383,7 @@
       roots.forEach(function (t4) {
         var p = pos[t4.id];
         parts.push('<line x1="' + mainX + '" y1="' + p.y + '" x2="' + p.l + '" y2="' + p.y + '" ' + STROKE + '/>');
-        parts.push('<circle cx="' + p.l + '" cy="' + p.y + '" r="2.6" fill="rgba(255,255,255,.78)"/>');
+        parts.push('<circle cx="' + (p.l - PORT_BACK) + '" cy="' + p.y + '" r="4.6" ' + PORT + '/>');
       });
     }
     // 六边形链：官方 add_unlock_adjust_node 传 next_enhance_id，adjacent 之间画横线
