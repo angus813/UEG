@@ -355,21 +355,27 @@
     }
     Object.keys(pqSet).forEach(function (k) {
       var ab = k.split('>');
-      var a = pos[ab[1]], b = pos[ab[0]];
-      if (!a || !b) return;
-      var sameRow = Math.abs(a.cy - b.cy) < 1;
+      var child = pos[ab[1]], par = pos[ab[0]];      // par = 前置, child = 需要它的
+      if (!child || !par) return;
+      var sameRow = Math.abs(child.cy - par.cy) < 1;
       if (sameRow) {
-        // 行内：短横线 + 中点圆点（游戏里行内横线就是链上的先后关系）
-        var x1 = Math.min(a.l, b.l), x2 = Math.max(a.r, b.r);
-        parts.push('<line x1="' + x1 + '" y1="' + a.cy + '" x2="' + x2 +
-          '" y2="' + a.cy + '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
-        parts.push('<circle cx="' + ((x1 + x2) / 2) + '" cy="' + a.cy +
+        // 同行：短横线，两端贴在节点左右边缘，中间一个圆点
+        var x1 = Math.min(par.l, child.l), x2 = Math.max(par.r, child.r);
+        parts.push('<line x1="' + x1 + '" y1="' + child.cy + '" x2="' + x2 +
+          '" y2="' + child.cy + '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
+        parts.push('<circle cx="' + ((x1 + x2) / 2) + '" cy="' + child.cy +
           '" r="2.2" fill="rgba(255,255,255,.62)"/>');
-      } else {
-        // 跨行：斜线
-        parts.push('<line x1="' + b.cx + '" y1="' + b.cy + '" x2="' + a.cx +
-          '" y2="' + a.cy + '" stroke="rgba(255,255,255,.40)" stroke-width="1.1"/>');
+        return;
       }
+      // 跨行：斜线。官方是从前置节点的右下角斜拉到后继节点的右上角，
+      // 两个端点分别落在行间空隙的上沿和下沿，整条线都在空隙里，不会压到任何节点。
+      var up = child.cy < par.cy ? child : par;
+      var dn = child.cy < par.cy ? par : child;
+      parts.push('<line x1="' + up.r + '" y1="' + (up.t + up.h) + '" x2="' +
+        dn.r + '" y2="' + dn.t +
+        '" stroke="rgba(255,255,255,.40)" stroke-width="1.1"/>');
+      parts.push('<circle cx="' + up.r + '" cy="' + (up.t + up.h) +
+        '" r="2" fill="rgba(255,255,255,.55)"/>');
     });
     svg.innerHTML = parts.join('');
   }
