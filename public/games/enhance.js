@@ -216,7 +216,6 @@
       var tq = show[q];
       h += nodeHtml(tq, list, ((tq.rw || 0) + 1) + '/' + ((tq.cl || 0) + 1));
     }
-    var hrow = nrow - (hx.length ? 1 : 0);
     for (var q2 = 0; q2 < hx.length; q2++) {
       h += nodeHtml(hx[q2], list, nrow + '/' + (q2 + 1));
     }
@@ -312,8 +311,11 @@
     svg.style.height = wr.height + 'px';
     var pos = {};
     var nodes = wrap.querySelectorAll('.node');
-    var rowOf = {};
-    for (var li = 0; li < list.length; li++) rowOf[list[li].id] = list[li].rw;
+    var rowOf = {}, colOf = {};
+    for (var li = 0; li < list.length; li++) {
+      rowOf[list[li].id] = list[li].rw;
+      colOf[list[li].id] = list[li].cl;
+    }
     for (var i = 0; i < nodes.length; i++) {
       var r = nodes[i].getBoundingClientRect();
       var nid = nodes[i].getAttribute('data-id');
@@ -323,60 +325,69 @@
         cx: r.left - wr.left + r.width / 2,
         cy: r.top - wr.top + r.height / 2,
         l: r.left - wr.left, t: r.top - wr.top,
-        r: r.right - wr.left,
+        r: r.right - wr.left, b: r.bottom - wr.top,
         row: rowOf[nid] === undefined ? -1 : rowOf[nid],
+        col: colOf[nid] === undefined ? -1 : colOf[nid],
         w: r.width, h: r.height
       };
     }
+    // 网格缝隙宽度：官方连线只走缝里，不压节点。取 CSS 的实际列/行间距。
+    var treeEl = $('tree');
+    var tcs = treeEl ? getComputedStyle(treeEl) : null;
+    var colGap = tcs ? (parseFloat(tcs.columnGap) || 46) : 46;
+    var rowGap = tcs ? (parseFloat(tcs.rowGap) || 14) : 14;
     var parts = [];
-    // 主干：左侧竖线贯通首尾，每行最左节点短横线接入
-    var rowsMap = {};
+    var STROKE = 'stroke="rgba(255,255,255,.45)" stroke-width="1.2"';
+    var DOT_FILL = 'rgba(255,255,255,.62)';
+
+    // 画一条折线并在「后继」一端的接入点内侧 6px 画端口点（官方端口环的位置）
+    function link(pts) {
+      var d = 'M' + pts[0][0] + ' ' + pts[0][1];
+      for (var q = 1; q < pts.length; q++) d += ' L' + pts[q][0] + ' ' + pts[q][1];
+      parts.push('<path d="' + d + '" fill="none" ' + STROKE + '/>');
+      var a = pts[pts.length - 2], b = pts[pts.length - 1];
+      var dx = b[0] - a[0], dy = b[1] - a[1];
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var back = Math.min(6, len / 2);
+      parts.push('<circle cx="' + (b[0] - dx / len * back) + '" cy="' + (b[1] - dy / len * back) +
+        '" r="2.2" fill="' + DOT_FILL + '"/>');
+    }
+
+    // 主干：官方只在「根节点（单父为 0）且 ui_level != COMMON」时显示 panel_left_dot
+    // （set_attr_data 行576-580），所以接入点是根节点，不是每行行首。
+    var roots = [];
     for (var i2 = 0; i2 < list.length; i2++) {
       var t2 = list[i2];
-      if (!pos[t2.id] || t2.ul === -2) continue;
-      var key = (t2.ul === -1) ? 'spec' : ('r' + t2.rw);
-      (rowsMap[key] = rowsMap[key] || []).push({ t: t2, p: pos[t2.id] });
+      if (!pos[t2.id] || t2.ul === -2 || t2.ul === 0) continue;
+      if (t2.ul === -1) continue;
+      if (!t2.pq || !t2.pq.length) roots.push(t2);
     }
-    var rowKeys = Object.keys(rowsMap).sort(function (a, b) {
-      if (a === 'spec') return 1;
-      if (b === 'spec') return -1;
-      return Number(a.slice(1)) - Number(b.slice(1));
-    });
-    var heads = [];
-    for (var ri = 0; ri < rowKeys.length; ri++) {
-      var arr0 = rowsMap[rowKeys[ri]];
-      arr0.sort(function (a, b) {
-        if (a.t.ul === -1) return a.t.cl - b.t.cl;
-        return a.t.cl - b.t.cl;
-      });
-      heads.push(arr0[0].p);
-    }
-    if (heads.length) {
-      var mainX = Math.min.apply(null, heads.map(function (p) { return p.l; })) - 26;
-      var allY = [];
-      for (var k2 in rowsMap) rowsMap[k2].forEach(function (x) { allY.push(x.p.y); });
-      var yTop = Math.min.apply(null, allY), yBot = Math.max.apply(null, allY);
-      parts.push('<line x1="' + mainX + '" y1="' + yTop + '" x2="' + mainX + '" y2="' + yBot +
-        '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
-      heads.forEach(function (head) {
-        parts.push('<line x1="' + mainX + '" y1="' + head.y + '" x2="' + head.l +
-          '" y2="' + head.y + '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
-        parts.push('<circle cx="' + head.l + '" cy="' + head.y +
-          '" r="2.6" fill="rgba(255,255,255,.78)"/>');
+    if (roots.length) {
+      var mainX = Math.min.apply(null, roots.map(function (t3) { return pos[t3.id].l; })) - 26;
+      var ys = roots.map(function (t3) { return pos[t3.id].y; });
+      var yTop = Math.min.apply(null, ys), yBot = Math.max.apply(null, ys);
+      parts.push('<line x1="' + mainX + '" y1="' + yTop + '" x2="' + mainX + '" y2="' + yBot + '" ' + STROKE + '/>');
+      roots.forEach(function (t4) {
+        var p = pos[t4.id];
+        parts.push('<line x1="' + mainX + '" y1="' + p.y + '" x2="' + p.l + '" y2="' + p.y + '" ' + STROKE + '/>');
+        parts.push('<circle cx="' + p.l + '" cy="' + p.y + '" r="2.6" fill="rgba(255,255,255,.78)"/>');
       });
     }
     // 六边形链：官方 add_unlock_adjust_node 传 next_enhance_id，adjacent 之间画横线
-    if (rowsMap.spec) {
-      var hxa = rowsMap.spec.slice().sort(function (a, b) { return a.t.cl - b.t.cl; });
-      for (var h1 = 0; h1 + 1 < hxa.length; h1++) {
-        var hp = hxa[h1].p, hc = hxa[h1 + 1].p;
-        parts.push('<line x1="' + hp.r + '" y1="' + hp.cy + '" x2="' + hc.l +
-          '" y2="' + hc.cy + '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
-        parts.push('<circle cx="' + ((hp.r + hc.l) / 2) + '" cy="' + hp.cy +
-          '" r="2.2" fill="rgba(255,255,255,.62)"/>');
-      }
+    var hxa = [];
+    for (var hi = 0; hi < list.length; hi++) {
+      if (list[hi].ul === -1 && pos[list[hi].id]) hxa.push({ t: list[hi], p: pos[list[hi].id] });
     }
-    // 前置关系：只在「后者直接以前者为前置」时连线，一对一，绝不多连
+    hxa.sort(function (a, b) { return a.t.cl - b.t.cl; });
+    for (var h1 = 0; h1 + 1 < hxa.length; h1++) {
+      var hp = hxa[h1].p, hc = hxa[h1 + 1].p;
+      link([[hp.r, hp.cy], [hc.l, hc.cy]]);
+    }
+    // 前置连线。形态只看两端在网格里的相对位置，照官方截图：线只走缝，不压任何节点。
+    //   同行隔一列        → 列缝里一条横线
+    //   相邻行 + 相邻列   → 两个面对面的角直接连
+    //   同列 + 相邻行     → 行缝里一条竖线
+    //   其余（跨多行/跨多列）→ 沿列缝竖走、沿行缝横穿的折线
     var pqSet = {};
     for (var j = 0; j < list.length; j++) {
       var t = list[j];
@@ -385,32 +396,46 @@
     }
     Object.keys(pqSet).forEach(function (k) {
       var ab = k.split('>');
-      var child = pos[ab[1]], par = pos[ab[0]];      // par = 前置, child = 需要它的
-      if (!child || !par) return;
-      var sameRow = Math.abs(child.cy - par.cy) < 1;
-      if (sameRow) {
-        // 同行：短横线，两端贴在节点左右边缘，中间一个圆点
-        var x1 = Math.min(par.l, child.l), x2 = Math.max(par.r, child.r);
-        parts.push('<line x1="' + x1 + '" y1="' + child.cy + '" x2="' + x2 +
-          '" y2="' + child.cy + '" stroke="rgba(255,255,255,.45)" stroke-width="1.2"/>');
-        parts.push('<circle cx="' + ((x1 + x2) / 2) + '" cy="' + child.cy +
-          '" r="2.2" fill="rgba(255,255,255,.62)"/>');
+      var par = pos[ab[0]], child = pos[ab[1]];      // par = 前置, child = 需要它的
+      if (!par || !child) return;
+      var drw = child.row - par.row;
+      var dcl = child.col - par.col;
+      var known = par.row >= 0 && par.col >= 0 && child.row >= 0 && child.col >= 0;
+
+      if (known && drw === 0 && Math.abs(dcl) === 1) {
+        var yRow = child.cy;
+        if (dcl > 0) link([[par.r, yRow], [child.l, yRow]]);
+        else link([[par.l, yRow], [child.r, yRow]]);
         return;
       }
-      // 跨行：官方形态是「前置右下角 → 后继右上角」的斜线，两端分别落在行间空隙的
-      // 下沿和上沿。只有相邻行能直接斜拉；跨多行时改走折线，每段仍留在空隙里。
-      var up = child.cy < par.cy ? child : par;
-      var dn = child.cy < par.cy ? par : child;
-      var stroke = 'stroke="rgba(255,255,255,.40)" stroke-width="1.1"';
-      if (Math.abs(up.row - dn.row) === 1) {
-        parts.push('<line x1="' + up.r + '" y1="' + (up.t + up.h) + '" x2="' +
-          dn.r + '" y2="' + dn.t + '" ' + stroke + '/>');
-      } else {
-        parts.push('<path d="M' + up.r + ' ' + (up.t + up.h) + ' H' + dn.r +
-          ' V' + dn.t + '" ' + stroke + ' fill="none"/>');
+      if (known && Math.abs(drw) === 1 && Math.abs(dcl) === 1) {
+        var upD = drw > 0 ? par : child;
+        var dnD = drw > 0 ? child : par;
+        var p1 = [dnD.cx > upD.cx ? upD.r : upD.l, upD.b];
+        var p2 = [dnD.cx > upD.cx ? dnD.l : dnD.r, dnD.t];
+        link(drw > 0 ? [p1, p2] : [p2, p1]);
+        return;
       }
-      parts.push('<circle cx="' + up.r + '" cy="' + (up.t + up.h) +
-        '" r="2" fill="rgba(255,255,255,.55)"/>');
+      if (known && Math.abs(drw) === 1 && dcl === 0) {
+        if (drw > 0) link([[par.cx, par.b], [child.cx, child.t]]);
+        else link([[par.cx, par.t], [child.cx, child.b]]);
+        return;
+      }
+
+      // 兜底：横向绕到相邻列缝，纵向穿行缝；终点始终落在后继节点上
+      if (Math.abs(par.cy - child.cy) < par.h / 2) {
+        var yOut0 = par.b + rowGap / 2;
+        link([[par.cx, par.b], [par.cx, yOut0], [child.cx, yOut0], [child.cx, child.b]]);
+        return;
+      }
+      var upF = child.cy < par.cy ? child : par;
+      var dnF = child.cy < par.cy ? par : child;
+      var yOut = upF.b + rowGap / 2;                  // 上节点下方那条行缝
+      var yIn = dnF.t - rowGap / 2;                   // 下节点上方那条行缝
+      var corr = dnF.cx >= upF.cx ? upF.r + colGap / 2 : upF.l - colGap / 2;
+      var pts = [[upF.cx, upF.b], [upF.cx, yOut], [corr, yOut],
+                 [corr, yIn], [dnF.cx, yIn], [dnF.cx, dnF.t]];
+      link(child === upF ? pts.slice().reverse() : pts);
     });
     svg.innerHTML = parts.join('');
   }
