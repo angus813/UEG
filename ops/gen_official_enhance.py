@@ -192,6 +192,63 @@ def load_effect_table():
     return json.load(open(path, encoding='utf-8')).get('_Tb_cfg_system_effect') or {}
 
 
+def load_system_meta():
+    """官方系统名与标签（tb_cfg_ship_system#name|system_label#<system_id>）。"""
+    path = os.path.join(LANG_DIR, 'tb_cfg_ship_system.txt')
+    out = {}
+    if not os.path.exists(path):
+        return out
+    for line in open(path, encoding='utf-8'):
+        if '::' not in line:
+            continue
+        key, val = line.rstrip('\r\n').split('::', 1)
+        parts = key.split('#')
+        if len(parts) == 3 and parts[0] == 'cfg_ship_system':
+            out.setdefault(parts[2], {})[parts[1]] = val
+    return out
+
+
+def group_systems(tree):
+    """把树配置按船归并：{ship_id: {system_id: [节点 id...]}}，保持配置顺序。
+
+    站内的「船→系统」绑定是旧版本游戏的，实测 124 艘里 94 艘缺系统、共缺 152 个，
+    另有 51 艘挂着当前版本已不存在的系统。以树配置为准重建。
+    """
+    out = collections.defaultdict(lambda: collections.defaultdict(list))
+    for nid in tree:
+        if len(nid) >= 9:
+            out[nid[:5]][nid[:7]].append(nid)
+    return out
+
+
+def build_system_techs(sysid, tree, enh, effects, official):
+    """为一个系统从零构建节点列表（新补的系统用）。"""
+    layout = build_layout(tree, enh, sysid, set())
+    out = []
+    for cid in sorted(layout):
+        li = layout[cid]
+        eid = official_effect_id(enh.get(cid))
+        name = official.get(('name', eid)) or ''
+        label = official.get(('effect_label', eid)) or ''
+        icon = (effects.get(eid) or {}).get('PATH') or ''
+        desc = official.get(('desc', eid)) or ''
+        if desc and PLACEHOLDER_RE.search(desc):
+            desc = ''
+        detail = official.get(('desc_detail', eid)) or ''
+        if detail and PLACEHOLDER_RE.search(detail):
+            detail = ''
+        t = {'id': cid, 'n': name, 'lb': label, 'ic': icon,
+             'mx': len(li['cost']) if li['cost'] else 0, 'ct': li['cost'],
+             'ds': desc, 'd': detail, 'c': li['kind'],
+             'ul': li['ul'], 'cl': li['cl'], 'rw': li['rw']}
+        if li['pars']:
+            t['pq'] = [[p, li['ul']] for p in li['pars']]
+        if li['dl'] is not None:
+            t['dl'] = li['dl']
+        out.append(t)
+    return out
+
+
 def load_official_text():
     """读游戏官方文案（res_4.npk 里的 language/zh_CN/tb_cfg_system_effect.txt）。
 
@@ -394,6 +451,8 @@ def main():
     tree, enh = load_cfg()
     official = load_official_text()
     effects = load_effect_table()
+    sysmeta = load_system_meta()
+    official_sys = group_systems(tree)
     xrows = read_xlsx_enhancements(XLSX)
     cur = json.load(open(TEXT_BASE if os.path.exists(TEXT_BASE) else JSON_OUT, encoding='utf-8'))
     namemap = json.load(open(os.path.join(ROOT, 'public', 'games', 'ship_name_map.json'), encoding='utf-8'))['映射']
@@ -474,8 +533,17 @@ def main():
     for ship, sv in cur.items():
         sv2 = {k: v for k, v in sv.items() if k != 'systems'}
         sys2 = {}
+        ship_id = str(sv.get('shipId') or '')
+        want_sys = official_sys.get(ship_id) or {}
+        # 该船的官方系统里已经在站内的 id（用于后面补缺）
+        present_ids = {str(x.get('id') or '') for x in sv['systems'].values()}
         for sysn, sysv in sv['systems'].items():
             sid = sysv.get('id')
+            sid_key = str(sid or '')
+            # 官方树里已无节点的系统 = 旧版本残留，删掉
+            if want_sys and sid_key and sid_key not in want_sys:
+                report['system-drop-stale'] += 1
+                continue
             layout = build_layout(tree, enh, sid, {t2['id'] for t2 in sysv['techs']}) if sid else {}
             rows = sysv.get('_rows') or []
             mp = sysv.get('_map') or {}
@@ -572,6 +640,37 @@ def main():
             s2 = {k: v for k, v in sysv.items() if not k.startswith('_')}
             s2['techs'] = techs
             sys2[sysn] = s2
+
+        # 补上官方有、站内没有的系统
+        icon_by_label = {}
+        for _sn, _s in sv['systems'].items():
+            meta = sysmeta.get(str(_s.get('id') or '')) or {}
+            lb = meta.get('label')
+            if lb and _s.get('icon'):
+                icon_by_label.setdefault(lb, _s['icon'])
+        for osid, onids in want_sys.items():
+            if osid in present_ids:
+                continue
+            techs = build_system_techs(osid, tree, enh, effects, official)
+            if not techs:
+                continue
+            meta = sysmeta.get(osid) or {}
+            name = meta.get('name') or osid
+            key = name
+            k2 = 2
+            while key in sys2:                       # 名字撞了就退化成「名(2)」
+                key = '%s(%d)' % (name, k2)
+                k2 += 1
+            sys2[key] = {
+                'id': osid,
+                'name': name,
+                'officialName': name,
+                'label': meta.get('label') or '',
+                'icon': icon_by_label.get(meta.get('label') or '', 'icon_system_type_subsystem.png'),
+                'techs': techs,
+            }
+            report['system-add'] += 1
+
         sv2['systems'] = sys2
         out[ship] = sv2
 
