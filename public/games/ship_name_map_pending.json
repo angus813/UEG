@@ -1,0 +1,200 @@
+{
+ "_说明": "结构指纹多义、需人工确认的舰船映射",
+ "_数量": 13,
+ "待确认": [
+  {
+   "中文舰船": "平衡安德森SC020·侦察型",
+   "结构指纹": [
+    9,
+    7,
+    6,
+    4,
+    2
+   ],
+   "英文候选": [
+    "Balancer Anderson SC020 - Scout",
+    "SC002 - Quantum Scout"
+   ],
+   "强化项数": 28
+  },
+  {
+   "中文舰船": "米斯特拉·战斗攻击型",
+   "结构指纹": [
+    11,
+    6,
+    3,
+    3
+   ],
+   "英文候选": [
+    "Janbiya Aer410 - Assault Attacker",
+    "Mistral - Combat Attacker"
+   ],
+   "强化项数": 23
+  },
+  {
+   "中文舰船": "砂龙·大气截击型",
+   "结构指纹": [
+    11,
+    6,
+    5,
+    2
+   ],
+   "英文候选": [
+    "Sandrake - Atmospheric Interceptor",
+    "Vitas-B010 - Bomber"
+   ],
+   "强化项数": 24
+  },
+  {
+   "中文舰船": "刺鳐·鱼雷轰炸型",
+   "结构指纹": [
+    11,
+    5,
+    5,
+    3
+   ],
+   "英文候选": [
+    "Bullfrog - Dual-Purpose Bomber",
+    "Stingray - Torpedo Bomber"
+   ],
+   "强化项数": 24
+  },
+  {
+   "中文舰船": "林鸮A100型·联合攻击型",
+   "结构指纹": [
+    10,
+    7,
+    4,
+    3
+   ],
+   "英文候选": [
+    "Eris I - Light Rapid-Fire Cannon Destroyer",
+    "Strix A100 - Joint Attacker"
+   ],
+   "强化项数": 24
+  },
+  {
+   "中文舰船": "维塔斯A021·重型攻击型",
+   "结构指纹": [
+    10,
+    6,
+    5,
+    4,
+    3
+   ],
+   "英文候选": [
+    "B192 Newland - Heavy Attacker",
+    "Vitas A021 - Heavy Attacker",
+    "Carilion - Heavy Cannon Frigate"
+   ],
+   "强化项数": 28
+  },
+  {
+   "中文舰船": "维塔斯B010·轰炸型",
+   "结构指纹": [
+    11,
+    6,
+    5,
+    2
+   ],
+   "英文候选": [
+    "Sandrake - Atmospheric Interceptor",
+    "Vitas-B010 - Bomber"
+   ],
+   "强化项数": 24
+  },
+  {
+   "中文舰船": "严酷级·突击型",
+   "结构指纹": [
+    8,
+    5,
+    3,
+    3,
+    3
+   ],
+   "英文候选": [
+    "Grim Reaper - Assault Frigate",
+    "XT-8 - Armed Missile Survey Ship"
+   ],
+   "强化项数": 22
+  },
+  {
+   "中文舰船": "云海级·防空型",
+   "结构指纹": [
+    9,
+    7,
+    5,
+    3,
+    2
+   ],
+   "英文候选": [
+    "Mare Nubium - Anti-Aircraft Frigate",
+    "NOMA M470 - Anti-Aircraft Frigate",
+    "NOMA M470 - Support Frigate"
+   ],
+   "强化项数": 26
+  },
+  {
+   "中文舰船": "澄海级·重型",
+   "结构指纹": [
+    10,
+    5,
+    4,
+    3,
+    2
+   ],
+   "英文候选": [
+    "Mare Serenitatis - Heavy Frigate",
+    "Ruby - Heavy Railgun Frigate"
+   ],
+   "强化项数": 24
+  },
+  {
+   "中文舰船": "诺玛M470级·防空型",
+   "结构指纹": [
+    9,
+    7,
+    5,
+    3,
+    2
+   ],
+   "英文候选": [
+    "Mare Nubium - Anti-Aircraft Frigate",
+    "NOMA M470 - Anti-Aircraft Frigate",
+    "NOMA M470 - Support Frigate"
+   ],
+   "强化项数": 26
+  },
+  {
+   "中文舰船": "诺玛M470级·支援型",
+   "结构指纹": [
+    9,
+    7,
+    5,
+    3,
+    2
+   ],
+   "英文候选": [
+    "Mare Nubium - Anti-Aircraft Frigate",
+    "NOMA M470 - Anti-Aircraft Frigate",
+    "NOMA M470 - Support Frigate"
+   ],
+   "强化项数": 26
+  },
+  {
+   "中文舰船": "狼蜥级·战术型",
+   "结构指纹": [
+    8,
+    6,
+    5,
+    4,
+    2
+   ],
+   "英文候选": [
+    "XenoStinger - Defensive Frigate",
+    "XenoStinger - Tactical Frigate"
+   ],
+   "强化项数": 25
+  }
+ ]
+}
