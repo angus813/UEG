@@ -124,6 +124,9 @@ def build_adjust_node(cid, enh, eff, lang):
     ur = unlock_requirement(e)
     if ur:
         node['ur'] = ur
+    uq = unlock_req(e)
+    if uq:
+        node['uq'] = uq
     if e.get('ADJUST_PROB'):
         node['ap'] = e['ADJUST_PROB']
     return node
@@ -140,6 +143,31 @@ def parse_dict_of_list(s):
         key = items[0]
         rest = items[1:]
         out[key] = rest if len(rest) > 1 else rest[0]
+    return out
+
+
+def unlock_req(e):
+    """返回结构化解锁条件（供站内校验用），字段含义同 unlock_requirement。
+
+    ways: [{m: 模块稀有度, r: [武器技术稀有度...]}]，多条为「或」关系
+    ar:   调教类要求的武器技术稀有度
+    ty:   限定的武器技术类型
+    """
+    out = {}
+    ut = e.get('UNLOCK_TYPE')
+    tl = e.get('UNLOCK_WEAPON_TECH_TYPE_LIMIT') or e.get('ADJUST_WEAPON_TECH_TYPE_LIMIT')
+    types = [x.strip() for x in str(tl or '').split(',') if x.strip()]
+    if types:
+        out['ty'] = types
+    if ut == 2:
+        ways = []
+        for mod_rarity, need in parse_dict_of_list(e.get('UNLOCK_COST_RARITY')).items():
+            need = need if isinstance(need, list) else [need]
+            ways.append({'m': mod_rarity, 'r': need})
+        if ways:
+            out['ways'] = ways
+    elif e.get('ADJUST_RARITY') is not None:
+        out['ar'] = e['ADJUST_RARITY']
     return out
 
 
@@ -244,6 +272,9 @@ def main():
                 if ur and ur != t.get('ur'):
                     t['ur'] = ur
                     stat['补解锁条件'] += 1
+                uq = unlock_req(e)
+                if uq and uq != t.get('uq'):
+                    t['uq'] = uq
                 if e.get('ADJUST_PROB') and not t.get('ap'):
                     t['ap'] = e['ADJUST_PROB']
 

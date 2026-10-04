@@ -127,6 +127,9 @@ body {
 }
 .node.addable .box { border-color: rgba(255,255,255,.62); background: rgba(74,80,83,.92); }
 .node.maxed .box { border-color: #ffd24a; background: rgba(96,86,44,.85); }
+.node.hexwait .box { opacity: .62; }
+.node.hexwait:hover .box { border-color: #ffcf7a; }
+.node.hexok .box { border-color: rgba(120,220,180,.75); }
 .node.locked .box { opacity: .48; }
 .node.hex .box { clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
   background: repeating-linear-gradient(45deg, rgba(58,63,65,.9) 0 6px, rgba(70,76,78,.9) 6px 12px); }
@@ -153,7 +156,11 @@ body {
 .detail .dt { font-size: .72rem; color: #b6bbbd; margin-top: 5px; line-height: 1.7; }
 .detail .dt summary { cursor: pointer; color: #cfd3d4; }
 .detail .ops { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
-.detail .ops .t { font-size: .74rem; color: #cfd3d4; }
+.detail .hx { margin-top: 7px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.detail .hx .hxlabel { font-size: .72rem; color: #b6bbbd; }
+.detail .hx .hxi { background: rgba(20,24,26,.8); border: 1px solid rgba(255,255,255,.22);
+  color: #e8e9ea; padding: 3px 7px; font-size: .72rem; border-radius: 2px; font-family: inherit; }
+.detail .hx .hxi.hxn { width: 92px; }.detail .ops .t { font-size: .74rem; color: #cfd3d4; }
 
 .hint { font-size: .72rem; color: #b6bbbd; padding: 8px 16px; border-top: 1px solid rgba(255,255,255,.10); line-height: 1.8; }
 .hint b { color: #ffd24a; }
@@ -263,11 +270,11 @@ body {
 </div>
 
 <script src="ships_data.js?v=20261004a"></script>
-<script src="official_enhance_data.js?v=20261004m"></script>
+<script src="official_enhance_data.js?v=20261004p"></script>
 <script src="ship_stats.js?v=20261004e"></script>
 <script src="system_stats.js?v=20261004e"></script>
 <script src="enhance_effects.js?v=20261004e"></script>
-<script src="enhance.js?v=20261004n"></script>
+<script src="enhance.js?v=20261004q"></script>
 
 <div id="flashTip" style="position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:rgba(30,34,36,.95);color:#fff;font-weight:700;border:1px solid rgba(255,255,255,.3);border-left:3px solid #ffd24a;padding:9px 20px;z-index:99;opacity:0;transition:opacity .3s;font-size:.82rem;border-radius:2px"></div>
 

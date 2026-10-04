@@ -283,6 +283,42 @@
     return bad.length ? bad.join('、') : '';
   }
 
+  // ---------- 调教登记 ----------
+  // 官方六边形（adjust）项要绑定一门满足条件的武器技术才能加点。
+  // 服务端不下发武器技术表（稀有度/类型只有配置里的要求），站内改为手工登记：
+  // 记下用了哪门技术及其稀有度、类型，再按配置里的 uq 校验。
+  const LS_HEX = 'ueg_hex_tech';
+  var hexTech = {};
+  try { hexTech = JSON.parse(localStorage.getItem(LS_HEX) || '{}') || {}; } catch (e) { hexTech = {}; }
+  function saveHex() {
+    try { localStorage.setItem(LS_HEX, JSON.stringify(hexTech)); } catch (e) {}
+  }
+  function hexKey(t) { return shipKey + '|' + sysName + '|' + t.id; }
+  function hexOf(t) { return hexTech[hexKey(t)] || null; }
+  function hexTypes(t) { return (t.uq && t.uq.ty) || []; }
+  function hexNeedRarity(t) {
+    var uq = t.uq || {};
+    if (uq.ar !== undefined && uq.ar !== null) return [String(uq.ar)];
+    if (uq.ways) {
+      var out = [];
+      for (var i = 0; i < uq.ways.length; i++)
+        for (var j = 0; j < uq.ways[i].r.length; j++)
+          if (out.indexOf(String(uq.ways[i].r[j])) < 0) out.push(String(uq.ways[i].r[j]));
+      return out;
+    }
+    return null;
+  }
+  // 返回 null 表示登记合格；否则返回不合格的原因
+  function hexCheck(t, r) {
+    var uq = t.uq || {};
+    var ty = hexTypes(t), need = hexNeedRarity(t);
+    if (!ty.length && !need) return null;
+    if (!r || !r.name) return '未登记武器技术';
+    if (ty.length && ty.indexOf(String(r.type)) < 0) return '武器技术类型需为 ' + ty.join(' / ');
+    if (need && need.indexOf(String(r.rarity)) < 0) return '武器技术稀有度需为 ' + need.join(' / ');
+    return null;
+  }
+
   // ---------- 舰船栏 ----------
   var TYPE_ORDER = ['战列舰', '战列巡洋舰', '航空母舰', '巡洋舰', '驱逐舰', '护卫舰',
                     '登陆舰', '护航艇', '战机', '支援舰'];
@@ -589,6 +625,13 @@
     if (maxed && t.mx > 0) cls += ' maxed';
     if (blocked) cls += ' locked';
     if (selTech && selTech.id === t.id) cls += ' sel';
+    // 六边形：未登记/登记不合格时不能加点
+    var hxBad = null;
+    if (t.ul === -1) {
+      hxBad = hexCheck(t, hexOf(t));
+      if (hxBad) cls += ' hexwait';
+      else cls += ' hexok';
+    }
 
     var cost = (t.mx > 0 && !maxed) ? costOf(t, baseOf(t) + l + 1) : 0;
     var lvTxt = '';
@@ -598,12 +641,47 @@
     else if (t.c === 2) flag = '<span class="flag">模</span>';
     else if (t.ut) flag = '<span class="flag">稀</span>';
 
+    var hxTitle = '';
+    if (t.ul === -1) {
+      var hr = hexOf(t);
+      hxTitle = ' title="' + esc(hxBad ? ('调教：' + hxBad) : ('调教武器技术：' + hr.name)) + '"';
+    }
+
     return '<div class="' + cls + '"' + (gridArea ? ' style="grid-area:' + gridArea + '"' : '') +
-      ' data-id="' + t.id + '" data-sys="' + esc(sysName) + '">' +
+      ' data-id="' + t.id + '" data-sys="' + esc(sysName) + '"' + hxTitle + '>' +
       '<div class="box">' + flag + icon(t.ic) +
       '<span class="lb">' + esc(t.lb || t.n) + '</span>' + lvTxt +
       (cost ? '<span class="cost">' + cost + '</span>' : '') + '</div>' +
       '</div>';
+  }
+
+  function hexFormHtml(t) {
+    var r = hexOf(t) || {}, tys = hexTypes(t), need = hexNeedRarity(t);
+    var opts = '';
+    if (tys.length) {
+      opts = '<select class="hxi" data-hx="type">' +
+        (tys.indexOf(String(r.type)) < 0 ? '<option value="">类型…</option>' : '') +
+        tys.map(function (v) {
+          return '<option value="' + esc(v) + '"' + (String(r.type) === v ? ' selected' : '') + '>类型 ' + esc(v) + '</option>';
+        }).join('') + '</select>';
+    }
+    var rar = need ? need.join('/') : '任意';
+    return '<div class="hx"><span class="hxlabel">调教武器技术</span>' +
+      '<input class="hxi" data-hx="name" list="hxNames_' + t.id + '" placeholder="名称" value="' + esc(r.name || '') + '">' +
+      '<input class="hxi hxn" data-hx="rarity" placeholder="稀有度 ' + esc(rar) + '" value="' + esc(r.rarity == null ? '' : r.rarity) + '">' +
+      opts +
+      '<button class="tbtn" data-act="hexsave">保存登记</button>' +
+      '<button class="tbtn" data-act="hexclear">清除</button>' +
+      '<datalist id="hxNames_' + t.id + '">' + hxNameOptions() + '</datalist></div>';
+  }
+  // 已登记过的武器技术名称，供 datalist 复用
+  function hxNameOptions() {
+    var seen = {}, out = [];
+    for (var k in hexTech) {
+      var n = hexTech[k] && hexTech[k].name;
+      if (n && !seen[n]) { seen[n] = 1; out.push('<option value="' + esc(n) + '">'); }
+    }
+    return out.join('');
   }
 
   function detailHtml(list) {
@@ -623,13 +701,28 @@
     if (t.ds) h += '<div class="d">' + esc(t.ds).replace(/\[([^\]]+)\]/g, '<span class="mk">[$1]</span>') + '</div>';
     if (t.d) h += '<details class="dt"><summary>详细说明</summary>' + esc(t.d) + '</details>';
     if (t.ur) h += '<div class="pq">' + esc(t.ur) + '</div>';
-    if (t.ap && t.ap.length) h += '<div class="dt">逐级触发概率 ' +
-      esc(t.ap.map(function (p) { return p + '%'; }).join(' / ')) + '</div>';
+    var prob = '';
+    if (t.ap && t.ap.length) {
+      var nx = t.ap[l];
+      if (nx !== undefined)
+        prob = '升到第 ' + (baseOf(t) + l + 1) + ' 级触发概率 ' + nx + '%';
+      h += '<div class="dt">' + (prob ? esc(prob) : '') +
+        '<details><summary>逐级概率</summary>' +
+        esc(t.ap.map(function (p, i) { return '第 ' + (i + 1) + ' 级 ' + p + '%'; }).join('　')) +
+        '</details></div>';
+    }
+    var hxBad = null;
+    if (t.ul === -1) {
+      hxBad = hexCheck(t, hexOf(t));
+      h += hexFormHtml(t);
+      h += '<div class="' + (hxBad ? 'pq' : 'dt') + '">' +
+        (hxBad ? '未满足：' + esc(hxBad) : '登记合格：' + esc(hexOf(t).name)) + '</div>';
+    }
     if (pq && unmetTxt(pq)) h += '<div class="pq">任一前置加点后解锁（当前未加）：' + esc(unmetTxt(pq)) + '</div>';
     h += '<div class="ops">';
     h += '<button class="tbtn" data-act="minus"' + (l <= 0 ? ' disabled' : '') + '>− 降 1 级</button>';
     h += '<button class="tbtn" data-act="plus"' +
-      ((t.mx <= 0 || maxed || blocked) ? ' disabled' : '') + '>＋ 升 1 级</button>';
+      ((t.mx <= 0 || maxed || blocked || hxBad) ? ' disabled' : '') + '>＋ 升 1 级</button>';
     h += '<span class="t">当前 ' + absLv(t) + ' / ' + absMax(t) + ' 级' +
       (maxed || t.mx <= 0 ? '' : ' · 下一级消耗 ' + costOf(t, baseOf(t) + l + 1) + ' 点') + '</span>';
     h += '</div></div>';
@@ -831,14 +924,35 @@
         renderMain();
       });
     }
-    var ops = mainCol.querySelectorAll('.detail .ops .tbtn');
+    var ops = mainCol.querySelectorAll('.detail .tbtn[data-act]');
     for (var j = 0; j < ops.length; j++) {
       ops[j].addEventListener('click', function () {
         if (!selTech) return;
-        if (this.getAttribute('data-act') === 'plus') doPlus(list, selTech);
-        else doMinus(list, selTech);
+        var act = this.getAttribute('data-act');
+        if (act === 'plus') doPlus(list, selTech);
+        else if (act === 'minus') doMinus(list, selTech);
+        else if (act === 'hexsave') saveHexReg(list, selTech, false);
+        else if (act === 'hexclear') saveHexReg(list, selTech, true);
       });
     }
+  }
+
+  function saveHexReg(list, t, clear) {
+    var k = hexKey(t);
+    if (clear) { delete hexTech[k]; saveHex(); renderMain(); return; }
+    var box = mainCol.querySelector('.detail');
+    if (!box) return;
+    var get = function (n) {
+      var e = box.querySelector('[data-hx="' + n + '"]');
+      return e ? e.value.trim() : '';
+    };
+    var name = get('name'), rarity = get('rarity'), type = get('type');
+    if (!name) { tip('请填写武器技术名称'); return; }
+    hexTech[k] = { name: name, rarity: rarity, type: type };
+    saveHex();
+    var bad = hexCheck(t, hexTech[k]);
+    renderMain();
+    if (bad) tip('已登记，但不满足要求：' + bad);
   }
 
   function doPlus(list, t) {
@@ -847,6 +961,10 @@
     if (l >= t.mx) return;
     var pq = prereqOf(list, t);
     if (pq && unmetTxt(pq)) { tip('任一前置加点后解锁（当前未加）：' + unmetTxt(pq)); return; }
+    if (t.ul === -1) {
+      var hxBad = hexCheck(t, hexOf(t));
+      if (hxBad) { tip('调教未完成：' + hxBad); return; }
+    }
     var c = costOf(t, baseOf(t) + l + 1);
     points -= c;
     setLv(sysName, t.id, l + 1);
