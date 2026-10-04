@@ -622,6 +622,9 @@
       '<span style="margin-left:auto;font-size:.68rem;color:#9aa0a2">节点 ' + esc(t.id) + '</span></div>';
     if (t.ds) h += '<div class="d">' + esc(t.ds).replace(/\[([^\]]+)\]/g, '<span class="mk">[$1]</span>') + '</div>';
     if (t.d) h += '<details class="dt"><summary>详细说明</summary>' + esc(t.d) + '</details>';
+    if (t.ur) h += '<div class="pq">' + esc(t.ur) + '</div>';
+    if (t.ap && t.ap.length) h += '<div class="dt">逐级触发概率 ' +
+      esc(t.ap.map(function (p) { return p + '%'; }).join(' / ')) + '</div>';
     if (pq && unmetTxt(pq)) h += '<div class="pq">任一前置加点后解锁（当前未加）：' + esc(unmetTxt(pq)) + '</div>';
     h += '<div class="ops">';
     h += '<button class="tbtn" data-act="minus"' + (l <= 0 ? ' disabled' : '') + '>− 降 1 级</button>';

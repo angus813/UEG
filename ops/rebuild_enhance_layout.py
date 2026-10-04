@@ -121,7 +121,53 @@ def build_adjust_node(cid, enh, eff, lang):
     node['c'] = 0
     if e.get('ADJUST_ENHANCE_INDEX') is not None:
         node['dx'] = e['ADJUST_ENHANCE_INDEX']
+    ur = unlock_requirement(e)
+    if ur:
+        node['ur'] = ur
+    if e.get('ADJUST_PROB'):
+        node['ap'] = e['ADJUST_PROB']
     return node
+
+
+def parse_dict_of_list(s):
+    """官方 data_utils.parse_cfg_str_to_dict_of_list 的格式：
+    'val11,val12,val13;val21,val22;...' → {'val11': [val12, val13], 'val21': val22}"""
+    out = {}
+    for group in str(s or '').split(';'):
+        items = [x.strip() for x in group.split(',') if x.strip() != '']
+        if len(items) < 2:
+            continue
+        key = items[0]
+        rest = items[1:]
+        out[key] = rest if len(rest) > 1 else rest[0]
+    return out
+
+
+def unlock_requirement(e):
+    """按官方 bp_extend_system_view.build_weapon_tech_list 的判定拼出人话。
+
+    UNLOCK_TYPE_RARITY：UNLOCK_COST_RARITY 每个 ';' 分组是一条解锁途径，
+        键=模块稀有度，值=该途径接受的「武器技术稀有度」集合；
+        UNLOCK_WEAPON_TECH_TYPE_LIMIT 限定武器技术类型。
+    EFFECT_TYPE_ADJUST：ADJUST_RARITY 指定稀有度，ADJUST_WEAPON_TECH_TYPE_LIMIT 限定类型。
+    """
+    parts = []
+    ut = e.get('UNLOCK_TYPE')
+    tl = e.get('UNLOCK_WEAPON_TECH_TYPE_LIMIT') or e.get('ADJUST_WEAPON_TECH_TYPE_LIMIT')
+    types = [x.strip() for x in str(tl or '').split(',') if x.strip()]
+    if ut == 2:
+        grp = parse_dict_of_list(e.get('UNLOCK_COST_RARITY'))
+        ways = []
+        for mod_rarity, need in grp.items():
+            need = need if isinstance(need, list) else [need]
+            ways.append('模块稀有度 %s + 武器技术稀有度 %s' % (mod_rarity, '/'.join(need)))
+        if ways:
+            parts.append('解锁：' + '；或 '.join(ways))
+    elif e.get('ADJUST_RARITY') is not None:
+        parts.append('调教：武器技术稀有度 %s' % e['ADJUST_RARITY'])
+    if types:
+        parts.append('武器技术类型 %s' % '/'.join(types))
+    return '　'.join(parts)
 
 
 def dfs_depth(ids, tree):
@@ -187,6 +233,20 @@ def main():
                         stat['改判隐藏'] += 1
                     t['ul'] = -2
 
+            # 2.4) 六边形节点回填解锁条件 / 逐级触发概率（官方调教判定，见 unlock_requirement）
+            for t in techs:
+                if t.get('ul') != -1:
+                    continue
+                e = enh.get(t['id'])
+                if not e:
+                    continue
+                ur = unlock_requirement(e)
+                if ur and ur != t.get('ur'):
+                    t['ur'] = ur
+                    stat['补解锁条件'] += 1
+                if e.get('ADJUST_PROB') and not t.get('ap'):
+                    t['ap'] = e['ADJUST_PROB']
+
             # 2.5) 补描述：官方文案里带 {101} 这类占位符的条目此前被整条丢弃，
             # 导致这些节点看不到升级效果；这里保留原文，占位符换成可读标记。
             for t in techs:
@@ -243,8 +303,9 @@ def main():
                                key=lambda t: (t.get('cl', 0), t['id']))
             sd['techs'] = plane_order + hex_order
 
-    print('行调整 %d，列调整 %d，新增六边形 %d，改判隐藏 %d，补描述 %d'
-          % (stat['行调整'], stat['列调整'], stat['新增六边形'], stat['改判隐藏'], stat['补描述']))
+    print('行调整 %d，列调整 %d，新增六边形 %d，改判隐藏 %d，补描述 %d，补解锁条件 %d'
+          % (stat['行调整'], stat['列调整'], stat['新增六边形'], stat['改判隐藏'],
+             stat['补描述'], stat['补解锁条件']))
     print('剩余同格重叠 %d 处' % stat['重叠格'])
     for c in collisions:
         print('   ', c)
