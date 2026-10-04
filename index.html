@@ -240,6 +240,7 @@
         if (typeof window.gateXinghebei === 'function') window.gateXinghebei();
         // 公告区的「发布公告」按钮同理，定义在后面的 IIFE 里
         if (typeof window.refreshAnnStaff === 'function') window.refreshAnnStaff();
+        if (typeof window.refreshAnnouncements === 'function') window.refreshAnnouncements();
         if (modal.style.display === 'flex') modal.style.display = 'none';
       } else {
         userInfo.textContent = '未登录';
@@ -252,6 +253,7 @@
         const xcCard = document.getElementById('cardXinghebei');
         if (xcCard) xcCard.style.display = 'none';
         if (typeof window.refreshAnnStaff === 'function') window.refreshAnnStaff();
+        if (typeof window.refreshAnnouncements === 'function') window.refreshAnnouncements();
         if (modal.style.display !== 'flex') openModal('login');
       }
     }
@@ -526,6 +528,17 @@
         list.innerHTML = html;
       }
 
+      function loadErrText(msg) {
+        // 公告区的错误提示必须分清「登录态过期」和「表没建」——
+        // 两者都表现为「读不到公告」，混成一句话会让人去建一张已经建好的表。
+        var s = String(msg || '');
+        if (/JWT|token|expired|signature/i.test(s)) return '登录态已过期，请重新登录';
+        if (/Could not find the table|does not exist|schema cache|42P01/i.test(s)) {
+          return '公告表还没建：请在 Supabase 跑 ops/supabase_announcements.sql';
+        }
+        return '公告读取失败' + (s ? '：' + s : '');
+      }
+
       async function load() {
         loadErr = '';
         try {
@@ -535,12 +548,11 @@
             list.classList.remove('is-error');
           } else {
             items = [];
-            loadErr = '公告读取失败' + (r && r.msg ? '：' + esc(r.msg) : '') +
-                      '<br><span class="ann-hint">首次使用请先在 Supabase 建 announcements 表（ops/supabase_announcements.sql）</span>';
+            loadErr = loadErrText(r && r.msg);
           }
         } catch (e) {
           items = [];
-          loadErr = '公告读取失败，请检查网络';
+          loadErr = loadErrText(e && e.message);
         }
         render();
       }
@@ -660,12 +672,22 @@
         }
       });
 
-      // 首屏：公告公开可读，不用等登录态；权限判定要等会话恢复完成
-      load();
-      window.refreshAnnStaff();
+      // 首屏不要立刻 load：UEG_SESSION_READY 还在跑续期，此时 localStorage 里的
+      // access token 可能是过期的，PostgREST 会直接拒（JWT expired），
+      // 而公告读策略是公开的 —— 等续期完成（或失败清掉 token）再读就没事。
+      // 读是公开的，所以登录态变化后也要重读一次。
+      window.refreshAnnouncements = function () { return load(); };
       var ready0 = window.UEG_SESSION_READY;
       if (ready0 && typeof ready0.then === 'function') {
-        ready0.then(function () { window.refreshAnnStaff(); }).catch(function () {});
+        ready0.then(function () {
+          window.refreshAnnouncements();
+          window.refreshAnnStaff();
+        }).catch(function () {
+          window.refreshAnnouncements();
+        });
+      } else {
+        load();
+        window.refreshAnnStaff();
       }
     })();
   </script>
