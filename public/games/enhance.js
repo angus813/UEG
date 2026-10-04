@@ -682,7 +682,7 @@
     var parts = [];
     // 官方连线用一个颜色画线、两端标记和环：线 2px、环外径 11px、方块 4x4（相对节点 71px）。
     // 站内节点 76px，按同比例取：线 1.5、环外径 9.2、方块 4x4。
-    var LINE_C = 'rgba(255,255,255,.5)';
+    var LINE_C = 'rgba(58,60,56,.6)';
     var STROKE = 'stroke="' + LINE_C + '" stroke-width="1.5"';
     var PORT = 'fill="none" stroke="' + LINE_C + '" stroke-width="1.5"';
     var CAP_FILL = LINE_C;

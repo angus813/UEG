@@ -10,18 +10,29 @@
   if (window.__uegBgm) return;
 
   var STORE_KEY = 'ueg_bgm_on';
+  var TIME_KEY = 'ueg_bgm_time';
+  var SAVE_MS = 5000;                       // 播放进度落盘间隔
   var VOLUME = 0.4;
   var Z_INDEX = 10000; // 高于启动动画层 .rl-boot（9999），避免首屏点击被挡住
   var scriptEl = document.currentScript;
   var base = scriptEl && scriptEl.src ? scriptEl.src.replace(/[^/]*$/, '') : '';
 
   function remembered() {
-    try { return localStorage.getItem(STORE_KEY) === '1'; } catch (e) { return false; }
+    // 未设置过 = 默认开启；用户手动关掉才记 '0'
+    try { return localStorage.getItem(STORE_KEY) !== '0'; } catch (e) { return true; }
   }
   function remember(on) {
+    try { localStorage.setItem(STORE_KEY, on ? '1' : '0'); } catch (e) {}
+  }
+  function savedTime() {
+    try { var v = parseFloat(localStorage.getItem(TIME_KEY)); return isFinite(v) && v > 0 ? v : 0; }
+    catch (e) { return 0; }
+  }
+  function saveTime() {
     try {
-      if (on) localStorage.setItem(STORE_KEY, '1');
-      else localStorage.removeItem(STORE_KEY);
+      if (audio && !audio.paused && isFinite(audio.currentTime)) {
+        localStorage.setItem(TIME_KEY, String(audio.currentTime));
+      }
     } catch (e) {}
   }
 
@@ -29,6 +40,7 @@
   var loading = false;
   var token = 0;
   var gestureArmed = false;
+  var saveTimer = 0;
 
   var audio = new Audio();
   audio.loop = true;
@@ -97,6 +109,11 @@
     if (loading) return;
     loading = true;
     paint();
+    // 跨页续播：接上上次离开时的进度
+    var st = wantOn ? savedTime() : 0;
+    if (st > 0 && (!audio.currentTime || audio.currentTime < 1)) {
+      try { audio.currentTime = st; } catch (e) {}
+    }
     var my = ++token;
     var p;
     try { p = audio.play(); } catch (err) { p = null; }
@@ -160,6 +177,11 @@
   function mount() {
     document.body.appendChild(btn);
     paint();
+    if (!saveTimer) {
+      saveTimer = setInterval(saveTime, SAVE_MS);
+      window.addEventListener('pagehide', saveTime);
+      window.addEventListener('beforeunload', saveTime);
+    }
     if (wantOn) beginLoad();
   }
   if (document.body) mount();
