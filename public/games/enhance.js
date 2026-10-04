@@ -378,13 +378,18 @@
       if (!t2.pq || !t2.pq.length) roots.push(t2);
     }
     if (roots.length) {
-      var mainX = Math.min.apply(null, roots.map(function (t3) { return pos[t3.id].l; })) - 26;
+      var leftL = Math.min.apply(null, roots.map(function (t3) { return pos[t3.id].l; }));
+      var mainX = leftL - 26;
       var ys = roots.map(function (t3) { return pos[t3.id].y; });
       var yTop = Math.min.apply(null, ys), yBot = Math.max.apply(null, ys);
       parts.push('<line x1="' + mainX + '" y1="' + yTop + '" x2="' + mainX + '" y2="' + yBot + '" ' + STROKE + '/>');
       roots.forEach(function (t4) {
         var p = pos[t4.id];
-        parts.push('<line x1="' + mainX + '" y1="' + p.y + '" x2="' + p.l + '" y2="' + p.y + '" ' + STROKE + '/>');
+        // 接入段只画到最左一列：从主干一路横拉到右侧的列会横穿同行的其他节点
+        // （游戏里主干只服务最左列，其余根节点只保留左侧的左点标记）。
+        if (p.l > mainX + 1 && Math.abs(p.l - leftL) < 1) {
+          parts.push('<line x1="' + mainX + '" y1="' + p.y + '" x2="' + p.l + '" y2="' + p.y + '" ' + STROKE + '/>');
+        }
         parts.push('<circle cx="' + (p.l - PORT_BACK) + '" cy="' + p.y + '" r="4.6" ' + PORT + '/>');
       });
     }
