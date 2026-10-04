@@ -17,6 +17,7 @@
   const DATA = window.SHIPS_DATA || {};
   const OFF = window.OFFICIAL_ENHANCE || {};
   const FX = window.ENHANCE_EFFECTS || {};
+const AT = window.ENHANCE_ADJUST_EFFECTS || {};
   const SHIP_STATS = window.SHIP_STATS || {};
   const STATS_ALIAS = window.SHIP_STATS_ALIAS || {};
   const SYSTEM_STATS = window.SYSTEM_STATS || {};
@@ -164,6 +165,38 @@
   // 战斗机制类效果（集火/拦截/闪避…）不参与属性计算。
   var FX_SKIP = /集火|战略打击|子系统暴击|被武器命中|被导弹|被鱼雷|失效|自动维修|拦截|锁定|目标选择|飞行时间|闪避|反击|警戒|战斗|站位|撤退|隐藏|伪装|干扰|探测|识别/;
 
+  // 把一条 [类型, 动作, 数值] 记到累加器里（官方强化节点与调教节点共用同一套口径）
+  function addEffect(acc, type, action, value) {
+    if (!isFinite(value) || value === 0 || FX_SKIP.test(type)) return;
+    if (action === '比例加成' || action === '比例减少') {
+      var per = (action === '比例减少' ? -value : value);
+      if (/受到|被武器|被命中|被拦截/.test(type)) return;
+      var absV = Math.abs(per), dirV = 1;
+      if (/降低|减少/.test(type)) dirV = /冷却|持续时间|攻击间隔/.test(type) ? 1 : -1;
+      if (/攻城/.test(type)) acc.siege += absV * dirV;
+      else if (/防空/.test(type)) acc.aa += absV * dirV;
+      else if (/冷却/.test(type)) acc.cd += absV * dirV;
+      else if (/暴击/.test(type)) acc.crit += absV * dirV;
+      else if (/持续时间/.test(type)) acc.dur += per;
+      else if (/攻击间隔/.test(type)) acc.atkSpeed += absV * dirV;
+      else if (/频率|每轮攻击|额外射击/.test(type)) acc.freq += absV * dirV;
+      else if (/命中/.test(type)) acc.hit += absV * dirV;
+      else if (/生命|结构值/.test(type)) acc.hp += absV * dirV;
+      else if (/装甲|抗性/.test(type)) {
+        if (/能量/.test(type)) acc.energy += absV * dirV; else acc.phys += absV * dirV;
+      }
+      else if (/巡航/.test(type)) acc.cruise += absV * dirV;
+      else if (/曲速|曲率/.test(type)) acc.warp += absV * dirV;
+      else if (/伤害/.test(type)) acc.dmg += absV * dirV;
+    } else if (action.indexOf('增加') >= 0 || action.indexOf('减少') >= 0) {
+      var add = (action.indexOf('减') >= 0 ? -value : value);
+      if (/装甲|抗性|物理抵抗/.test(type)) {
+        if (/能量/.test(type)) acc.energyAdd += add; else acc.physAdd += add;
+      } else if (/生命|结构值/.test(type)) acc.hpAdd += add;
+      else if (/伤害/.test(type)) acc.dmg += add;
+    }
+  }
+
   function mults() {
     var acc = { dmg: 0, aa: 0, siege: 0, cd: 0, hit: 0, crit: 0, hp: 0, phys: 0, energy: 0,
                 cruise: 0, warp: 0, atkSpeed: 0, freq: 0, dur: 0,
@@ -174,41 +207,23 @@
         var sn = names[i], techs = ship.systems[sn].techs || [];
         for (var j = 0; j < techs.length; j++) {
           var t = techs[j], lv = lvOf(sn, t.id);
+          // 调教（官方 EFFECT_TYPE==ADJUST）：第 N 级的累计加成 = 总值 × N / 等级上限，
+          // 作用于它的目标强化节点，见 ops/gen_adjust_effects.py
+          var at = AT[t.id];
+          if (at && t.tg) {
+            var span = Math.max(1, t.mx || 1);
+            for (var a = 0; a < at.length; a++) {
+              var act = Math.max(0, lv - at[a][0] + 1) / span;
+              if (act > 0) addEffect(acc, at[a][1], at[a][2], Number(at[a][3]) * act);
+            }
+          }
           if (lv <= 0) continue;
           for (var c = 1; c <= lv; c++) acc.invested += costOf(t, baseOf(t) + c);
           var fx = FX[t.id];
           if (!fx) continue;
           var frac = lv / Math.max(1, t.mx || 1);
           for (var k = 0; k < fx.length; k++) {
-            var type = fx[k][0] || '', action = fx[k][1] || '', raw = Number(fx[k][2]);
-            if (!isFinite(raw) || raw === 0 || FX_SKIP.test(type)) continue;
-            if (action === '比例加成' || action === '比例减少') {
-              var per = (action === '比例减少' ? -raw : raw) * frac;
-              if (/受到|被武器|被命中|被拦截/.test(type)) continue;
-              var absV = Math.abs(per), dirV = 1;
-              if (/降低|减少/.test(type)) dirV = /冷却|持续时间|攻击间隔/.test(type) ? 1 : -1;
-              if (/攻城/.test(type)) acc.siege += absV * dirV;
-              else if (/防空/.test(type)) acc.aa += absV * dirV;
-              else if (/冷却/.test(type)) acc.cd += absV * dirV;
-              else if (/暴击/.test(type)) acc.crit += absV * dirV;
-              else if (/持续时间/.test(type)) acc.dur += per;
-              else if (/攻击间隔/.test(type)) acc.atkSpeed += absV * dirV;
-              else if (/频率|每轮攻击|额外射击/.test(type)) acc.freq += absV * dirV;
-              else if (/命中/.test(type)) acc.hit += absV * dirV;
-              else if (/生命|结构值/.test(type)) acc.hp += absV * dirV;
-              else if (/装甲|抗性/.test(type)) {
-                if (/能量/.test(type)) acc.energy += absV * dirV; else acc.phys += absV * dirV;
-              }
-              else if (/巡航/.test(type)) acc.cruise += absV * dirV;
-              else if (/曲速|曲率/.test(type)) acc.warp += absV * dirV;
-              else if (/伤害/.test(type)) acc.dmg += absV * dirV;
-            } else if (action.indexOf('增加') >= 0 || action.indexOf('减少') >= 0) {
-              var add = (action.indexOf('减') >= 0 ? -raw : raw) * frac;
-              if (/装甲|抗性|物理抵抗/.test(type)) {
-                if (/能量/.test(type)) acc.energyAdd += add; else acc.physAdd += add;
-              } else if (/生命|结构值/.test(type)) acc.hpAdd += add;
-              else if (/伤害/.test(type)) acc.dmg += add;
-            }
+            addEffect(acc, fx[k][0] || '', fx[k][1] || '', Number(fx[k][2]) * frac);
           }
         }
       }
