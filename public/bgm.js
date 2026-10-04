@@ -11,6 +11,7 @@
 
   var STORE_KEY = 'ueg_bgm_on';
   var VOLUME = 0.4;
+  var Z_INDEX = 10000; // 高于启动动画层 .rl-boot（9999），避免首屏点击被挡住
   var scriptEl = document.currentScript;
   var base = scriptEl && scriptEl.src ? scriptEl.src.replace(/[^/]*$/, '') : '';
 
@@ -24,16 +25,21 @@
     } catch (e) {}
   }
 
+  var wantOn = remembered();
+  var loading = false;
+  var token = 0;
+  var gestureArmed = false;
+
   var audio = new Audio();
   audio.loop = true;
-  audio.preload = 'none';
+  audio.preload = wantOn ? 'auto' : 'none'; // 已开启过的访客提前缓冲，点击即出声
   audio.volume = VOLUME;
   audio.src = base + 'audio/bgm.mp3';
   window.__uegBgm = { base: base, audio: audio };
 
   var style = document.createElement('style');
   style.textContent = [
-    '.ueg-bgm{position:fixed;right:16px;bottom:16px;z-index:9998;width:40px;height:40px;',
+    '.ueg-bgm{position:fixed;right:16px;bottom:16px;z-index:' + Z_INDEX + ';width:40px;height:40px;',
     'padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.28);',
     'background:rgba(28,32,34,.82);color:#c9d3d6;cursor:pointer;display:flex;',
     'align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.35);',
@@ -57,66 +63,104 @@
   btn.className = 'ueg-bgm';
   btn.innerHTML = ICON;
 
-  function paint(on, loading) {
-    btn.classList.toggle('is-on', !!on);
-    btn.classList.toggle('is-loading', !!loading);
-    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    btn.setAttribute('aria-label', on ? '暂停背景音乐' : '播放背景音乐');
-    btn.title = on ? '暂停背景音乐' : '播放背景音乐';
+  function paint() {
+    btn.classList.toggle('is-on', wantOn);
+    btn.classList.toggle('is-loading', loading);
+    btn.setAttribute('aria-pressed', wantOn ? 'true' : 'false');
+    var label = wantOn ? (loading ? '正在加载背景音乐' : '暂停背景音乐') : '播放背景音乐';
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
   }
 
-  var armed = false;
+  function detachGesture() {
+    document.removeEventListener('pointerdown', onFirstGesture, true);
+    document.removeEventListener('keydown', onFirstGesture, true);
+    document.removeEventListener('touchstart', onFirstGesture, true);
+    gestureArmed = false;
+  }
+
+  function onFirstGesture(e) {
+    detachGesture();
+    if (btn.contains(e.target)) return; // 按钮自身交给 click 处理
+    if (wantOn && audio.paused) beginLoad();
+  }
+
   function armFirstGesture() {
-    if (armed) return;
-    armed = true;
-    var fire = function () {
-      document.removeEventListener('pointerdown', fire, true);
-      document.removeEventListener('keydown', fire, true);
-      document.removeEventListener('touchstart', fire, true);
-      armed = false;
-      if (remembered() && audio.paused) start();
-    };
-    document.addEventListener('pointerdown', fire, true);
-    document.addEventListener('keydown', fire, true);
-    document.addEventListener('touchstart', fire, true);
+    if (gestureArmed) return;
+    gestureArmed = true;
+    document.addEventListener('pointerdown', onFirstGesture, true);
+    document.addEventListener('keydown', onFirstGesture, true);
+    document.addEventListener('touchstart', onFirstGesture, true);
   }
 
-  function start() {
-    paint(true, true);
-    var p = audio.play();
+  function beginLoad() {
+    if (loading) return;
+    loading = true;
+    paint();
+    var my = ++token;
+    var p;
+    try { p = audio.play(); } catch (err) { p = null; }
     if (p && p.then) {
       p.then(function () {
-        remember(true);
-        paint(true, false);
+        if (my !== token) return;
+        loading = false;
+        paint();
       }).catch(function () {
-        paint(false, false);
-        armFirstGesture();
+        if (my !== token) return;
+        loading = false;
+        paint();
+        armFirstGesture(); // 被浏览器拦下：保留意图，等第一次交互再试
       });
     } else {
-      remember(true);
-      paint(true, false);
+      loading = false;
+      paint();
     }
   }
 
-  function stop() {
-    audio.pause();
-    remember(false);
-    paint(false, false);
+  function toggle(on) {
+    wantOn = on;
+    if (on) {
+      remember(true);
+      beginLoad();
+    } else {
+      token++;
+      loading = false;
+      remember(false);
+      try { audio.pause(); } catch (e) {}
+      paint();
+    }
   }
 
-  btn.addEventListener('click', function () {
-    if (audio.paused) start();
-    else stop();
+  btn.addEventListener('click', function () { toggle(!wantOn); });
+
+  audio.addEventListener('playing', function () {
+    loading = false;
+    paint();
+  });
+
+  audio.addEventListener('waiting', function () {
+    if (wantOn && audio.currentTime > 0 && audio.paused === false) {
+      loading = true;
+      paint();
+    }
+  });
+
+  audio.addEventListener('progress', function () {
+    if (!loading || !audio.duration || !audio.buffered.length) return;
+    var pct = Math.min(99, Math.round(audio.buffered.end(audio.buffered.length - 1) / audio.duration * 100));
+    btn.title = '正在加载背景音乐 ' + pct + '%';
+  });
+
+  audio.addEventListener('error', function () {
+    loading = false;
+    paint();
+    btn.title = '背景音乐加载失败，点击重试';
   });
 
   function mount() {
     document.body.appendChild(btn);
-    if (remembered()) {
-      paint(true, false);
-      if (audio.paused) start();
-    } else {
-      paint(false, false);
-    }
+    paint();
+    if (wantOn) beginLoad();
   }
   if (document.body) mount();
   else document.addEventListener('DOMContentLoaded', mount);
