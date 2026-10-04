@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="public/admin.css">
   <link rel="stylesheet" href="public/rhine-fonts.css" media="print" onload="this.media='all'"> <!-- MiSans（异步加载，不阻塞首屏） -->
   <noscript><link rel="stylesheet" href="public/rhine-fonts.css"></noscript> <!-- MiSans webfont -->
-  <link rel="stylesheet" href="public/rhine.css"> <!-- Rhine Lab Archive 设计系统 -->
+  <link rel="stylesheet" href="public/rhine.css?v=20261005a"> <!-- Rhine Lab Archive 设计系统 -->
   <link rel="stylesheet" href="public/rhine-motion.css"> <!-- 动效层 -->
   <!-- 页面视觉统一由 public/rhine.css 设计系统提供 -->
   <script src="public/rhine-motion.js"></script>
@@ -21,39 +21,68 @@
       <button class="btn-user" id="btnLogout" style="display:none;">注销</button>
     </div>
 
-    <div class="menu-view">
-      <div class="menu-title">
+    <div class="home-layout">
+      <section class="home-left">
+        <div class="menu-title">
 <span class="fm">拉格朗日UEG公会官网</span>
-      </div>
-      <div class="menu-subtitle">UNITED EARTH GOVNMENT 3 YEARS</div>
-      <div class="menu-options">
-        <!-- 链接到 public/ 下的页面 -->
-        <a href="public/xinghebei.html" class="menu-card" id="cardXinghebei">
-          <div class="menu-card-icon"></div>
-          <div class="menu-card-text">星河杯</div>
-          <div class="menu-card-desc">舰队指标选择器</div>
-        </a>
-        <a href="public/mata.html" class="menu-card">
-          <div class="menu-card-icon"></div>
-          <div class="menu-card-text">MATA</div>
-          <div class="menu-card-desc">自动化助手 · 素材共享 · 排行榜</div>
-        </a>
-        <a href="public/games.html" class="menu-card">
-          <div class="menu-card-icon"></div>
-          <div class="menu-card-text">小游戏</div>
-          <div class="menu-card-desc">娱乐模块</div>
-        </a>
-        <div class="menu-card" onclick="alert('纪念堂建设中')">
-          <div class="menu-card-icon"></div>
-          <div class="menu-card-text">纪念堂</div>
-          <div class="menu-card-desc">历史记录与成就</div>
         </div>
-        <a href="public/guild.html" class="menu-card">
-          <div class="menu-card-icon"></div>
-          <div class="menu-card-text">公会</div>
-          <div class="menu-card-desc">组织与协作</div>
-        </a>
-      </div>
+        <div class="menu-subtitle">UNITED EARTH GOVNMENT 3 YEARS</div>
+        <div class="menu-options">
+          <!-- 链接到 public/ 下的页面 -->
+          <a href="public/xinghebei.html" class="menu-card" id="cardXinghebei">
+            <div class="menu-card-icon"></div>
+            <div class="menu-card-text">星河杯</div>
+            <div class="menu-card-desc">舰队指标选择器</div>
+          </a>
+          <a href="public/mata.html" class="menu-card">
+            <div class="menu-card-icon"></div>
+            <div class="menu-card-text">MATA</div>
+            <div class="menu-card-desc">自动化助手 · 素材共享 · 排行榜</div>
+          </a>
+          <a href="public/games.html" class="menu-card">
+            <div class="menu-card-icon"></div>
+            <div class="menu-card-text">小游戏</div>
+            <div class="menu-card-desc">娱乐模块</div>
+          </a>
+          <div class="menu-card" onclick="alert('纪念堂建设中')">
+            <div class="menu-card-icon"></div>
+            <div class="menu-card-text">纪念堂</div>
+            <div class="menu-card-desc">历史记录与成就</div>
+          </div>
+          <a href="public/guild.html" class="menu-card">
+            <div class="menu-card-icon"></div>
+            <div class="menu-card-text">公会</div>
+            <div class="menu-card-desc">组织与协作</div>
+          </a>
+        </div>
+      </section>
+
+      <aside class="home-right">
+        <div class="ann-head">
+          <h2 class="ann-title">更新公告</h2>
+          <div class="ann-head-btns">
+            <button class="btn-user ann-refresh-btn" id="btnAnnRefresh" title="重新读取公告">刷新</button>
+            <button class="btn-user ann-compose-btn" id="btnAnnCompose" style="display:none;">发布公告</button>
+          </div>
+        </div>
+
+        <form class="ann-form" id="annForm" style="display:none;">
+          <input type="text" class="modal-input ann-input" id="annTitle" placeholder="标题（60 字以内）" maxlength="60" autocomplete="off">
+          <textarea class="modal-input ann-input ann-textarea" id="annBody" placeholder="正文（可留空，最多 2000 字）" maxlength="2000"></textarea>
+          <div class="ann-flags">
+            <label class="ann-flag"><input type="checkbox" id="annPinned"> 置顶</label>
+            <label class="ann-flag ann-flag-danger"><input type="checkbox" id="annImportant"> 重要</label>
+            <span class="ann-form-spacer"></span>
+            <button type="button" class="btn-user" id="annCancel">取消</button>
+            <button type="submit" class="btn-user ann-submit" id="annSubmit">发布</button>
+          </div>
+          <div class="ann-form-msg" id="annFormMsg"></div>
+        </form>
+
+        <div class="ann-list" id="annList">
+          <div class="ann-empty">公告加载中…</div>
+        </div>
+      </aside>
     </div>
 
     <!-- 登录/注册模态框 -->
@@ -88,7 +117,7 @@
 
   <!-- 引入核心模块（根目录） -->
   <script src="config.js"></script>
-  <script src="github-db.js"></script>
+  <script src="github-db.js?v=20261005a"></script>
 
   <script>
     // ==================== 用户状态管理 ====================
@@ -209,6 +238,8 @@
         const xcCard = document.getElementById('cardXinghebei');
         if (xcCard) xcCard.style.display = '';
         if (typeof window.gateXinghebei === 'function') window.gateXinghebei();
+        // 公告区的「发布公告」按钮同理，定义在后面的 IIFE 里
+        if (typeof window.refreshAnnStaff === 'function') window.refreshAnnStaff();
         if (modal.style.display === 'flex') modal.style.display = 'none';
       } else {
         userInfo.textContent = '未登录';
@@ -220,6 +251,7 @@
         // 两者之间有窗口期会让「登录框弹着、卡片还挂着」。
         const xcCard = document.getElementById('cardXinghebei');
         if (xcCard) xcCard.style.display = 'none';
+        if (typeof window.refreshAnnStaff === 'function') window.refreshAnnStaff();
         if (modal.style.display !== 'flex') openModal('login');
       }
     }
@@ -395,6 +427,247 @@
       } catch (e) {}
     };
     window.gateXinghebei();
+  </script>
+
+  <script>
+    // ==================== 更新公告 ====================
+    // 权限口径与星河杯门禁一致：is_admin / is_owner / is_official。
+    // 前端判断只管 UI，真正闸门是 announcements 表上的 RLS（public.is_staff()）。
+    (function () {
+      var list = document.getElementById('annList');
+      var form = document.getElementById('annForm');
+      var btnCompose = document.getElementById('btnAnnCompose');
+      var titleEl = document.getElementById('annTitle');
+      var bodyEl = document.getElementById('annBody');
+      var pinnedEl = document.getElementById('annPinned');
+      var importantEl = document.getElementById('annImportant');
+      var msgEl = document.getElementById('annFormMsg');
+      var submitEl = document.getElementById('annSubmit');
+      if (!list || !form) return;
+
+      var items = [];
+      var staff = false;
+      var editingId = null;
+      var loadErr = '';
+
+      // 公告内容是数据库里的文本，一律按不可信处理：拼进 HTML 前转义
+      function esc(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      function fmtDate(iso) {
+        var dt = new Date(iso);
+        return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+               String(dt.getDate()).padStart(2, '0');
+      }
+
+      function ago(iso) {
+        var t = Date.parse(iso);
+        if (isNaN(t)) return '';
+        var d = (Date.now() - t) / 1000;
+        // 时钟不同步（客户端时间偏后、或补录了未来的公告）会算出负值，
+        // 直接返回日期而不是「刚刚」——「刚刚」会被误读成刚发布。
+        if (d < 0) return fmtDate(iso);
+        if (d < 60) return '刚刚';
+        if (d < 3600) return Math.floor(d / 60) + ' 分钟前';
+        if (d < 86400) return Math.floor(d / 3600) + ' 小时前';
+        if (d < 86400 * 7) return Math.floor(d / 86400) + ' 天前';
+        return fmtDate(iso);
+      }
+
+      function showFormMsg(text) {
+        msgEl.textContent = text || '';
+        msgEl.classList.toggle('is-error', !!text);
+      }
+
+      function render() {
+        if (loadErr) {
+          // 读失败要显式说出来，不能落到下面的空态 ——
+          // 「读失败」和「还没发过公告」在界面上长得一样，管理员会以为表没建。
+          list.innerHTML = '<div class="ann-empty is-error">' + loadErr + '</div>';
+          return;
+        }
+        if (!items.length) {
+          list.innerHTML = '<div class="ann-empty">暂无公告</div>';
+          return;
+        }
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+          var a = items[i];
+          var cls = 'ann-item' + (a.important ? ' is-important' : '');
+          html += '<article class="' + cls + '" data-id="' + esc(a.id) + '">';
+          html += '<div class="ann-item-head">';
+          if (a.pinned) html += '<span class="ann-tag ann-tag-pin">置顶</span>';
+          if (a.important) html += '<span class="ann-tag ann-tag-danger">重要</span>';
+          html += '<h3 class="ann-item-title">' + esc(a.title) + '</h3>';
+          html += '</div>';
+          if (a.body) {
+            // 正文按行断行：白空格处理防止连续空行撑出大间距
+            var lines = String(a.body).split(/\r?\n/).filter(function (l) { return l.trim(); });
+            html += '<div class="ann-item-body">' +
+              lines.map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') + '</div>';
+          }
+          html += '<div class="ann-item-foot"><span>' + esc(a.author || '管理员') + '</span>' +
+                  '<span>' + esc(ago(a.created_at)) +
+                  (a.updated_at && Date.parse(a.updated_at) - Date.parse(a.created_at) > 60000 ? ' · 已编辑' : '') +
+                  '</span></div>';
+          if (staff) {
+            html += '<div class="ann-item-ops">' +
+              '<button type="button" data-ann-act="edit" data-id="' + esc(a.id) + '">编辑</button>' +
+              '<button type="button" data-ann-act="pin" data-id="' + esc(a.id) + '">' +
+                (a.pinned ? '取消置顶' : '置顶') + '</button>' +
+              '<button type="button" data-ann-act="del" data-id="' + esc(a.id) + '">删除</button>' +
+              '</div>';
+          }
+          html += '</article>';
+        }
+        list.innerHTML = html;
+      }
+
+      async function load() {
+        loadErr = '';
+        try {
+          var r = await DB.getAnnouncements();
+          if (r && r.code === 200) {
+            items = r.data || [];
+            list.classList.remove('is-error');
+          } else {
+            items = [];
+            loadErr = '公告读取失败' + (r && r.msg ? '：' + esc(r.msg) : '') +
+                      '<br><span class="ann-hint">首次使用请先在 Supabase 建 announcements 表（ops/supabase_announcements.sql）</span>';
+          }
+        } catch (e) {
+          items = [];
+          loadErr = '公告读取失败，请检查网络';
+        }
+        render();
+      }
+
+      function openForm(item) {
+        editingId = item ? item.id : null;
+        titleEl.value = item ? item.title : '';
+        bodyEl.value = item ? item.body : '';
+        pinnedEl.checked = item ? !!item.pinned : false;
+        importantEl.checked = item ? !!item.important : false;
+        submitEl.textContent = item ? '保存' : '发布';
+        showFormMsg('');
+        form.style.display = '';
+        titleEl.focus();
+      }
+
+      function closeForm() {
+        editingId = null;
+        form.style.display = 'none';
+        titleEl.value = '';
+        bodyEl.value = '';
+        pinnedEl.checked = false;
+        importantEl.checked = false;
+        // 成功提交后 closeForm 先跑、失败分支的重置文案在其后，
+        // 不在这里清掉会把「保存中…」留在按钮上
+        submitEl.textContent = '发布';
+        submitEl.disabled = false;
+        showFormMsg('');
+      }
+
+      // 登录态或权限变化时由 updateUI 调过来：决定「发布公告」按钮是否出现
+      window.refreshAnnStaff = async function refreshAnnStaff() {
+        staff = false;
+        if (!getCurrentUser()) {
+          btnCompose.style.display = 'none';
+          closeForm();
+          render();
+          return;
+        }
+        var ready = window.UEG_SESSION_READY;
+        if (ready) { try { await ready; } catch (e) {} }
+        try { staff = await DB.isStaff(); } catch (e) { staff = false; }
+        btnCompose.style.display = staff ? '' : 'none';
+        if (!staff) closeForm();
+        render();
+      };
+
+      btnCompose.addEventListener('click', function () {
+        if (!staff) { showError('仅管理员可发布公告', 2000); return; }
+        closeForm();
+        openForm(null);
+      });
+      document.getElementById('btnAnnRefresh').addEventListener('click', function () {
+        load();
+      });
+      document.getElementById('annCancel').addEventListener('click', closeForm);
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        if (!staff) { showFormMsg('仅管理员可发布公告'); return; }
+        if (submitEl.disabled) return;
+        submitEl.disabled = true;
+        submitEl.textContent = editingId ? '保存中…' : '发布中…';
+        var payload = {
+          title: titleEl.value,
+          body: bodyEl.value,
+          pinned: pinnedEl.checked,
+          important: importantEl.checked
+        };
+        var r = editingId
+          ? await DB.updateAnnouncement(editingId, payload)
+          : await DB.createAnnouncement(payload);
+        submitEl.disabled = false;
+        if (r && r.code === 200) {
+          closeForm();
+          await load();
+        } else {
+          submitEl.textContent = editingId ? '保存' : '发布';
+          showFormMsg((r && r.msg) || '操作失败');
+        }
+      });
+
+      list.addEventListener('click', async function (e) {
+        var btn = e.target.closest('[data-ann-act]');
+        if (!btn || !staff) return;
+        var id = btn.getAttribute('data-id');
+        var act = btn.getAttribute('data-ann-act');
+        var idx = items.findIndex(function (a) { return a.id === id; });
+        if (idx < 0) return;
+        var target = items[idx];
+
+        if (act === 'edit') {
+          openForm({ id: target.id, title: target.title, body: target.body,
+                     pinned: target.pinned, important: target.important });
+          form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          return;
+        }
+        if (act === 'pin') {
+          btn.disabled = true;
+          var rp = await DB.updateAnnouncement(id, { pinned: !target.pinned });
+          btn.disabled = false;
+          if (rp && rp.code === 200) await load();
+          else showError(rp.msg || '操作失败', 2000);
+          return;
+        }
+        if (act === 'del') {
+          if (!confirm('确定删除公告「' + target.title + '」？该操作不可撤销。')) return;
+          btn.disabled = true;
+          var rd = await DB.deleteAnnouncement(id);
+          btn.disabled = false;
+          if (rd && rd.code === 200) {
+            if (editingId === id) closeForm();
+            await load();
+          } else {
+            showError(rd.msg || '操作失败', 2000);
+          }
+        }
+      });
+
+      // 首屏：公告公开可读，不用等登录态；权限判定要等会话恢复完成
+      load();
+      window.refreshAnnStaff();
+      var ready0 = window.UEG_SESSION_READY;
+      if (ready0 && typeof ready0.then === 'function') {
+        ready0.then(function () { window.refreshAnnStaff(); }).catch(function () {});
+      }
+    })();
   </script>
 </body>
 </html>

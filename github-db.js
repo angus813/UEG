@@ -318,6 +318,85 @@
       return { code: 200, msg: '删除成功' };
     },
 
+    // ---- 更新公告 ----
+    // 写侧权限由表上的 RLS 把关（public.is_staff()：is_admin / is_owner / is_official），
+    // 前面的 isStaff() 只是提前拦一道、避免用户点了没反应；越权请求会被 PostgREST 拒掉。
+    async getAnnouncements() {
+      const r = await this.rest('/rest/v1/announcements?select=*&order=pinned.desc,created_at.desc&limit=50');
+      if (r.code !== 200) return { code: r.code, msg: r.msg || '读取失败' };
+      return { code: 200, data: Array.isArray(r.data) ? r.data : [] };
+    },
+    async isStaff() {
+      const name = currentUsername();
+      if (!name) return false;
+      try {
+        const r = await this.rest('/rest/v1/users?select=is_admin,is_owner,is_official&username=eq.' + enc(name));
+        if (r.code === 200 && Array.isArray(r.data) && r.data.length) {
+          const u = r.data[0];
+          return !!(u.is_admin || u.is_owner || u.is_official);
+        }
+      } catch (e) {}
+      const cu = JSON.parse(localStorage.getItem('ueg_current_user') || 'null');
+      return !!(cu && (cu.is_admin || cu.is_owner || cu.is_official));
+    },
+    async createAnnouncement(data) {
+      data = data || {};
+      const title = String(data.title || '').trim();
+      if (!title) return { code: 400, msg: '标题不能为空' };
+      if (title.length > 60) return { code: 400, msg: '标题最多 60 字' };
+      const body = String(data.body || '');
+      if (body.length > 2000) return { code: 400, msg: '正文最多 2000 字' };
+      const row = {
+        title: title,
+        body: body,
+        author: currentUsername() || '管理员',
+        pinned: !!data.pinned,
+        important: !!data.important
+      };
+      const r = await this.rest('/rest/v1/announcements', {
+        method: 'POST', body: row, prefer: 'return=representation'
+      });
+      if (r.code !== 200) return { code: r.code, msg: '发布失败: ' + (r.msg || '无权限') };
+      return { code: 200, msg: '发布成功', data: r.data && r.data[0] ? r.data[0] : row };
+    },
+    async updateAnnouncement(id, data) {
+      if (!id) return { code: 400, msg: '缺少 id' };
+      data = data || {};
+      const patch = {};
+      if ('title' in data) {
+        const t = String(data.title || '').trim();
+        if (!t) return { code: 400, msg: '标题不能为空' };
+        if (t.length > 60) return { code: 400, msg: '标题最多 60 字' };
+        patch.title = t;
+      }
+      if ('body' in data) {
+        const b = String(data.body || '');
+        if (b.length > 2000) return { code: 400, msg: '正文最多 2000 字' };
+        patch.body = b;
+      }
+      if ('pinned' in data) patch.pinned = !!data.pinned;
+      if ('important' in data) patch.important = !!data.important;
+      if (!Object.keys(patch).length) return { code: 400, msg: '无更新内容' };
+      patch.updated_at = new Date().toISOString();
+      const r = await this.rest('/rest/v1/announcements?id=eq.' + enc(id), {
+        method: 'PATCH', body: patch, prefer: 'return=representation'
+      });
+      if (r.code !== 200 || !(Array.isArray(r.data) && r.data.length)) {
+        return { code: 403, msg: '修改失败（仅管理员可改）' };
+      }
+      return { code: 200, msg: '已保存', data: r.data[0] };
+    },
+    async deleteAnnouncement(id) {
+      if (!id) return { code: 400, msg: '缺少 id' };
+      const r = await this.rest('/rest/v1/announcements?id=eq.' + enc(id), {
+        method: 'DELETE', prefer: 'return=representation'
+      });
+      if (r.code !== 200 || !(Array.isArray(r.data) && r.data.length)) {
+        return { code: 403, msg: '删除失败（仅管理员可删）' };
+      }
+      return { code: 200, msg: '已删除' };
+    },
+
     // ---- 舰船数据 ----
     async getShips() {
       const r = await this.rest('/rest/v1/ships_data?select=data&id=eq.default');
