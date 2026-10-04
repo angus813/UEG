@@ -93,8 +93,13 @@ def links_of(techs):
         if cid in hexids:
             continue                       # 六边形节点只参与链线，不画配置里的前置线
         for p in (t.get('pq') or []):
-            if p[0] in tree and p[0] not in hexids and (p[0], cid) not in out:
-                out.append((p[0], cid))
+            if p[0] not in tree or p[0] in hexids or (p[0], cid) in out:
+                continue
+            par = tree[p[0]]
+            # 与 drawLines 同口径：跨 2 列以上且跨行的前置线不画
+            if abs((t.get('cl') or 0) - (par.get('cl') or 0)) >= 2 and t.get('rw') != par.get('rw'):
+                continue
+            out.append((p[0], cid))
     return out
 
 

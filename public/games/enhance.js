@@ -682,7 +682,7 @@
     var parts = [];
     // 官方连线用一个颜色画线、两端标记和环：线 2px、环外径 11px、方块 4x4（相对节点 71px）。
     // 站内节点 76px，按同比例取：线 1.5、环外径 9.2、方块 4x4。
-    var LINE_C = 'rgba(58,60,56,.6)';
+    var LINE_C = 'rgba(255,255,255,.5)';
     var STROKE = 'stroke="' + LINE_C + '" stroke-width="1.5"';
     var PORT = 'fill="none" stroke="' + LINE_C + '" stroke-width="1.5"';
     var CAP_FILL = LINE_C;
@@ -749,7 +749,8 @@
     //   相邻行 + 相邻列   → 两个面对面的角直接连
     //   同列 + 相邻行     → 行缝里一条竖线
     //   其余（跨多行/跨多列）→ 沿列缝竖走、沿行缝横穿的折线
-    // 六边形节点只参与底部那排的链线，不画配置里的前置线。
+    // 跨 2 列以上且跨行的前置线不画：兜底折线要在行缝里横穿整段，会压过别的节点
+    // 并与相邻斜线交叉（全站只有 603010209→603010206 一条，见 ST59级·防御型/舰首炮台系统）。
     var hexIds = {};
     for (var h0 = 0; h0 < list.length; h0++) if (list[h0].ul === -1) hexIds[list[h0].id] = 1;
     var pqSet = {};
@@ -757,8 +758,13 @@
       var t = list[j];
       if (!t.pq || t.ul === -1) continue;
       for (var m = 0; m < t.pq.length; m++) {
-        if (hexIds[t.pq[m][0]]) continue;
-        pqSet[t.pq[m][0] + '>' + t.id] = 1;
+        var pid = t.pq[m][0];
+        if (hexIds[pid]) continue;
+        var pr = techById(list, pid);
+        if (!pr) continue;
+        if (pr.cl !== undefined && t.cl !== undefined &&
+            Math.abs((t.cl || 0) - (pr.cl || 0)) >= 2 && t.rw !== pr.rw) continue;
+        pqSet[pid + '>' + t.id] = 1;
       }
     }
     Object.keys(pqSet).forEach(function (k) {
