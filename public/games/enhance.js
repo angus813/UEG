@@ -69,6 +69,7 @@
   function absLv(t) { return baseOf(t) + lvOf(sysName, t.id); }
   function absMax(t) { return baseOf(t) + t.mx; }
   function costOf(t, abs) {
+    if (!t.ct || !t.ct.length) return 0;      // 调教节点不吃科技点，没有代价表
     var i = abs - baseOf(t) - 1;
     if (i < 0 || i >= t.ct.length) return 0;
     var c = t.ct[i];
@@ -283,39 +284,121 @@
     return bad.length ? bad.join('、') : '';
   }
 
-  // ---------- 调教登记 ----------
-  // 官方六边形（adjust）项要绑定一门满足条件的武器技术才能加点。
-  // 服务端不下发武器技术表（稀有度/类型只有配置里的要求），站内改为手工登记：
-  // 记下用了哪门技术及其稀有度、类型，再按配置里的 uq 校验。
-  const LS_HEX = 'ueg_hex_tech';
-  var hexTech = {};
+  // ---------- 系统调校 / 调教 ----------
+  // 照官方 bp_extend_system_view + system_extend_utils：
+  //   扩展解锁（extend）：ENHANCE 且 UNLOCK_TYPE != 0 的节点，花武器技术解锁。
+  //     UNLOCK_COST_RARITY 每个 ';' 分组 = 一条途径，形如 '36,1,2,3'：
+  //     稀有度 ∈ {1,2,3} 的武器技术，ENHANCE_VALUE 之和要达到 36；多组任一满足即可。
+  //   调教（adjust）：EFFECT_TYPE == 2 的节点，花武器技术掷骰提升目标强化节点，
+  //     目标 = ADJUST_ENHANCE_INDEX，即同系统内「系统 id × 100 + 索引」。
+  //   钥匙：效果 EFFECT_ID == EFFECT_SHIP_BLUEPRINT_ENHANCE_ADJUST(2082) 的节点
+  //     （即「系统调校」），未解锁时本系统不能调教（check_tuning_available）。
+  // 服务端不下发武器技术表（ENHANCE_VALUE 只有配置里的门槛），站内手工登记：
+  // 每条记 名称/稀有度/类型/价值/数量，按配置校验。
+  const LS_HEX = 'ueg_hex_tech';        // 舰|系统|节点 -> 武器技术清单
+  const LS_HEXFAIL = 'ueg_hex_fail';    // 舰|系统|节点 -> 连续调教失败次数
+  // 官方 configdata 里的硬常量
+  const ADJ_FAIL_PROB_ADD = 5;                       // ENHANCE_ADJUST_FAILD_PROB_ADD：每失败一次 +5%
+  const ADJ_RARITY_PROB_ADD = { 4: 5, 5: 15 };      // SYSTEM_ENHANCE_ADJUST_RARITY_PROB_ADD
+  const ADJ_MAX_RARITY = 5;                         // ADJUST_WEAPON_TECH_MAX_RARITY
+  var hexTech = {}, hexFail = {};
   try { hexTech = JSON.parse(localStorage.getItem(LS_HEX) || '{}') || {}; } catch (e) { hexTech = {}; }
+  try { hexFail = JSON.parse(localStorage.getItem(LS_HEXFAIL) || '{}') || {}; } catch (e) { hexFail = {}; }
   function saveHex() {
     try { localStorage.setItem(LS_HEX, JSON.stringify(hexTech)); } catch (e) {}
+    try { localStorage.setItem(LS_HEXFAIL, JSON.stringify(hexFail)); } catch (e) {}
   }
   function hexKey(t) { return shipKey + '|' + sysName + '|' + t.id; }
-  function hexOf(t) { return hexTech[hexKey(t)] || null; }
-  function hexTypes(t) { return (t.uq && t.uq.ty) || []; }
-  function hexNeedRarity(t) {
-    var uq = t.uq || {};
-    if (uq.ar !== undefined && uq.ar !== null) return [String(uq.ar)];
-    if (uq.ways) {
-      var out = [];
-      for (var i = 0; i < uq.ways.length; i++)
-        for (var j = 0; j < uq.ways[i].r.length; j++)
-          if (out.indexOf(String(uq.ways[i].r[j])) < 0) out.push(String(uq.ways[i].r[j]));
-      return out;
+  function hexList(t) { var v = hexTech[hexKey(t)]; return Array.isArray(v) ? v : []; }
+  function hexSetList(t, list) {
+    var k = hexKey(t);
+    if (!list || !list.length) delete hexTech[k]; else hexTech[k] = list;
+  }
+  function hexFails(t) { return Number(hexFail[hexKey(t)]) || 0; }
+  function hexSetFails(t, n) {
+    var k = hexKey(t);
+    if (!n) delete hexFail[k]; else hexFail[k] = n;
+  }
+  // 节点类型：key = 系统调校钥匙，adjust = 调教节点，extend = 其它扩展解锁节点
+  function hexKind(t) {
+    if (t.ul !== -1) return '';
+    if (t.tg) return 'adjust';
+    if (t.ky) return 'key';
+    return 'extend';
+  }
+  // 价值 = 数量 × ENHANCE_VALUE
+  function hexValue(list, onlyRarity) {
+    var s = 0;
+    for (var i = 0; i < list.length; i++) {
+      var it = list[i];
+      if (onlyRarity && onlyRarity.indexOf(String(it.r)) < 0) continue;
+      s += (Number(it.v) || 0) * Math.max(1, Number(it.c) || 1);
     }
+    return s;
+  }
+  function hexTypeBad(list, types) {
+    if (!types || !types.length) return null;
+    for (var i = 0; i < list.length; i++)
+      if (types.indexOf(String(list[i].t)) < 0)
+        return '武器技术类型需为 ' + types.join(' / ') + '（登记的是 ' + list[i].t + '）';
     return null;
   }
-  // 返回 null 表示登记合格；否则返回不合格的原因
-  function hexCheck(t, r) {
+  // 扩展解锁校验：返回 null 表示合格
+  function hexUnlockCheck(t, list) {
+    if (!list.length) return '未登记武器技术';
     var uq = t.uq || {};
-    var ty = hexTypes(t), need = hexNeedRarity(t);
-    if (!ty.length && !need) return null;
-    if (!r || !r.name) return '未登记武器技术';
-    if (ty.length && ty.indexOf(String(r.type)) < 0) return '武器技术类型需为 ' + ty.join(' / ');
-    if (need && need.indexOf(String(r.rarity)) < 0) return '武器技术稀有度需为 ' + need.join(' / ');
+    var bad = hexTypeBad(list, uq.ty);
+    if (bad) return bad;
+    var ways = uq.ways || [];
+    if (!ways.length) return null;
+    for (var i = 0; i < ways.length; i++) {
+      var w = ways[i];
+      if (hexValue(list, w.r) >= Number(w.v)) return null;
+    }
+    return '未达解锁门槛（' + ways.map(function (w) {
+      return '稀有度 ' + w.r.join('/') + '、总价值 ≥ ' + w.v;
+    }).join('；或 ') + '），当前总价值 ' + hexValue(list);
+  }
+  // 调教校验：返回 null 表示合格
+  function hexAdjustCheck(t, list) {
+    if (!list.length) return '未登记武器技术';
+    var rl = t.rl || [];
+    for (var i = 0; i < list.length; i++) {
+      if (rl.length && rl.indexOf(String(list[i].r)) < 0)
+        return '武器技术稀有度需为 ' + rl.join(' / ') + '（登记的是 ' + list[i].r + '）';
+      if (Number(list[i].r) > ADJ_MAX_RARITY)
+        return '武器技术稀有度不能超过 ' + ADJ_MAX_RARITY;
+    }
+    var bad = hexTypeBad(list, t.ty2);
+    if (bad) return bad;
+    if (t.av !== undefined && t.av !== null && hexValue(list) < Number(t.av))
+      return '武器技术总价值 ' + hexValue(list) + ' < 门槛 ' + t.av;
+    return null;
+  }
+  // 官方 refresh_success_ratio：
+  //   成功率 = min(ADJUST_PROB[当前等级] + 5 × 连续失败次数, 100) + Σ(数量 × 稀有度加成)
+  function hexRate(t) {
+    var lv = lvOf(sysName, t.id);
+    var base = t.ap && t.ap[lv] !== undefined ? Number(t.ap[lv]) : 0;
+    var fails = hexFails(t);
+    var fix = 0, list = hexList(t);
+    for (var i = 0; i < list.length; i++)
+      fix += Math.max(1, Number(list[i].c) || 1) * (ADJ_RARITY_PROB_ADD[String(list[i].r)] || 0);
+    var capped = Math.min(base + fails * ADJ_FAIL_PROB_ADD, 100);
+    return { lv: lv, base: base, fails: fails, capped: capped, fix: fix, total: Math.min(capped + fix, 100) };
+  }
+  // 本系统是否已解锁调校能力（官方 check_tuning_available：钥匙节点有等级即已解锁）
+  function tuningReady(sn) {
+    var s = ship && ship.systems[sn];
+    if (!s || !s.tk) return true;      // 站内没有钥匙数据时不拦
+    for (var i = 0; i < s.tk.length; i++) if (lvOf(sn, s.tk[i]) > 0) return true;
+    return false;
+  }
+  // 目标强化节点被哪个调教节点提升（站内只展示，不改属性：官方按 ADJUST_DESC 的 {T} 结算）
+  function tunerOf(sn, tid) {
+    var s = ship && ship.systems[sn];
+    if (!s) return null;
+    for (var i = 0; i < s.techs.length; i++) if (s.techs[i].tg === tid) return s.techs[i];
     return null;
   }
 
@@ -603,7 +686,9 @@
     h += detailHtml(list);
     h += '<div class="hint">节点方块＝官方强化项，图标与文字取自官方 <b>cfg_system_effect</b>；' +
       '连线＝官方 <b>cfg_system_enhance_tree</b> 的前置关系（要求前置达到指定等级，未满足则锁定）。' +
-      '底部六边形为特殊/巅峰类强化项。点击节点查看详情，详情卡内可加减等级。<br>' +
+      '底部六边形＝官方的<b>扩展解锁</b>与<b>调教</b>项，不吃科技点：扩展解锁要登记并消耗武器技术（稀有度与总价值按配置门槛），' +
+      '调教要先把本系统的「系统调校」解锁，再按 <b>ADJUST_PROB</b> 逐级掷骰提升目标强化项（连续失败每次 +5%）。' +
+      '点击节点查看详情。<br>' +
       '描述中的 <b>[Lv.N]</b>、<b>[周期]</b>、<b>[持续]</b> 是官方模板里由服务器按舰船实际数据下发的数值，' +
       '本站未内置，故以标记显示，不代表最终数值。</div>';
 
@@ -619,33 +704,39 @@
     var pq = prereqOf(list, t);
     var blocked = !!(pq && pq.every(function (x) { return !x.ok; }));
     var cls = 'node';
-    // 六边形 = 官方 adjust 项（UNLOCK_TYPE != 0），对应游戏底部那行斜纹块
-    if (t.ul === -1) cls += ' hex';
+    // 六边形 = 官方调教/扩展解锁项（UNLOCK_TYPE != 0 或 EFFECT_TYPE == ADJUST），对应游戏底部那行斜纹块
+    var kind = hexKind(t);
+    if (kind) cls += ' hex';
     if (t.mx > 0) cls += ' addable';
     if (maxed && t.mx > 0) cls += ' maxed';
     if (blocked) cls += ' locked';
     if (selTech && selTech.id === t.id) cls += ' sel';
-    // 六边形：未登记/登记不合格时不能加点
     var hxBad = null;
-    if (t.ul === -1) {
-      hxBad = hexCheck(t, hexOf(t));
-      if (hxBad) cls += ' hexwait';
-      else cls += ' hexok';
+    if (kind === 'adjust') {
+      hxBad = hexAdjustCheck(t, hexList(t));
+      if (!tuningReady(sysName)) hxBad = '本系统的「系统调校」尚未解锁';
+      else if (maxed) hxBad = null;
     }
 
-    var cost = (t.mx > 0 && !maxed) ? costOf(t, baseOf(t) + l + 1) : 0;
+    var cost = (t.mx > 0 && !maxed && !kind) ? costOf(t, baseOf(t) + l + 1) : 0;
     var lvTxt = '';
-    if (t.mx > 0) lvTxt = '<span class="lv">' + (baseOf(t) + l) + '/' + absMax(t) + '</span>';
+    if (kind === 'adjust') lvTxt = '<span class="lv">' + l + '/' + absMax(t) + '</span>';
+    else if (t.mx > 0) lvTxt = '<span class="lv">' + (baseOf(t) + l) + '/' + absMax(t) + '</span>';
+    if (kind === 'adjust') {
+      if (!tuningReady(sysName)) cls += ' hexwait';
+      else if (hxBad) cls += ' hexwait';
+      else cls += ' hexok';
+    } else if (kind) {
+      cls += l > 0 ? ' hexok' : ' hexwait';
+    }
     var flag = '';
     if (t.c === 1) flag = '<span class="flag">互</span>';
     else if (t.c === 2) flag = '<span class="flag">模</span>';
     else if (t.ut) flag = '<span class="flag">稀</span>';
 
     var hxTitle = '';
-    if (t.ul === -1) {
-      var hr = hexOf(t);
-      hxTitle = ' title="' + esc(hxBad ? ('调教：' + hxBad) : ('调教武器技术：' + hr.name)) + '"';
-    }
+    if (kind === 'adjust') hxTitle = ' title="' + esc(hxBad ? hxBad : ('调教 ' + l + '/' + t.mx)) + '"';
+    else if (kind) hxTitle = ' title="' + esc((kind === 'key' ? '系统调校：' : '扩展解锁：') + (l > 0 ? '已解锁' : '未解锁')) + '"';
 
     return '<div class="' + cls + '"' + (gridArea ? ' style="grid-area:' + gridArea + '"' : '') +
       ' data-id="' + t.id + '" data-sys="' + esc(sysName) + '"' + hxTitle + '>' +
@@ -656,30 +747,38 @@
   }
 
   function hexFormHtml(t) {
-    var r = hexOf(t) || {}, tys = hexTypes(t), need = hexNeedRarity(t);
-    var opts = '';
-    if (tys.length) {
-      opts = '<select class="hxi" data-hx="type">' +
-        (tys.indexOf(String(r.type)) < 0 ? '<option value="">类型…</option>' : '') +
-        tys.map(function (v) {
-          return '<option value="' + esc(v) + '"' + (String(r.type) === v ? ' selected' : '') + '>类型 ' + esc(v) + '</option>';
-        }).join('') + '</select>';
-    }
-    var rar = need ? need.join('/') : '任意';
-    return '<div class="hx"><span class="hxlabel">调教武器技术</span>' +
-      '<input class="hxi" data-hx="name" list="hxNames_' + t.id + '" placeholder="名称" value="' + esc(r.name || '') + '">' +
-      '<input class="hxi hxn" data-hx="rarity" placeholder="稀有度 ' + esc(rar) + '" value="' + esc(r.rarity == null ? '' : r.rarity) + '">' +
-      opts +
+    var list = hexList(t);
+    var rows = list.map(function (it, i) {
+      return '<div class="hxrow" data-hxrow="' + i + '">' +
+        '<input class="hxi" data-hx="n" list="hxNames" placeholder="名称" value="' + esc(it.n || '') + '">' +
+        '<input class="hxi hxn" data-hx="r" placeholder="稀有度" value="' + esc(it.r == null ? '' : it.r) + '">' +
+        '<input class="hxi hxn" data-hx="t" placeholder="类型" value="' + esc(it.t == null ? '' : it.t) + '">' +
+        '<input class="hxi hxn" data-hx="v" placeholder="价值" value="' + esc(it.v == null ? '' : it.v) + '">' +
+        '<input class="hxi hxn" data-hx="c" placeholder="数量" value="' + esc(it.c == null ? 1 : it.c) + '">' +
+        '<button class="tbtn" data-act="hexdel" data-row="' + i + '">删</button>' +
+        '</div>';
+    }).join('');
+    return '<div class="hx">' +
+      '<div class="hxlabel">武器技术清单（官方按 ENHANCE_VALUE × 数量累计总价值）' +
+      (t.av !== undefined && t.av !== null ? '，本项需总价值 ≥ ' + esc(t.av) : '') + '</div>' +
+      rows +
+      '<div class="hxrow"><button class="tbtn" data-act="hexadd">加一门技术</button>' +
       '<button class="tbtn" data-act="hexsave">保存登记</button>' +
-      '<button class="tbtn" data-act="hexclear">清除</button>' +
-      '<datalist id="hxNames_' + t.id + '">' + hxNameOptions() + '</datalist></div>';
+      '<button class="tbtn" data-act="hexclear">清空</button>' +
+      '<datalist id="hxNames">' + hxNameOptions() + '</datalist></div>' +
+      '<div class="hxsum">合计总价值 <b>' + hexValue(list) + '</b>　共 ' +
+      list.reduce(function (a, it) { return a + Math.max(1, Number(it.c) || 1); }, 0) + ' 份</div>' +
+      '</div>';
   }
   // 已登记过的武器技术名称，供 datalist 复用
   function hxNameOptions() {
     var seen = {}, out = [];
     for (var k in hexTech) {
-      var n = hexTech[k] && hexTech[k].name;
-      if (n && !seen[n]) { seen[n] = 1; out.push('<option value="' + esc(n) + '">'); }
+      var arr = hexTech[k] || [];
+      for (var i = 0; i < arr.length; i++) {
+        var n = arr[i] && arr[i].n;
+        if (n && !seen[n]) { seen[n] = 1; out.push('<option value="' + esc(n) + '">'); }
+      }
     }
     return out.join('');
   }
@@ -691,40 +790,76 @@
     var pq = prereqOf(list, t);
     var blocked = !!(pq && pq.every(function (x) { return !x.ok; }));
     var maxed = t.mx <= 0 || l >= t.mx;
+    var kind = hexKind(t);
     var h = '<div class="detail" data-d="' + t.id + '">';
     h += '<div class="h">' + esc(t.n) +
       (t.lb ? '<em>' + esc(t.lb) + '</em>' : '') +
+      (kind === 'key' ? '<em>系统调校</em>' : (kind === 'adjust' ? '<em>调教</em>' : (kind === 'extend' ? '<em>扩展解锁</em>' : ''))) +
       (t.c === 1 ? '<em>调整</em>' : '') + (t.c === 2 ? '<em>模组</em>' : '') +
       (baseOf(t) ? '<em>默认 ' + baseOf(t) + ' 级</em>' : '') +
       (t.ut ? '<em>稀有度解锁</em>' : '') +
       '<span style="margin-left:auto;font-size:.68rem;color:#9aa0a2">节点 ' + esc(t.id) + '</span></div>';
     if (t.ds) h += '<div class="d">' + esc(t.ds).replace(/\[([^\]]+)\]/g, '<span class="mk">[$1]</span>') + '</div>';
     if (t.d) h += '<details class="dt"><summary>详细说明</summary>' + esc(t.d) + '</details>';
+
+    // 被本节点调教的目标
+    var tuned = tunerOf(sysName, t.id);
+    if (tuned) {
+      h += '<div class="pq">被调教：' + esc(tuned.n) + '（节点 ' + esc(tuned.id) + '）当前调教 ' +
+        lvOf(sysName, tuned.id) + ' 级。官方按 ADJUST_DESC 的「{T}」由服务器结算，本站无该数值，未计入属性。</div>';
+    }
+
     if (t.ur) h += '<div class="pq">' + esc(t.ur) + '</div>';
-    var prob = '';
-    if (t.ap && t.ap.length) {
+
+    var hxBad = null;
+    if (kind === 'adjust') {
+      var rt = hexRate(t);
+      var target = t.tg ? techById(list, t.tg) : null;
+      h += '<div class="dt">调教成功率 ' + rt.total + '%' +
+        '（基础 ' + rt.base + '%' +
+        (rt.fails ? ' + 失败补偿 ' + (rt.fails * ADJ_FAIL_PROB_ADD) + '%（连续失败 ' + rt.fails + ' 次）' : '') +
+        (rt.fix ? ' + 稀有度加成 ' + rt.fix + '%' : '') +
+        '，上限 100%）' +
+        (target ? '　目标：' + esc(target.n) + '（节点 ' + esc(target.id) + '）' : '') +
+        '</div>';
+      h += '<details class="dt"><summary>逐级概率</summary>' +
+        esc(t.ap.map(function (p, i) { return '第 ' + (i + 1) + ' 级 ' + p + '%'; }).join('　')) +
+        '</details>';
+      if (!tuningReady(sysName)) hxBad = '本系统的「系统调校」尚未解锁';
+      else hxBad = maxed ? null : hexAdjustCheck(t, hexList(t));
+      h += hexFormHtml(t);
+      h += '<div class="' + (hxBad ? 'pq' : 'dt') + '">' + (hxBad ? '未满足：' + esc(hxBad) : '登记合格') + '</div>';
+    } else if (kind) {
+      hxBad = l > 0 ? null : hexUnlockCheck(t, hexList(t));
+      h += hexFormHtml(t);
+      h += '<div class="' + (hxBad ? 'pq' : 'dt') + '">' +
+        (hxBad ? '未满足：' + esc(hxBad) : (l > 0 ? '已解锁' : '登记合格，可解锁')) + '</div>';
+    } else if (t.ap && t.ap.length) {
       var nx = t.ap[l];
-      if (nx !== undefined)
-        prob = '升到第 ' + (baseOf(t) + l + 1) + ' 级触发概率 ' + nx + '%';
-      h += '<div class="dt">' + (prob ? esc(prob) : '') +
+      h += '<div class="dt">' + (nx !== undefined ? '下一级 ' + nx + '%　' : '') +
         '<details><summary>逐级概率</summary>' +
         esc(t.ap.map(function (p, i) { return '第 ' + (i + 1) + ' 级 ' + p + '%'; }).join('　')) +
         '</details></div>';
     }
-    var hxBad = null;
-    if (t.ul === -1) {
-      hxBad = hexCheck(t, hexOf(t));
-      h += hexFormHtml(t);
-      h += '<div class="' + (hxBad ? 'pq' : 'dt') + '">' +
-        (hxBad ? '未满足：' + esc(hxBad) : '登记合格：' + esc(hexOf(t).name)) + '</div>';
-    }
     if (pq && unmetTxt(pq)) h += '<div class="pq">任一前置加点后解锁（当前未加）：' + esc(unmetTxt(pq)) + '</div>';
+
     h += '<div class="ops">';
-    h += '<button class="tbtn" data-act="minus"' + (l <= 0 ? ' disabled' : '') + '>− 降 1 级</button>';
-    h += '<button class="tbtn" data-act="plus"' +
-      ((t.mx <= 0 || maxed || blocked || hxBad) ? ' disabled' : '') + '>＋ 升 1 级</button>';
-    h += '<span class="t">当前 ' + absLv(t) + ' / ' + absMax(t) + ' 级' +
-      (maxed || t.mx <= 0 ? '' : ' · 下一级消耗 ' + costOf(t, baseOf(t) + l + 1) + ' 点') + '</span>';
+    if (kind === 'adjust') {
+      h += '<button class="tbtn" data-act="adjstep"' + (hxBad ? ' disabled' : '') + '>调教一次</button>';
+      h += '<button class="tbtn" data-act="adjplan" data-lv="' + Math.min(t.mx, l + 1) + '"' +
+        (maxed ? ' disabled' : '') + '>直接设到 ' + Math.min(t.mx, l + 1) + ' 级</button>';
+      h += '<button class="tbtn" data-act="minus"' + (l <= 0 ? ' disabled' : '') + '>− 降 1 级</button>';
+      h += '<span class="t">调教 ' + l + ' / ' + t.mx + ' 次　连续失败 ' + hexFails(t) + ' 次</span>';
+    } else if (kind) {
+      h += '<button class="tbtn" data-act="hexunlock"' + (l > 0 || hxBad ? ' disabled' : '') + '>解锁</button>';
+      h += '<span class="t">' + (l > 0 ? '已解锁' : '未解锁') + ' · 不消耗科技点</span>';
+    } else {
+      h += '<button class="tbtn" data-act="minus"' + (l <= 0 ? ' disabled' : '') + '>− 降 1 级</button>';
+      h += '<button class="tbtn" data-act="plus"' +
+        ((t.mx <= 0 || maxed || blocked) ? ' disabled' : '') + '>＋ 升 1 级</button>';
+      h += '<span class="t">当前 ' + (baseOf(t) + lvOf(sysName, t.id)) + ' / ' + absMax(t) + ' 级' +
+        (maxed || t.mx <= 0 ? '' : ' · 下一级消耗 ' + costOf(t, baseOf(t) + l + 1) + ' 点') + '</span>';
+    }
     h += '</div></div>';
     return h;
   }
@@ -931,40 +1066,111 @@
         var act = this.getAttribute('data-act');
         if (act === 'plus') doPlus(list, selTech);
         else if (act === 'minus') doMinus(list, selTech);
-        else if (act === 'hexsave') saveHexReg(list, selTech, false);
-        else if (act === 'hexclear') saveHexReg(list, selTech, true);
+        else if (act === 'hexsave') saveHexReg(selTech);
+        else if (act === 'hexclear') clearHexReg(selTech);
+        else if (act === 'hexadd') addHexRow();
+        else if (act === 'hexdel') delHexRow(Number(this.getAttribute('data-row')));
+        else if (act === 'hexunlock') doHexUnlock(list, selTech);
+        else if (act === 'adjstep') doAdjustStep(list, selTech);
+        else if (act === 'adjplan') doAdjustPlan(list, selTech, Number(this.getAttribute('data-lv')));
       });
     }
   }
 
-  function saveHexReg(list, t, clear) {
-    var k = hexKey(t);
-    if (clear) { delete hexTech[k]; saveHex(); renderMain(); return; }
-    var box = mainCol.querySelector('.detail');
-    if (!box) return;
-    var get = function (n) {
-      var e = box.querySelector('[data-hx="' + n + '"]');
-      return e ? e.value.trim() : '';
-    };
-    var name = get('name'), rarity = get('rarity'), type = get('type');
-    if (!name) { tip('请填写武器技术名称'); return; }
-    hexTech[k] = { name: name, rarity: rarity, type: type };
-    saveHex();
-    var bad = hexCheck(t, hexTech[k]);
+  // 从详情卡里读回登记表单（未保存的行也算，方便「加一门技术」后直接保存）
+  function readHexRows() {
+    var rows = mainCol.querySelectorAll('.detail .hxrow[data-hxrow]');
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      var g = function (n) {
+        var e = rows[i].querySelector('[data-hx="' + n + '"]');
+        return e ? e.value.trim() : '';
+      };
+      var it = { n: g('n'), r: g('r'), t: g('t'), v: g('v'), c: g('c') };
+      if (it.n || it.r || it.t || it.v) out.push(it);
+    }
+    return out;
+  }
+  function addHexRow() {
+    var box = mainCol.querySelector('.detail .hx');
+    if (!box || !selTech) return;
+    var cur = readHexRows();
+    cur.push({ n: '', r: '', t: '', v: '', c: '1' });
+    hexSetList(selTech, cur); saveHex();
+    renderMain();
+  }
+  function delHexRow(idx) {
+    if (!selTech) return;
+    var cur = readHexRows();
+    cur.splice(idx, 1);
+    hexSetList(selTech, cur); saveHex();
+    renderMain();
+  }
+  function saveHexReg(t) {
+    var list = readHexRows();
+    hexSetList(t, list); saveHex();
+    var bad = hexKind(t) === 'adjust' ? hexAdjustCheck(t, list) : hexUnlockCheck(t, list);
     renderMain();
     if (bad) tip('已登记，但不满足要求：' + bad);
+  }
+  function clearHexReg(t) {
+    hexSetList(t, []); hexSetFails(t, 0); saveHex(); renderMain();
+  }
+  // 官方 confirm_for_extend：校验通过后消耗登记的武器技术，节点置为已解锁（默认等级）
+  function doHexUnlock(list, t) {
+    if (lvOf(sysName, t.id) > 0) return;
+    var bad = hexUnlockCheck(t, hexList(t));
+    if (bad) { tip(bad); return; }
+    setLv(sysName, t.id, 1);
+    spendHexList(t);
+    saveHex(); save(); renderAll();
+    tip((t.ky ? '已开放本系统调校能力' : '已解锁') + '：' + t.n);
+  }
+  // 一次动作消耗清单里各一份（官方每次确认都把所选武器技术发过去）
+  function spendHexList(t) {
+    var list = hexList(t).map(function (it) {
+      var c = Math.max(1, Number(it.c) || 1);
+      return { n: it.n, r: it.r, t: it.t, v: it.v, c: c - 1 };
+    }).filter(function (it) { return it.c > 0; });
+    hexSetList(t, list); saveHex();
+  }
+  // 官方 confirm_for_adjust：校验 + 掷 ADJUST_PROB，成功 +1 级，失败累计次数 +1
+  function doAdjustStep(list, t) {
+    if (!tuningReady(sysName)) { tip('本系统的「系统调校」尚未解锁'); return; }
+    var l = lvOf(sysName, t.id);
+    if (l >= t.mx) { tip('调教等级已满'); return; }
+    var bad = hexAdjustCheck(t, hexList(t));
+    if (bad) { tip(bad); return; }
+    var rt = hexRate(t);
+    var ok = Math.random() * 100 < rt.total;
+    spendHexList(t);
+    if (ok) { setLv(sysName, t.id, l + 1); hexSetFails(t, 0); }
+    else hexSetFails(t, hexFails(t) + 1);
+    saveHex(); save(); renderAll();
+    var tgt = t.tg ? techById(list, t.tg) : null;
+    tip('调教' + (ok ? '成功' : '失败') + '（成功率 ' + rt.total + '%）' +
+        (tgt ? '，目标 ' + tgt.n : '') +
+        (ok ? '' : '，连续失败 ' + hexFails(t) + ' 次，下次 +' + (hexFails(t) * ADJ_FAIL_PROB_ADD) + '%'));
+  }
+  // 规划用：直接设级，不掷骰、不计失败、不消耗
+  function doAdjustPlan(list, t, lv) {
+    if (!tuningReady(sysName)) { tip('本系统的「系统调校」尚未解锁'); return; }
+    var l = lvOf(sysName, t.id);
+    var to = Math.max(0, Math.min(t.mx, Number(lv) || 0));
+    if (to === l) return;
+    setLv(sysName, t.id, to);
+    hexSetFails(t, 0);
+    saveHex(); save(); renderAll();
+    tip(t.n + ' 调教等级设为 ' + to + '（规划值，未掷骰）');
   }
 
   function doPlus(list, t) {
     if (t.mx <= 0) { tip('该项不可加点'); return; }
+    if (hexKind(t)) { tip('六边形节点不吃科技点：扩展解锁用武器技术，调教用「调教一次」'); return; }
     var l = lvOf(sysName, t.id);
     if (l >= t.mx) return;
     var pq = prereqOf(list, t);
     if (pq && unmetTxt(pq)) { tip('任一前置加点后解锁（当前未加）：' + unmetTxt(pq)); return; }
-    if (t.ul === -1) {
-      var hxBad = hexCheck(t, hexOf(t));
-      if (hxBad) { tip('调教未完成：' + hxBad); return; }
-    }
     var c = costOf(t, baseOf(t) + l + 1);
     points -= c;
     setLv(sysName, t.id, l + 1);
@@ -973,6 +1179,14 @@
   function doMinus(list, t) {
     var l = lvOf(sysName, t.id);
     if (l <= 0) return;
+    if (hexKind(t) === 'adjust') {
+        setLv(sysName, t.id, l - 1);
+      hexSetFails(t, 0);
+      saveHex(); save(); renderAll();
+      tip('调教等级降到 ' + (l - 1));
+      return;
+    }
+    if (hexKind(t)) { tip('已解锁的六边形不能降级'); return; }
     var dep = dependentsOf(list, t).filter(function (d) { return lvOf(sysName, d.id) > 0; });
     if (dep.length) { tip('降级将使以下强化项失效：' + dep.map(function (d) { return d.n; }).join('、')); return; }
     var c = costOf(t, baseOf(t) + l);
@@ -1068,19 +1282,25 @@
         var v = lvOf(sn, techs[j].id);
         if (v > 0) any = true;
         s += LV_CHARS.charAt(Math.min(v, 35));
-        // 六边形的调教登记跟等级一起走，导出方与导入方看到同一套武器技术
-        var r = hexTech[shipKey + '|' + sn + '|' + techs[j].id];
-        if (techs[j].ul === -1 && r && r.name)
-          reg.push(encodeURIComponent(sn) + ':' + techs[j].id + ':' + encodeURIComponent(r.name) + ':' +
-                   encodeURIComponent(r.rarity == null ? '' : r.rarity) + ':' +
-                   encodeURIComponent(r.type == null ? '' : r.type));
+        // 六边形的武器技术登记与连续失败次数跟等级一起走
+        var item = hexTech[shipKey + '|' + sn + '|' + techs[j].id];
+        var fails = hexFail[shipKey + '|' + sn + '|' + techs[j].id];
+        if (!hexKind(techs[j])) continue;
+        if (!(item && item.length) && !Number(fails)) continue;   // 没登记也没失败就不占位
+        var body = (item || []).map(function (it) {
+          return [it.n, it.r, it.t, it.v, it.c].map(function (x) {
+            return encodeURIComponent(x == null ? '' : String(x));
+          }).join('~');
+        }).join(',');
+        reg.push(encodeURIComponent(sn) + ':' + techs[j].id + ':' + body +
+                 ':' + (Number(fails) || 0));
       }
       if (any) part.push(String(sysv.id || '') + ':' + techs.length + ':' + s);
     }
     if (!part.length && !reg.length) return '';
-    var body = 'UEG2|' + shipKey + '|' + part.join('|');
-    if (reg.length) body += '|@' + reg.join(';');
-    return PLAN_PREFIX + b64e(body);
+    var body2 = 'UEG2|' + shipKey + '|' + part.join('|');
+    if (reg.length) body2 += '|@' + reg.join(';');
+    return PLAN_PREFIX + b64e(body2);
   }
   function applyPlanCode(code) {
     code = String(code || '').replace(/\s+/g, '');
@@ -1100,13 +1320,18 @@
         var items = f[i].slice(1).split(';');
         for (var a = 0; a < items.length; a++) {
           var q = items[a].split(':');
-          if (q.length < 5 || !q[0] || !q[1]) { badReg++; continue; }
+          if (q.length < 4 || !q[0] || !q[1]) { badReg++; continue; }
           var rsn = decodeURIComponent(q[0]);
-          hexTech[key + '|' + rsn + '|' + q[1]] = {
-            name: decodeURIComponent(q[2]),
-            rarity: decodeURIComponent(q[3]),
-            type: decodeURIComponent(q[4])
-          };
+          var arr = q[2] ? q[2].split(',').map(function (row) {
+            var f2 = row.split('~');
+            return { n: decodeURIComponent(f2[0] || ''), r: decodeURIComponent(f2[1] || ''),
+                     t: decodeURIComponent(f2[2] || ''), v: decodeURIComponent(f2[3] || ''),
+                     c: decodeURIComponent(f2[4] || '1') };
+          }) : [];
+          var rk = key + '|' + rsn + '|' + q[1];
+          if (arr.length) hexTech[rk] = arr; else delete hexTech[rk];
+          var fl = parseInt(q[3], 10);
+          if (fl > 0) hexFail[rk] = fl; else delete hexFail[rk];
           regs++;
         }
         continue;

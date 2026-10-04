@@ -157,11 +157,17 @@ body {
 .detail .dt { font-size: .72rem; color: #b6bbbd; margin-top: 5px; line-height: 1.7; }
 .detail .dt summary { cursor: pointer; color: #cfd3d4; }
 .detail .ops { margin-top: 8px; display: flex; align-items: center; gap: 8px; }
-.detail .hx { margin-top: 7px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.detail .hx .hxlabel { font-size: .72rem; color: #b6bbbd; }
-.detail .hx .hxi { background: rgba(20,24,26,.8); border: 1px solid rgba(255,255,255,.22);
+.detail .hx { margin-top: 7px; padding: 8px 10px; background: rgba(20,24,26,.74);
+  border: 1px solid rgba(255,255,255,.14); border-left: 3px solid rgba(255,210,74,.45); border-radius: 2px; }
+.detail .hx .hxlabel { display: block; font-size: .72rem; color: #cdd2d4; margin-bottom: 6px; }
+.detail .hx .hxrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.detail .hx .hxrow:last-child { margin-bottom: 0; }
+.detail .hx .hxi { background: rgba(12,15,16,.82); border: 1px solid rgba(255,255,255,.22);
   color: #e8e9ea; padding: 3px 7px; font-size: .72rem; border-radius: 2px; font-family: inherit; }
-.detail .hx .hxi.hxn { width: 92px; }.detail .ops .t { font-size: .74rem; color: #cfd3d4; }
+.detail .hx .hxi[data-hx="n"] { width: 148px; }
+.detail .hx .hxi.hxn { width: 66px; }
+.detail .hx .hxsum { font-size: .72rem; color: #cdd2d4; margin-top: 4px; }
+.detail .hx .hxsum b { color: #ffd24a; }.detail .ops .t { font-size: .74rem; color: #cfd3d4; }
 
 .hint { font-size: .72rem; color: #c3c8ca; padding: 8px 16px; border-top: 1px solid rgba(255,255,255,.10);
   background: rgba(28,32,34,.84); line-height: 1.8; }
@@ -272,11 +278,11 @@ body {
 </div>
 
 <script src="ships_data.js?v=20261004a"></script>
-<script src="official_enhance_data.js?v=20261004p"></script>
+<script src="official_enhance_data.js?v=20261004w"></script>
 <script src="ship_stats.js?v=20261004e"></script>
 <script src="system_stats.js?v=20261004e"></script>
 <script src="enhance_effects.js?v=20261004s"></script>
-<script src="enhance.js?v=20261004r"></script>
+<script src="enhance.js?v=20261004w"></script>
 
 <div id="flashTip" style="position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:rgba(30,34,36,.95);color:#fff;font-weight:700;border:1px solid rgba(255,255,255,.3);border-left:3px solid #ffd24a;padding:9px 20px;z-index:99;opacity:0;transition:opacity .3s;font-size:.82rem;border-radius:2px"></div>
 

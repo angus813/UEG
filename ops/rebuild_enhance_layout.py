@@ -41,6 +41,8 @@ EFF_JSON = os.path.join(CFG, '_Tb_cfg_system_effect.json')
 RANK = {4: 0, 2: 1, 0: 2, 3: 3}          # 官方 LEVEL_ENHANCE_HIGHT：THIRD 最高
 HIDE_KIND = 2                             # 树配置第二项 = 2：不进树，画面不可见
 PLACEHOLDER_RE = re.compile(r'\{[^}]*\}')
+# 官方 effect_def.EFFECT_SHIP_BLUEPRINT_ENHANCE_ADJUST：效果是「开放本系统调校能力」的钥匙节点
+TUNE_KEY_EFFECT_ID = 2082
 
 
 def load_data():
@@ -122,6 +124,9 @@ def build_adjust_node(cid, enh, eff, lang):
     if e.get('ADJUST_ENHANCE_INDEX') is not None:
         node['dx'] = e['ADJUST_ENHANCE_INDEX']
     ur = unlock_requirement(e)
+    adj = adjust_fields(e, int(cid) // 100)
+    if not ur and adj:
+        ur = adjust_requirement(adj)
     if ur:
         node['ur'] = ur
     uq = unlock_req(e)
@@ -129,6 +134,12 @@ def build_adjust_node(cid, enh, eff, lang):
         node['uq'] = uq
     if e.get('ADJUST_PROB'):
         node['ap'] = e['ADJUST_PROB']
+    if row.get('EFFECT_ID') == TUNE_KEY_EFFECT_ID:
+        node['ky'] = 1
+    node.update(adj)
+    if node.get('ap') and 'mx' not in node:
+        # 调教节点不吃科技点，等级上限就是 ADJUST_PROB 的长度
+        node['mx'] = len(node['ap'])
     return node
 
 
@@ -149,52 +160,81 @@ def parse_dict_of_list(s):
 def unlock_req(e):
     """返回结构化解锁条件（供站内校验用），字段含义同 unlock_requirement。
 
-    ways: [{m: 模块稀有度, r: [武器技术稀有度...]}]，多条为「或」关系
-    ar:   调教类要求的武器技术稀有度
+    官方 bp_extend_system_view：
+      UNLOCK_COST_RARITY 每个 ';' 分组是一条途径（cal_rarity_requirement_remain 遍历
+      require_rarity_cost_dict.items()，键是 value_requirement、值是稀有度集合），
+      即「这些稀有度的武器技术，总价值要达到键上的门槛」。
+    ways: [{v: 价值门槛, r: [稀有度...]}]，多条为「或」关系
     ty:   限定的武器技术类型
     """
     out = {}
-    ut = e.get('UNLOCK_TYPE')
-    tl = e.get('UNLOCK_WEAPON_TECH_TYPE_LIMIT') or e.get('ADJUST_WEAPON_TECH_TYPE_LIMIT')
+    tl = e.get('UNLOCK_WEAPON_TECH_TYPE_LIMIT')
     types = [x.strip() for x in str(tl or '').split(',') if x.strip()]
     if types:
         out['ty'] = types
-    if ut == 2:
-        ways = []
-        for mod_rarity, need in parse_dict_of_list(e.get('UNLOCK_COST_RARITY')).items():
-            need = need if isinstance(need, list) else [need]
-            ways.append({'m': mod_rarity, 'r': need})
-        if ways:
-            out['ways'] = ways
-    elif e.get('ADJUST_RARITY') is not None:
-        out['ar'] = e['ADJUST_RARITY']
+    ways = []
+    for value_need, rars in parse_dict_of_list(e.get('UNLOCK_COST_RARITY')).items():
+        rars = rars if isinstance(rars, list) else [rars]
+        ways.append({'v': value_need, 'r': rars})
+    if ways:
+        out['ways'] = ways
     return out
 
 
 def unlock_requirement(e):
-    """按官方 bp_extend_system_view.build_weapon_tech_list 的判定拼出人话。
+    """按官方 bp_extend_system_view 的判定拼出人话。
 
     UNLOCK_TYPE_RARITY：UNLOCK_COST_RARITY 每个 ';' 分组是一条解锁途径，
-        键=模块稀有度，值=该途径接受的「武器技术稀有度」集合；
+        键=所需总价值（武器技术 ENHANCE_VALUE 之和），值=该途径接受的武器技术稀有度集合；
         UNLOCK_WEAPON_TECH_TYPE_LIMIT 限定武器技术类型。
-    EFFECT_TYPE_ADJUST：ADJUST_RARITY 指定稀有度，ADJUST_WEAPON_TECH_TYPE_LIMIT 限定类型。
     """
     parts = []
-    ut = e.get('UNLOCK_TYPE')
-    tl = e.get('UNLOCK_WEAPON_TECH_TYPE_LIMIT') or e.get('ADJUST_WEAPON_TECH_TYPE_LIMIT')
-    types = [x.strip() for x in str(tl or '').split(',') if x.strip()]
-    if ut == 2:
-        grp = parse_dict_of_list(e.get('UNLOCK_COST_RARITY'))
-        ways = []
-        for mod_rarity, need in grp.items():
-            need = need if isinstance(need, list) else [need]
-            ways.append('模块稀有度 %s + 武器技术稀有度 %s' % (mod_rarity, '/'.join(need)))
-        if ways:
-            parts.append('解锁：' + '；或 '.join(ways))
-    elif e.get('ADJUST_RARITY') is not None:
-        parts.append('调教：武器技术稀有度 %s' % e['ADJUST_RARITY'])
-    if types:
-        parts.append('武器技术类型 %s' % '/'.join(types))
+    uq = unlock_req(e)
+    if uq.get('ways'):
+        ways = ['稀有度 %s、总价值 ≥ %s' % ('/'.join(w['r']), w['v']) for w in uq['ways']]
+        parts.append('解锁：' + '；或 '.join(ways))
+    if uq.get('ty'):
+        parts.append('武器技术类型 ' + '/'.join(uq['ty']))
+    return '　'.join(parts)
+
+
+def adjust_fields(e, system_id):
+    """官方调教（EFFECT_TYPE == ADJUST）相关字段，照 bp_extend_system_view 与
+    preprocess_data._process_system_enhance_enhance 取。
+
+      ADJUST_ENHANCE_INDEX -> 目标强化节点 id = 系统 id × 100 + 索引
+                               （SYSTEM_ADJUST_IN_ENHANCE[调教节点 id] = 目标 id）
+      ADJUST_RARITY        -> 调教所需总价值（require_value_sum）
+      ADJUST_RARITY_LIMIT  -> 可用的武器技术稀有度（未配置=不限，上限 ADJUST_WEAPON_TECH_MAX_RARITY=5）
+      ADJUST_WEAPON_TECH_TYPE_LIMIT -> 可用的武器技术类型
+      ADJUST_PROB          -> 逐级成功率
+    """
+    if e.get('EFFECT_TYPE') != 2:
+        return {}
+    out = {}
+    idx = e.get('ADJUST_ENHANCE_INDEX')
+    if idx:
+        out['tg'] = str(system_id * 100 + idx)
+    if e.get('ADJUST_RARITY') is not None:
+        out['av'] = e['ADJUST_RARITY']
+    lim = [x.strip() for x in str(e.get('ADJUST_RARITY_LIMIT') or '').split(',') if x.strip()]
+    if lim:
+        out['rl'] = lim
+    tys = [x.strip() for x in str(e.get('ADJUST_WEAPON_TECH_TYPE_LIMIT') or '').split(',') if x.strip()]
+    if tys:
+        out['ty2'] = tys
+    return out
+
+
+def adjust_requirement(adj):
+    """调教条件的人话（照 update_weapon_table_data_for_adjust 的字段口径）。"""
+    parts = []
+    if adj.get('av') is not None:
+        parts.append('调教：武器技术总价值 ≥ %s' % adj['av'])
+    if adj.get('rl'):
+        parts.append('稀有度 ' + '/'.join(adj['rl']))
+    if adj.get('ty2'):
+        parts.append('武器技术类型 ' + '/'.join(adj['ty2']))
     return '　'.join(parts)
 
 
@@ -269,14 +309,41 @@ def main():
                 if not e:
                     continue
                 ur = unlock_requirement(e)
-                if ur and ur != t.get('ur'):
-                    t['ur'] = ur
-                    stat['补解锁条件'] += 1
+                adj = adjust_fields(e, int(t['id']) // 100)
+                if not ur and adj:
+                    ur = adjust_requirement(adj)
+                if ur != t.get('ur'):
+                    if ur:
+                        t['ur'] = ur
+                        stat['补解锁条件'] += 1
+                    else:
+                        del t['ur']
                 uq = unlock_req(e)
-                if uq and uq != t.get('uq'):
-                    t['uq'] = uq
+                if uq != t.get('uq'):
+                    if uq:
+                        t['uq'] = uq
+                    else:
+                        t.pop('uq', None)
                 if e.get('ADJUST_PROB') and not t.get('ap'):
                     t['ap'] = e['ADJUST_PROB']
+                pfx = e.get('SYSTEM_EFFECT_PREFIX')
+                row = eff.get(str(pfx * 100 + 1), {}) if pfx is not None else {}
+                if row.get('EFFECT_ID') == TUNE_KEY_EFFECT_ID and not t.get('ky'):
+                    t['ky'] = 1
+                    stat['标钥匙'] += 1
+                for k, v in adj.items():
+                    if t.get(k) != v:
+                        t[k] = v
+                        stat['补调教字段'] += 1
+                if t.get('ap') and not t.get('mx'):
+                    # 调教节点不吃科技点，等级上限就是 ADJUST_PROB 的长度
+                    t['mx'] = len(t['ap'])
+                    stat['补调教上限'] += 1
+
+            # 2.45) 系统调校钥匙：官方 check_tuning_available 判本系统有没有已解锁的钥匙节点
+            keys = [t['id'] for t in techs if t.get('ky')]
+            if keys:
+                sd['tk'] = keys
 
             # 2.5) 补描述：官方文案里带 {101} 这类占位符的条目此前被整条丢弃，
             # 导致这些节点看不到升级效果；这里保留原文，占位符换成可读标记。
@@ -334,9 +401,11 @@ def main():
                                key=lambda t: (t.get('cl', 0), t['id']))
             sd['techs'] = plane_order + hex_order
 
-    print('行调整 %d，列调整 %d，新增六边形 %d，改判隐藏 %d，补描述 %d，补解锁条件 %d'
+    print('行调整 %d，列调整 %d，新增六边形 %d，改判隐藏 %d，补描述 %d，补解锁条件 %d，'
+          '标钥匙 %d，补调教字段 %d，补调教上限 %d'
           % (stat['行调整'], stat['列调整'], stat['新增六边形'], stat['改判隐藏'],
-             stat['补描述'], stat['补解锁条件']))
+             stat['补描述'], stat['补解锁条件'], stat['标钥匙'], stat['补调教字段'],
+             stat['补调教上限']))
     print('剩余同格重叠 %d 处' % stat['重叠格'])
     for c in collisions:
         print('   ', c)
