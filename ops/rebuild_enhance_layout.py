@@ -187,6 +187,22 @@ def main():
                         stat['改判隐藏'] += 1
                     t['ul'] = -2
 
+            # 2.5) 补描述：官方文案里带 {101} 这类占位符的条目此前被整条丢弃，
+            # 导致这些节点看不到升级效果；这里保留原文，占位符换成可读标记。
+            for t in techs:
+                eid = effect_id(enh.get(t['id']))
+                if not eid:
+                    continue
+                if not t.get('ds'):
+                    d = lang.get(('desc', eid)) or ''
+                    if d:
+                        t['ds'] = PLACEHOLDER_RE.sub('【数值】', d)
+                        stat['补描述'] += 1
+                if not t.get('d'):
+                    dd = lang.get(('desc_detail', eid)) or ''
+                    if dd:
+                        t['d'] = PLACEHOLDER_RE.sub('【数值】', dd)
+
             # 3) 列 = 配置树 DFS 深度（六边形行保持自己的排序值）
             depth = dfs_depth([t['id'] for t in techs if t.get('ul') != -1], tree)
             for t in techs:
@@ -227,8 +243,8 @@ def main():
                                key=lambda t: (t.get('cl', 0), t['id']))
             sd['techs'] = plane_order + hex_order
 
-    print('行调整 %d，列调整 %d，新增六边形 %d，改判隐藏 %d'
-          % (stat['行调整'], stat['列调整'], stat['新增六边形'], stat['改判隐藏']))
+    print('行调整 %d，列调整 %d，新增六边形 %d，改判隐藏 %d，补描述 %d'
+          % (stat['行调整'], stat['列调整'], stat['新增六边形'], stat['改判隐藏'], stat['补描述']))
     print('剩余同格重叠 %d 处' % stat['重叠格'])
     for c in collisions:
         print('   ', c)

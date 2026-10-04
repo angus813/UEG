@@ -257,13 +257,14 @@
     return null;
   }
   function prereqOf(list, t) {
+    // 官方判定（system_enhance_tree._is_unlocked_self）：无前置直接解锁；
+    // 任一前置节点等级 > 0 即解锁（OR）。配置第二列是 ui_level，不是等级要求。
     if (!t.pq || !t.pq.length) return null;
     var out = [];
     for (var i = 0; i < t.pq.length; i++) {
       var p = techById(list, t.pq[i][0]);
       if (!p || p.id === t.id) continue;
-      var need = t.pq[i][1] || 1;
-      out.push({ t: p, need: need, ok: absLv(p) >= need });
+      out.push({ t: p, lv: absLv(p), ok: absLv(p) > 0 });
     }
     return out.length ? out : null;
   }
@@ -277,8 +278,9 @@
     return out;
   }
   function unmetTxt(pq) {
-    return pq.filter(function (x) { return !x.ok; })
-      .map(function (x) { return x.t.n + ' 达 ' + x.need + ' 级'; }).join('、');
+    if (!pq) return '';
+    var bad = pq.filter(function (x) { return !x.ok; }).map(function (x) { return x.t.n; });
+    return bad.length ? bad.join('、') : '';
   }
 
   // ---------- 舰船栏 ----------
@@ -579,7 +581,7 @@
     var l = lvOf(sysName, t.id);
     var maxed = t.mx <= 0 || l >= t.mx;
     var pq = prereqOf(list, t);
-    var blocked = !!(pq && pq.some(function (x) { return !x.ok; }));
+    var blocked = !!(pq && pq.every(function (x) { return !x.ok; }));
     var cls = 'node';
     // 六边形 = 官方 adjust 项（UNLOCK_TYPE != 0），对应游戏底部那行斜纹块
     if (t.ul === -1) cls += ' hex';
@@ -609,7 +611,7 @@
     if (!t) return '<div class="detail"><div class="d">点击上方任一强化节点查看详情、加减等级。</div></div>';
     var l = lvOf(sysName, t.id);
     var pq = prereqOf(list, t);
-    var blocked = !!(pq && pq.some(function (x) { return !x.ok; }));
+    var blocked = !!(pq && pq.every(function (x) { return !x.ok; }));
     var maxed = t.mx <= 0 || l >= t.mx;
     var h = '<div class="detail" data-d="' + t.id + '">';
     h += '<div class="h">' + esc(t.n) +
@@ -620,7 +622,7 @@
       '<span style="margin-left:auto;font-size:.68rem;color:#9aa0a2">节点 ' + esc(t.id) + '</span></div>';
     if (t.ds) h += '<div class="d">' + esc(t.ds).replace(/\[([^\]]+)\]/g, '<span class="mk">[$1]</span>') + '</div>';
     if (t.d) h += '<details class="dt"><summary>详细说明</summary>' + esc(t.d) + '</details>';
-    if (pq && unmetTxt(pq)) h += '<div class="pq">需先满足：' + esc(unmetTxt(pq)) + '</div>';
+    if (pq && unmetTxt(pq)) h += '<div class="pq">任一前置加点后解锁（当前未加）：' + esc(unmetTxt(pq)) + '</div>';
     h += '<div class="ops">';
     h += '<button class="tbtn" data-act="minus"' + (l <= 0 ? ' disabled' : '') + '>− 降 1 级</button>';
     h += '<button class="tbtn" data-act="plus"' +
@@ -841,7 +843,7 @@
     var l = lvOf(sysName, t.id);
     if (l >= t.mx) return;
     var pq = prereqOf(list, t);
-    if (pq && unmetTxt(pq)) { tip('需先满足：' + unmetTxt(pq)); return; }
+    if (pq && unmetTxt(pq)) { tip('任一前置加点后解锁（当前未加）：' + unmetTxt(pq)); return; }
     var c = costOf(t, baseOf(t) + l + 1);
     points -= c;
     setLv(sysName, t.id, l + 1);
