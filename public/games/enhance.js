@@ -1036,9 +1036,11 @@
     tip('已重置，返还 ' + sp + ' 点');
   });
   // ---------- 方案码 ----------
-  // 一艘船各系统各强化项的等级 → 一行文本 → base64url。
-  // 明文格式：UEG1|舰船名|系统id:节点数:等级串|系统id:节点数:等级串...
+  // 一艘船各系统各强化项的等级（UEG2 另带六边形的调教登记）→ 一行文本 → base64url。
+  // 明文格式：UEG2|舰船名|系统id:节点数:等级串|系统id:节点数:等级串...|@系统名:节点id:名称:稀有度:类型;...
   // 等级串按节点 id 升序逐位记录，0-9 与 A-Z 对应 0-35 级；只写入有加点的系统。
+  // 登记段的文本字段做 percent 编码，名称里的 ':' ';' '|' 不会破坏分隔。
+  // UEG1 是旧格式（只有等级），仍可导入。
   var LV_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   var PLAN_PREFIX = 'E1-';
 
@@ -1059,18 +1061,26 @@
   }
   function makePlanCode() {
     if (!ship) return '';
-    var part = [], names = Object.keys(ship.systems);
+    var part = [], reg = [], names = Object.keys(ship.systems);
     for (var i = 0; i < names.length; i++) {
       var sn = names[i], sysv = ship.systems[sn], techs = techsOrdered(sysv), s = '', any = false;
       for (var j = 0; j < techs.length; j++) {
         var v = lvOf(sn, techs[j].id);
         if (v > 0) any = true;
         s += LV_CHARS.charAt(Math.min(v, 35));
+        // 六边形的调教登记跟等级一起走，导出方与导入方看到同一套武器技术
+        var r = hexTech[shipKey + '|' + sn + '|' + techs[j].id];
+        if (techs[j].ul === -1 && r && r.name)
+          reg.push(encodeURIComponent(sn) + ':' + techs[j].id + ':' + encodeURIComponent(r.name) + ':' +
+                   encodeURIComponent(r.rarity == null ? '' : r.rarity) + ':' +
+                   encodeURIComponent(r.type == null ? '' : r.type));
       }
       if (any) part.push(String(sysv.id || '') + ':' + techs.length + ':' + s);
     }
-    if (!part.length) return '';
-    return PLAN_PREFIX + b64e('UEG1|' + shipKey + '|' + part.join('|'));
+    if (!part.length && !reg.length) return '';
+    var body = 'UEG2|' + shipKey + '|' + part.join('|');
+    if (reg.length) body += '|@' + reg.join(';');
+    return PLAN_PREFIX + b64e(body);
   }
   function applyPlanCode(code) {
     code = String(code || '').replace(/\s+/g, '');
@@ -1081,11 +1091,26 @@
       catch (e) { planMsg('这个码无法识别，检查是否复制完整'); return; }
     }
     var f = raw.split('|');
-    if (f[0] !== 'UEG1' || f.length < 3) { planMsg('不是本站的方案码'); return; }
+    if ((f[0] !== 'UEG1' && f[0] !== 'UEG2') || f.length < 3) { planMsg('不是本站的方案码'); return; }
     var key = f[1], target = OFF[key];
     if (!target || !target.systems) { planMsg('这个码对应的舰船「' + key + '」站内没有数据'); return; }
-    var src = target.systems, put = {}, skip = [], total = 0;
+    var src = target.systems, put = {}, skip = [], total = 0, regs = 0, badReg = 0;
     for (var i = 2; i < f.length; i++) {
+      if (f[i].charAt(0) === '@') {
+        var items = f[i].slice(1).split(';');
+        for (var a = 0; a < items.length; a++) {
+          var q = items[a].split(':');
+          if (q.length < 5 || !q[0] || !q[1]) { badReg++; continue; }
+          var rsn = decodeURIComponent(q[0]);
+          hexTech[key + '|' + rsn + '|' + q[1]] = {
+            name: decodeURIComponent(q[2]),
+            rarity: decodeURIComponent(q[3]),
+            type: decodeURIComponent(q[4])
+          };
+          regs++;
+        }
+        continue;
+      }
       var seg = f[i].split(':'), sid = seg[0], cnt = parseInt(seg[1], 10), lvs = seg[2] || '';
       var sysv = null, sysn = null, key2;
       for (key2 in src) if (String(src[key2].id) === sid) { sysv = src[key2]; sysn = key2; break; }
@@ -1101,11 +1126,14 @@
     }
     if (key !== shipKey) pickShip(key);
     levels[shipKey] = put;
+    if (regs) saveHex();
     selTech = null;
     save(); renderAll();
     var w = DATA[key] || {};
     planMsg('已导入「' + ((w.name || key) + (w.model ? '·' + w.model : '')) + '」' +
-            total + ' 个强化项' + (skip.length ? '，跳过 ' + skip.length + ' 个系统：' + skip.join('、') : ''));
+            total + ' 个强化项' + (regs ? '、' + regs + ' 条调教登记' : '') +
+            (badReg ? '，' + badReg + ' 条登记无法识别' : '') +
+            (skip.length ? '，跳过 ' + skip.length + ' 个系统：' + skip.join('、') : ''));
   }
   function planMsg(t) {
     var e = $('planMsg');
@@ -1123,7 +1151,8 @@
       if (!code) { tip('当前舰船还没有加点'); return; }
       ta.value = code;
       $('planTitle').textContent = '导出方案码';
-      $('planHint').textContent = '复制这段码发给别人，对方粘进「导入方案码」即可看到同样的加点。共 ' + code.length + ' 字符。';
+      $('planHint').textContent = '复制这段码发给别人，对方粘进「导入方案码」即可看到同样的加点' +
+        '（含六边形节点的调教武器技术登记）。共 ' + code.length + ' 字符。';
     }
     mask.hidden = false;
     ta.focus(); ta.select();
