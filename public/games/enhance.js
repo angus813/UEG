@@ -16,6 +16,10 @@
 
   const DATA = window.SHIPS_DATA || {};
   const OFF = window.OFFICIAL_ENHANCE || {};
+  const FX = window.ENHANCE_EFFECTS || {};
+  const SHIP_STATS = window.SHIP_STATS || {};
+  const STATS_ALIAS = window.SHIP_STATS_ALIAS || {};
+  const SYSTEM_STATS = window.SYSTEM_STATS || {};
   const ICON = 'enhance_icons/';
   // 图标文件同名换图（旧版 system_intensify → 当前版 system_intensify_new），带版本号防止读到旧缓存
   const ICON_VER = '20261003g';
@@ -69,6 +73,182 @@
     if (i < 0 || i >= t.ct.length) return 0;
     var c = t.ct[i];
     return (typeof c === 'number' && c > 0) ? c : 0;
+  }
+
+  // ---------- 属性面板：数据源与加成计算 ----------
+  const LS_PICK = 'ueg_weapon_choice';
+  var weaponChoice = {};
+  try { weaponChoice = JSON.parse(localStorage.getItem(LS_PICK) || '{}') || {}; } catch (e) { weaponChoice = {}; }
+  function saveWeaponChoice() {
+    try { localStorage.setItem(LS_PICK, JSON.stringify(weaponChoice)); } catch (e) {}
+  }
+  function pickKey(sn, option) { return shipKey + '|' + sn + '|' + option; }
+
+  // 修掉引号/空格等差异后比较系统名（官方名与属性数据里的名不完全一致）
+  function normName(s) { return String(s == null ? '' : s).replace(/[“”"'·\s]/g, ''); }
+  function sysStatsOf(sn) {
+    var m = SYSTEM_STATS[shipKey];
+    if (!m || !sn) return null;
+    if (m[sn]) return m[sn];
+    var target = normName(sn), k;
+    for (k in m) if (normName(k) === target) return m[k];
+    for (k in m) {
+      var n = normName(k);
+      if (n && (n.indexOf(target) >= 0 || target.indexOf(n) >= 0)) return m[k];
+    }
+    return null;
+  }
+
+  // 舰船属性数据：按 舰名（含别名）+ 型号 取对应变体
+  function statsOf(info) {
+    if (!info) return null;
+    var nm = info.name || '';
+    var list = SHIP_STATS[nm] || SHIP_STATS[STATS_ALIAS[nm]];
+    if (!list || !list.length) return null;
+    var model = String(info.model || '').replace(/[型级]$/, '');
+    if (model) {
+      var i, sub = model.slice(0, 2);
+      for (i = 0; i < list.length; i++) if ((list[i].name || '').indexOf(model) >= 0) return list[i];
+      for (i = 0; i < list.length; i++) if (sub && (list[i].name || '').indexOf(sub) >= 0) return list[i];
+    }
+    return list[0];
+  }
+
+  // 每个互斥槽位选出当前使用的武器（默认第一个）
+  function selectedWeapons() {
+    var out = [], m = SYSTEM_STATS[shipKey] || {};
+    for (var sn in m) {
+      var slots = {}, ws = m[sn].weapons || [];
+      for (var i = 0; i < ws.length; i++) {
+        var o = ws[i].option || ws[i].name;
+        (slots[o] = slots[o] || []).push(ws[i]);
+      }
+      for (var o2 in slots) {
+        var list = slots[o2], saved = (weaponChoice[shipKey] || {})[sn] || {};
+        var chosen = saved[o2], picked = null;
+        for (var j = 0; j < list.length; j++) if (list[j].name === chosen) picked = list[j];
+        out.push(picked || list[0]);
+      }
+    }
+    return out;
+  }
+
+  function weaponTotals() {
+    var list = selectedWeapons();
+    var t = { damage: 0, cycle: 0, lockOn: 0, rounds: 0, cooldown: 0, duration: 0, weapons: 0 };
+    for (var i = 0; i < list.length; i++) {
+      var w = list[i];
+      var keys = ['damage', 'cycle', 'lockOn', 'rounds', 'cooldown', 'duration'];
+      for (var k = 0; k < keys.length; k++) {
+        var v = w[keys[k]];
+        if (v !== undefined && v !== null) t[keys[k]] += Number(v) || 0;
+      }
+      t.weapons++;
+    }
+    return t;
+  }
+
+  function weaponDpm() {
+    var list = selectedWeapons(), f = { antiShip: 0, antiAir: 0, siege: 0 };
+    for (var i = 0; i < list.length; i++) {
+      f.antiShip += Number(list[i].dpmShip) || 0;
+      f.antiAir += Number(list[i].dpmAA) || 0;
+      f.siege += Number(list[i].dpmSiege) || 0;
+    }
+    return f;
+  }
+
+  // 强化加成：按已加点等级把效果累加成倍率。
+  // 规则与官方数据表的「比例加成/比例减少」「增加/减少」两种动作对应；
+  // 战斗机制类效果（集火/拦截/闪避…）不参与属性计算。
+  var FX_SKIP = /集火|战略打击|子系统暴击|被武器命中|被导弹|被鱼雷|失效|自动维修|拦截|锁定|目标选择|飞行时间|闪避|反击|警戒|战斗|站位|撤退|隐藏|伪装|干扰|探测|识别/;
+
+  function mults() {
+    var acc = { dmg: 0, aa: 0, siege: 0, cd: 0, hit: 0, crit: 0, hp: 0, phys: 0, energy: 0,
+                cruise: 0, warp: 0, atkSpeed: 0, freq: 0, dur: 0,
+                hpAdd: 0, physAdd: 0, energyAdd: 0, invested: 0 };
+    if (ship) {
+      var names = Object.keys(ship.systems);
+      for (var i = 0; i < names.length; i++) {
+        var sn = names[i], techs = ship.systems[sn].techs || [];
+        for (var j = 0; j < techs.length; j++) {
+          var t = techs[j], lv = lvOf(sn, t.id);
+          if (lv <= 0) continue;
+          for (var c = 1; c <= lv; c++) acc.invested += costOf(t, baseOf(t) + c);
+          var fx = FX[t.id];
+          if (!fx) continue;
+          var frac = lv / Math.max(1, t.mx || 1);
+          for (var k = 0; k < fx.length; k++) {
+            var type = fx[k][0] || '', action = fx[k][1] || '', raw = Number(fx[k][2]);
+            if (!isFinite(raw) || raw === 0 || FX_SKIP.test(type)) continue;
+            if (action === '比例加成' || action === '比例减少') {
+              var per = (action === '比例减少' ? -raw : raw) * frac;
+              if (/受到|被武器|被命中|被拦截/.test(type)) continue;
+              var absV = Math.abs(per), dirV = 1;
+              if (/降低|减少/.test(type)) dirV = /冷却|持续时间|攻击间隔/.test(type) ? 1 : -1;
+              if (/攻城/.test(type)) acc.siege += absV * dirV;
+              else if (/防空/.test(type)) acc.aa += absV * dirV;
+              else if (/冷却/.test(type)) acc.cd += absV * dirV;
+              else if (/暴击/.test(type)) acc.crit += absV * dirV;
+              else if (/持续时间/.test(type)) acc.dur += per;
+              else if (/攻击间隔/.test(type)) acc.atkSpeed += absV * dirV;
+              else if (/频率|每轮攻击|额外射击/.test(type)) acc.freq += absV * dirV;
+              else if (/命中/.test(type)) acc.hit += absV * dirV;
+              else if (/生命|结构值/.test(type)) acc.hp += absV * dirV;
+              else if (/装甲|抗性/.test(type)) {
+                if (/能量/.test(type)) acc.energy += absV * dirV; else acc.phys += absV * dirV;
+              }
+              else if (/巡航/.test(type)) acc.cruise += absV * dirV;
+              else if (/曲速|曲率/.test(type)) acc.warp += absV * dirV;
+              else if (/伤害/.test(type)) acc.dmg += absV * dirV;
+            } else if (action.indexOf('增加') >= 0 || action.indexOf('减少') >= 0) {
+              var add = (action.indexOf('减') >= 0 ? -raw : raw) * frac;
+              if (/装甲|抗性|物理抵抗/.test(type)) {
+                if (/能量/.test(type)) acc.energyAdd += add; else acc.physAdd += add;
+              } else if (/生命|结构值/.test(type)) acc.hpAdd += add;
+              else if (/伤害/.test(type)) acc.dmg += add;
+            }
+          }
+        }
+      }
+    }
+    var critMul = 1 + acc.crit / 100, atkMul = 1 + acc.atkSpeed / 100, freqMul = 1 + acc.freq / 100;
+    return {
+      fireMul: (1 + acc.dmg / 100) * critMul * atkMul * freqMul,
+      aaMul: (1 + (acc.dmg + acc.aa) / 100) * critMul * atkMul * freqMul,
+      siegeMul: (1 + (acc.dmg + acc.siege) / 100) * critMul * atkMul * freqMul,
+      cdMul: 1 - acc.cd / 100,
+      hpMul: 1 + acc.hp / 100, hpAdd: acc.hpAdd,
+      physMul: 1 + acc.phys / 100, physAdd: acc.physAdd,
+      energyMul: 1 + acc.energy / 100, energyAdd: acc.energyAdd,
+      cruiseMul: 1 + acc.cruise / 100,
+      warpMul: 1 + acc.warp / 100,
+      durMul: 1 + acc.dur / 100,
+      invested: acc.invested
+    };
+  }
+
+  function sec1(n) { return Math.round(n * 10) / 10; }
+  // 有加成时用高亮数字显示加成后的值
+  function fmtStat(base, mul, add, fmtFn) {
+    var hasMul = mul && Math.abs(mul - 1) > 0.0001;
+    var hasAdd = add && Math.abs(add) >= 0.5;
+    if (!hasMul && !hasAdd) return '<b>' + (base ? fmtFn(base) : '—') + '</b>';
+    return '<b class="boost">' + fmtFn(base * (hasMul ? mul : 1) + (hasAdd ? add : 0)) + '</b>';
+  }
+
+  function shipClassOf(type) {
+    var t = type || '';
+    if (/航空母舰|支援舰|战列巡洋舰|战列舰/.test(t)) return '超主力舰';
+    if (/巡洋舰|驱逐舰|护卫舰/.test(t)) return '主力舰';
+    if (/护航艇|战机/.test(t)) return '舰载机';
+    return '其他';
+  }
+  function shipScaleOf(type) {
+    var t = type || '';
+    if (/航空母舰|支援舰|战列巡洋舰|巡洋舰/.test(t)) return '大型舰船';
+    if (/驱逐舰|护卫舰/.test(t)) return '小型舰船';
+    return '';
   }
 
   // ---------- 前置 ----------
@@ -164,9 +344,168 @@
     sysCol.innerHTML = h;
   }
 
+  // ---------- 属性面板 ----------
+  var shipPanelOpen = true, sysPropsOpen = false;   // 折叠状态跨重绘保留
+  function num(v) { return Math.round(Number(v) || 0).toLocaleString('zh-CN'); }
+
+  function shipPanelHtml() {
+    if (!ship) return '';
+    var st = statsOf(ship);
+    var enh = mults();
+    var variantCount = 0;
+    for (var k in DATA) if (DATA[k].name === ship.name) variantCount++;
+    var wt = weaponTotals(), dp = weaponDpm();
+    var brief = [];
+    if (st) {
+      brief.push('指挥值 ' + st.commandValue);
+      brief.push('生命 ' + num((st.hp || 0) * enh.hpMul + (enh.hpAdd || 0)));
+      brief.push('物理装甲 ' + num((st.physicalArmor || 0) * enh.physMul + (enh.physAdd || 0)));
+    }
+    if (dp.antiShip) brief.push('对舰 DPM ' + num(dp.antiShip * enh.fireMul));
+
+    var h = '<details class="sp-panel"' + (shipPanelOpen ? ' open' : '') + '>';
+    h += '<summary><span class="pt">' + esc((ship.name || '') + (ship.model ? '·' + ship.model : '')) + '</span>' +
+         '<span class="ps">' + esc(brief.join(' · ')) + '</span>' +
+         '<span class="pm">已投入 ' + enh.invested + ' 点</span></summary>';
+    if (!st) {
+      h += '<div class="sp-empty">这艘舰船在属性数据里没有记录</div></details>';
+      return h;
+    }
+    h += '<div class="sp-top">';
+    h += '<span><b>' + esc(st.type || ship.type || '') + '</b>' + (st.position ? ' · ' + esc(st.position) : '') + '</span>';
+    h += '<span class="badge">' + esc(shipClassOf(ship.type)) + '</span>';
+    h += '<span class="badge">' + esc(shipScaleOf(ship.type)) + '</span>';
+    h += '<span>指挥值 <b>' + esc(st.commandValue) + '</b></span>';
+    h += '<span>变体 <b>' + variantCount + '</b></span>';
+    h += '<span>已投入科技点 <b>' + enh.invested + '</b></span>';
+    h += '<span>服役上限 <b>' + esc(st.serviceLimit) + '</b></span>';
+    h += '</div>';
+
+    h += '<div class="sp-sec"><div class="sp-t">火力属性</div><div class="sp-grid">';
+    h += '<span>反舰 ' + (dp.antiShip ? fmtStat(dp.antiShip, enh.fireMul, 0, num) : '—') + '<i class="src">DPM</i></span>';
+    h += '<span>防空 ' + (dp.antiAir ? fmtStat(dp.antiAir, enh.aaMul, 0, num) : '—') + '<i class="src">DPM</i></span>';
+    h += '<span>攻城 ' + (dp.siege ? fmtStat(dp.siege, enh.siegeMul, 0, num) : '—') + '<i class="src">DPM</i></span>';
+    h += '</div></div>';
+
+    h += '<div class="sp-sec"><div class="sp-t">基础属性</div><div class="sp-grid">';
+    h += '<span>舰船生命 ' + fmtStat(st.hp || 0, enh.hpMul, enh.hpAdd, num) + '</span>';
+    (function () {
+      var cv = st.cruise;
+      if (cv === undefined || cv === null || cv === '') h += '<span>巡航速度 <b>—</b></span>';
+      else if (/^\d+$/.test(String(cv)) && enh.cruiseMul > 1.0001) h += '<span>巡航速度 <b class="boost">' + num(cv * enh.cruiseMul) + '</b></span>';
+      else h += '<span>巡航速度 <b>' + esc(cv) + '</b></span>';
+    })();
+    h += '<span>曲速 ' + fmtStat(st.warp || 0, enh.warpMul, 0, num) + '</span>';
+    h += '<span>物理装甲 ' + fmtStat(st.physicalArmor || 0, enh.physMul, enh.physAdd, num) + '</span>';
+    h += '<span>能量装甲 ' + fmtStat(st.energyArmor || 0, enh.energyMul, enh.energyAdd, num) + '</span>';
+    h += '<span>尺寸 <b>' + (st.size ? num(st.size) + 'm' : '—') + '</b></span>';
+    h += '</div></div>';
+
+    if (st.build) {
+      h += '<div class="sp-sec"><div class="sp-t">建造</div><div class="sp-grid">';
+      h += '<span>金属 <b>' + num(st.build.metal) + '</b></span>';
+      h += '<span>晶体 <b>' + num(st.build.crystal) + '</b></span>';
+      h += '<span>重氢 <b>' + num(st.build.deuterium) + '</b></span>';
+      h += '<span>时间 <b>' + (Number(st.build.time) || 0).toFixed(2) + ' 天</b></span>';
+      h += '<span>容量 <b>' + num(st.build.capacity) + '</b></span>';
+      h += '</div></div>';
+    }
+
+    if (wt.weapons) {
+      h += '<div class="sp-sec"><div class="sp-t">武器系统合计（' + wt.weapons + ' 件武器）</div><div class="sp-grid">';
+      h += '<span>伤害 <b>' + num(wt.damage * enh.fireMul) + '</b></span>';
+      h += '<span>循环 ' + fmtStat(wt.cycle, enh.cdMul, 0, sec1) + '</span>';
+      h += '<span>锁定 <b>' + num(wt.lockOn) + '</b></span>';
+      h += '<span>轮数 <b>' + num(wt.rounds) + '</b></span>';
+      h += '<span>冷却 <b>' + (enh.cdMul < 1 ? sec1(wt.cooldown * enh.cdMul) : num(wt.cooldown)) + 's</b></span>';
+      h += '<span>持续 ' + fmtStat(wt.duration, enh.durMul, 0, sec1) + 's</span>';
+      h += '</div></div>';
+    }
+    h += '</details>';
+    return h;
+  }
+
+  function sysPropsHtml(sn) {
+    var ss = sysStatsOf(sn);
+    if (!ss || !ss.weapons || !ss.weapons.length) return '';
+    var enh = mults();
+    var slots = {}, order = [];
+    for (var i = 0; i < ss.weapons.length; i++) {
+      var w = ss.weapons[i], o = w.option || w.name;
+      if (!slots[o]) { slots[o] = []; order.push(o); }
+      slots[o].push(w);
+    }
+    var saved = (weaponChoice[shipKey] || {})[sn] || {};
+    var body = '';
+    for (var a = 0; a < order.length; a++) {
+      var list = slots[order[a]], chosen = null;
+      for (var b = 0; b < list.length; b++) if (list[b].name === saved[order[a]]) chosen = list[b];
+      if (!chosen) chosen = list[0];
+      body += '<div class="fx-item">';
+      body += '<div class="fx-head"><span class="fx-nm">' + esc(chosen.name) + '</span>';
+      if (list.length > 1) {
+        body += '<span class="fx-picks">';
+        for (var c = 0; c < list.length; c++) {
+          var on = list[c] === chosen;
+          body += '<button class="fx-pick' + (on ? ' on' : '') + '" data-opt="' + esc(order[a]) +
+                  '" data-w="' + esc(list[c].name) + '"' + (on ? ' disabled' : '') + '>' + esc(list[c].name) + '</button>';
+        }
+        body += '</span>';
+      }
+      body += '</div>';
+      body += '<div class="fx-grid">';
+      if (chosen.type) body += '<span class="tag">' + esc(chosen.type) + '</span>';
+      if (chosen.weaponType) body += '<span class="tag">' + esc(chosen.weaponType) + '</span>';
+      if (chosen.damage !== undefined) body += '<span>伤害 <b>' + num(chosen.damage * enh.fireMul) + '</b></span>';
+      if (chosen.cycle !== undefined) body += '<span>循环 ' + fmtStat(chosen.cycle, enh.cdMul, 0, sec1) + '</span>';
+      if (chosen.lockOn !== undefined) body += '<span>锁定 <b>' + num(chosen.lockOn) + '</b></span>';
+      if (chosen.rounds !== undefined) body += '<span>轮数 <b>' + num(chosen.rounds) + '</b></span>';
+      if (chosen.cooldown !== undefined) body += '<span>冷却 <b>' + (enh.cdMul < 1 ? sec1(chosen.cooldown * enh.cdMul) : num(chosen.cooldown)) + 's</b></span>';
+      if (chosen.duration !== undefined) body += '<span>持续 ' + fmtStat(chosen.duration, enh.durMul, 0, sec1) + 's</span>';
+      body += '</div>';
+      var acts = chosen.actions || [];
+      for (var d = 0; d < acts.length; d++) {
+        var ac = acts[d], info = ac.name || '';
+        if (ac.effect && ac.act) info += ' · ' + ac.effect + ac.act + (ac.value !== undefined ? ' +' + ac.value : '');
+        if (ac.cond && ac.condValue !== undefined) info += '（' + ac.cond + ac.condValue + '）';
+        body += '<div class="fx-act"><span>' + esc(info) + '</span>' +
+                (ac.desc ? '<div class="fx-desc">' + esc(ac.desc) + '</div>' : '') + '</div>';
+      }
+      body += '</div>';
+    }
+    return '<details class="fx-panel"' + (sysPropsOpen ? ' open' : '') + '>' +
+           '<summary><span class="pt">系统属性</span><span class="ps">' + ss.weapons.length + ' 件武器</span></summary>' +
+           body + '</details>';
+  }
+
+  // 面板交互：折叠状态、互斥武器切换
+  function bindPanel() {
+    var p = mainCol.querySelector('.sp-panel');
+    if (p) p.addEventListener('toggle', function () { shipPanelOpen = this.open; });
+    var f = mainCol.querySelector('.fx-panel');
+    if (f) f.addEventListener('toggle', function () { sysPropsOpen = this.open; });
+    var picks = mainCol.querySelectorAll('.fx-pick');
+    for (var i = 0; i < picks.length; i++) {
+      picks[i].addEventListener('click', function () {
+        var sn = sysName, opt = this.getAttribute('data-opt'), w = this.getAttribute('data-w');
+        if (!sn || !opt) return;
+        var bag = weaponChoice[shipKey] = weaponChoice[shipKey] || {};
+        var slot = bag[sn] = bag[sn] || {};
+        slot[opt] = w;
+        saveWeaponChoice();
+        renderMain();
+      });
+    }
+  }
+
   // ---------- 主体 ----------
   function renderMain() {
-    if (!ship || !sysName) { mainCol.innerHTML = '<div class="empty">← 请选择舰船与系统</div>'; return; }
+    if (!ship) { mainCol.innerHTML = '<div class="empty">← 请选择舰船与系统</div>'; return; }
+    if (!sysName) {
+      mainCol.innerHTML = shipPanelHtml() + '<div class="empty">← 请选择系统</div>';
+      bindPanel();
+      return;
+    }
     var s = ship.systems[sysName];
     var list = s.techs;
     var maxAdd = 0, lvSum = 0, spent = 0;
@@ -179,7 +518,7 @@
       for (var c = 1; c <= l; c++) spent += costOf(t, baseOf(t) + c);
     }
 
-    var h = '<div class="sys-head">' +
+    var h = shipPanelHtml() + '<div class="sys-head">' +
       '<div class="bar"><span class="t">' + esc(s.officialName || s.name) + '</span>' +
       '<span class="m">(' + lvSum + '/' + maxAdd + ')</span></div>' +
       '<span class="sp">' +
@@ -196,6 +535,7 @@
       '<div class="a"><span>剩余</span><b>' + (points - spent) + '</b></div>' +
       '<div class="a"><span>强化项</span><b>' + maxAdd + '</b></div>' + chip +
       '</div>';
+    h += sysPropsHtml(sysName);
 
     // 官方排版：rw=行(cl=列) 来自 traverse_enhance_tree 的「列=DFS深度、行=列内ui_level分组」
     // ul=-1 六边形（adjust），ul=-2 树外节点（自维修/集火，官方不进树，不渲染）
@@ -232,6 +572,7 @@
     mainCol.innerHTML = h;
     scheduleLines(list);
     bindMain(list);
+    bindPanel();
   }
 
   function nodeHtml(t, list, gridArea) {
