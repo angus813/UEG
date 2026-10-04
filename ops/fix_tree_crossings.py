@@ -87,10 +87,13 @@ def _cross_strict(s, o):
 
 def links_of(techs):
     tree = {t['id']: t for t in techs if t.get('ul') != -2}
+    hexids = {t['id'] for t in techs if t.get('ul') == -1}
     out = []
     for cid, t in tree.items():
+        if cid in hexids:
+            continue                       # 六边形节点只参与链线，不画配置里的前置线
         for p in (t.get('pq') or []):
-            if p[0] in tree and (p[0], cid) not in out:
+            if p[0] in tree and p[0] not in hexids and (p[0], cid) not in out:
                 out.append((p[0], cid))
     return out
 

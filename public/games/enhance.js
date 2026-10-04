@@ -749,11 +749,17 @@
     //   相邻行 + 相邻列   → 两个面对面的角直接连
     //   同列 + 相邻行     → 行缝里一条竖线
     //   其余（跨多行/跨多列）→ 沿列缝竖走、沿行缝横穿的折线
+    // 六边形节点只参与底部那排的链线，不画配置里的前置线。
+    var hexIds = {};
+    for (var h0 = 0; h0 < list.length; h0++) if (list[h0].ul === -1) hexIds[list[h0].id] = 1;
     var pqSet = {};
     for (var j = 0; j < list.length; j++) {
       var t = list[j];
-      if (!t.pq) continue;
-      for (var m = 0; m < t.pq.length; m++) pqSet[t.pq[m][0] + '>' + t.id] = 1;
+      if (!t.pq || t.ul === -1) continue;
+      for (var m = 0; m < t.pq.length; m++) {
+        if (hexIds[t.pq[m][0]]) continue;
+        pqSet[t.pq[m][0] + '>' + t.id] = 1;
+      }
     }
     Object.keys(pqSet).forEach(function (k) {
       var ab = k.split('>');
