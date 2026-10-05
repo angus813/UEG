@@ -250,7 +250,24 @@ body {
 .up-desc { font-size: 0.76rem; color: var(--rhine-body); }
 
 /* ---------- 对局界面 ---------- */
+/* 分屏结构：顶栏（.top-status）全宽通栏，下方 .ws-split 把主区与右侧详情并排。
+   栅格用 1fr + 固定 248px 而不是 flex:1 —— 主区内容（九宫格卡池、舰队行）宽度
+   随内容变，给它 1fr 才能保证右栏宽度稳定、两个回合之间不跳。 */
 .game-header { display: flex; flex-direction: column; gap: 12px; }
+.ws-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 248px;
+  gap: 12px;
+  align-items: start;
+}
+.ws-main { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.ws-side { min-width: 0; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 12px; }
+
+/* 窄屏收成单列：右栏内容顺序下移，不做横向滚动 */
+@media (max-width: 900px) {
+  .ws-split { grid-template-columns: minmax(0, 1fr); }
+  .ws-side { position: static; }
+}
 .top-status {
   display: flex;
   gap: 12px;
@@ -814,9 +831,36 @@ body {
 @keyframes tipIn { from { opacity: 0; transform: translateX(-50%) translateY(-10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 .supply-panel { font-size: 0.8rem; }
 
-@media (max-width: 1100px) {
+/* 战场三栏在窄屏改单列。注意：分屏后主区比原来窄 260px 左右，
+   战场从「三栏并排」降级为单列的阈值要跟着降，否则会挤成一条。
+   1100px 是给整页留的余量；此处用 1180px 覆盖战场自身的实际可用宽度。 */
+@media (max-width: 1180px) {
   .battle-view { flex-direction: column; }
   .battle-center { width: 100%; max-height: 160px; order: -1; }
+}
+
+/* 进入对局后（leftPanel[data-mode] 不是 welcome）把外层那条 172px 按钮列收起来：
+   它的 6 个入口已经由 .ws-side 承载，再留一条就是同一屏两处「开始/返回」，
+   横向白白吃掉 172px。收窄到图标宽度而不是 display:none —— btnSupply 等
+   按钮的 id 仍需存在，隐藏后物资调配等入口会失效。 */
+.side-panel:not([data-mode="welcome"]) ~ .action-panel { width: 56px; }
+.side-panel:not([data-mode="welcome"]) ~ .action-panel .action-btn,
+.side-panel:not([data-mode="welcome"]) ~ .action-panel .back-link {
+  font-size: 0;              /* 文字收起，靠 CSS 伪元素给图标位 */
+  padding: 8px 0;
+  text-align: center;
+}
+.side-panel:not([data-mode="welcome"]) ~ .action-panel .action-btn::before {
+  content: attr(data-glyph);
+  font-size: 1rem;
+  line-height: 1;
+}
+.side-panel:not([data-mode="welcome"]) ~ .action-panel .back-link::before {
+  content: '←';
+  font-size: 1rem;
+}
+
+@media (max-width: 1100px) {
   .deploy-layout { flex-direction: column; }
   .deploy-right { width: 100%; }
   .fleet-card { flex: 1 1 140px; min-width: 130px; }

@@ -609,21 +609,25 @@ function renderTopStatus() {
 function renderPrep() {
   const panel = document.getElementById('leftPanel');
   panel.dataset.mode = 'prep';
+  // 顶栏（回合/资金/势力血条）全宽通栏，下方分屏：主区放卡池与手牌，
+  // 右栏放驳船、编组与行动按钮。理由见 weishu.css 的 .ws-split 注释。
   let html = '<div class="game-header">';
   html += renderTopStatus();
+  html += renderNewsTicker();
+  html += '<div class="ws-split"><div class="ws-main">';
   if (state.finalRound && state.finalRound.active) {
     html += '<div class="final-banner">最终回合 · 第 ' + state.finalRound.wave + ' 波次' + (state.finalRound.intermission ? '（间期 <span id="interTimer">' + Math.max(0, state.finalRound.timer) + '</span> 秒，可驳船补给）' : '') + '</div>';
   }
-  html += renderNewsTicker();
+  html += renderPoolSection();
+  html += '</div><div class="ws-side">';
   html += renderBarge();
   html += '<div class="prep-fleet">';
   html += '<div class="pf-title">我方编组（手牌区）</div>';
   html += renderFleetRows();
   html += '</div>';
-  html += renderPoolSection();
   html += renderHandSection();
   html += renderActionBar('prep');
-  html += '</div>';
+  html += '</div></div></div>';
   panel.innerHTML = html;
   renderPoolSectionBind();
 }
@@ -2019,6 +2023,9 @@ function renderBattle() {
   }
   html += renderNewsTicker();
   html += '<div class="battle-clock" id="battleClock">' + Math.ceil(clockLeft) + '</div>';
+  // 战斗期战场本身已是三栏（左我方 / 中日志 / 右敌方），再套一层分屏会把它挤扁，
+  // 所以战斗期只把行动按钮收进右栏，战场保持满宽。
+  html += '<div class="ws-split"><div class="ws-main">';
   html += '<div class="battle-view">';
   html += '<div class="fleet-panel left">';
   html += '<div class="fleet-title"><span class="ft-tag my">我</span>我方舰队 <span class="fp-cnt">' + state.units.filter(function (u) { return u.alive; }).length + '/' + state.units.length + '</span></div>';
@@ -2034,8 +2041,9 @@ function renderBattle() {
   html += renderRows(state.enemies, 'en');
   html += '</div>';
   html += '</div>';
+  html += '</div><div class="ws-side">';
   html += renderActionBar('battle');
-  html += '</div>';
+  html += '</div></div>';
   panel.innerHTML = html;
 }
 
