@@ -446,7 +446,10 @@
       i: u.id, c: u.cls, r: u.row, hp: u.hp, mhp: u.maxHp, s: u.shield,
       d: u.dmg, a: u.armor, rt: u.rate, rg: u.range, w: u.weapon,
       dt: u.dmgType, em: u.energyMul, cb: u.critBonus, am: u.antiMissile,
-      rp: u.repair, el: u.elite, al: u.alive ? 1 : 0, k: u.kills, lf: u.lastFireTime
+      rp: u.repair, el: u.elite, al: u.alive ? 1 : 0, k: u.kills, lf: u.lastFireTime,
+      // 联机联合舰队里，舰船 id 带玩家序号前缀（p2_my_0）。房主的本地有
+      // 完整编组，非房主没有队友的舰 —— 名字靠 roster 查，不每帧重传。
+      o: u.owner || ''
     } : {
       i: u.id, c: u.cls, z: u.zone, g: u.group, f: u.factionIdx,
       hp: u.hp, mhp: u.maxHp, s: u.shield, d: u.dmg, a: u.armor,
@@ -477,6 +480,13 @@
       tk: s.totalKills, rk: s.roundKills, rll: s.roundLifeLost,
       bl: s.bargeLevel, sh: s.shield
     };
+    // 联合舰队的「id -> 舰名」对照表。只在场次开始（编组确定）时变一次，
+    // 之后 shared 未变就不会重发 —— 40 艘 × 约 34B ≈ 1.4KB，一次性付掉。
+    if (s.units.length && (!s.coopRoster || Object.keys(s.coopRoster).length !== s.units.length)) {
+      const roster = {};
+      s.units.forEach(function (u) { roster[u.id] = [u.name, u.shortName || u.name, u.cls, u.owner || '']; });
+      shared.roster = roster;
+    }
     const fr = (s.finalRound && s.finalRound.active && s.finalRound.fortress)
       ? { hp: s.finalRound.fortress.hp, mhp: s.finalRound.fortress.maxHp,
           sh: s.finalRound.fortress.shield, ms: s.finalRound.fortress.maxShield,
@@ -536,6 +546,15 @@
       // null 而非 {}：diffSnapshot 用 prev.mu.forEach 遍历，
       // 空对象没有 mu，首帧就会抛「Cannot read properties of undefined」。
       syncState.lastSent = null;
+
+      // roster（id -> 舰名）只在编组变化时随 shared 发一次。后加入的玩家
+      // 订阅时那一帧已经过去了，就永远拿不到舰名 —— 队友的舰只能显示
+      // 「未知舰船」。所以让非房主订阅后主动要一次全量。
+      syncState.channel.on('broadcast', { event: 'needFull' }, function (msg) {
+        if (!msg || !msg.payload) return;
+        if (msg.payload.by === username()) return;
+        sendFull();
+      });
       return new Promise(function (resolve) {
         let settled = false;
         const to = setTimeout(function () {
@@ -562,7 +581,22 @@
     });
   }
 
-  function syncTimer() {
+  // 不做差分地发一帧完整快照。给刚订阅 / 中途加入的客户端补底用。
+function sendFull() {
+  if (!syncState.channel || !state.code || !syncState.getState) return null;
+  let full;
+  try { full = buildSnapshot(syncState.getState()); }
+  catch (e) { console.error('[weishu-sync] 取状态失败', e); return null; }
+  const payload = {
+    seq: (syncState.seq = (syncState.seq || 0) + 1),
+    d: { t: full.t, sh: full.sh, fr: full.fr, mu: full.mu, en: full.en, ids: full.ids }
+  };
+  syncState.lastSent = full;
+  syncState.channel.send({ type: 'broadcast', event: 'snap', payload: payload });
+  return payload;
+}
+
+function syncTimer() {
     if (syncState.timer) clearInterval(syncState.timer);
     syncState.timer = setInterval(function () {
       if (!syncState.channel || !state.code || !syncState.getState) return;
@@ -617,7 +651,14 @@
         ch.subscribe(function (status) {
           if (status === 'SUBSCRIBED') {
             if (settled) return;
-            settled = true; clearTimeout(to); resolve(true);
+            settled = true; clearTimeout(to);
+            // 向房主要一帧完整快照（含 roster）。房主可能还没开跑，
+            // 那时不会有回应 —— 等下一次增量帧即可，两者都能补上名字。
+            setTimeout(function () {
+              try { ch.send({ type: 'broadcast', event: 'needFull', payload: { by: username() } }); }
+              catch (e) {}
+            }, 120);
+            resolve(true);
           } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
             if (settled) return;
             settled = true; clearTimeout(to); resolve(false);
@@ -655,6 +696,7 @@
     notifySeat: notifySeat,
     snapshot: snapshot,
     isHost: isHost,
+    isRoom: function () { return !!state.code; },
     // 战斗同步（房主权威）
     SYNC_HZ_MS: SYNC_HZ_MS,
     startSync: startSync,

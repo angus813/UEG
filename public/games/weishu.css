@@ -589,6 +589,23 @@ body {
   box-shadow: none;
 }
 .fc-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+/* 联机联合舰队：左缘玩家色条 + 名字前缀。单人局不产生这些节点。 */
+.fc-owner {
+  flex: none;
+  width: 4px;
+  align-self: stretch;
+  min-height: 30px;
+  margin-right: -2px;
+}
+.fc-owner-tag {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  margin-right: 2px;
+  white-space: nowrap;
+}
+/* 联机卡面留出左缘色条的位置，避免与 .fc-icon 贴在一起 */
+.fleet-card.coop { padding-left: 12px; border-left-width: 2px; }
 .fc-icon {
   flex: none;
   width: 36px;

@@ -350,6 +350,121 @@ function countOfId(id) {
 function totalCommand() {
   return state.hand.reduce(function (a, c) { return a + (c.ship && c.ship.cls !== 'fighter' && c.ship.cls !== 'corvette' ? c.ship.command : 0); }, 0);
 }
+// ==================== 联机：舰队编组序列化与合并 ====================
+// 联机局里房主要把各人的 hand 合并成一支联合舰队。三件事必须跟着走，
+// 否则合并出来的舰会比单人局的弱：
+//   1. lv（逐项强化等级）—— 影响 dmg/hp/rate/armor/range 五项倍率
+//   2. eq（装备 id 列表）—— 影响同上，另有 shield 决定有无护盾
+//   3. mod（模块）—— modOffset 决定火力/装甲/维修倾向
+//   4. en（强化页加成）—— shipEnhanceBonus 读的是本机 ueg_enhance_state，
+//      房主拿不到队友的强化进度，所以必须在各自浏览器上先算好再上报。
+//
+// 诚实说明信任边界：en 由客户端上报，房主无法核验（强化进度存在本地
+// localStorage，库里没有）。它只影响自己那只舰的强度，不是竞争性数据。
+function packFleet() {
+  const ships = [];
+  let cmds = 0;
+  state.hand.forEach(function (c) {
+    if (!c.ship) return;
+    const cmd = (c.ship.cls !== 'fighter' && c.ship.cls !== 'corvette') ? (c.ship.command || 0) : 0;
+    cmds += cmd;
+    ships.push({
+      sid: c.ship.id,
+      lv: c.lv || {},
+      el: !!c.elite,
+      eq: (c.equips || []).map(function (e) { return e.id; }),
+      md: c.mod || '',
+      en: shipEnhanceBonus(c.ship.name),
+      cm: cmd
+    });
+  });
+  return { by: sbUser(), cm: cmds, sh: ships, ready: true };
+}
+
+// 房主合并：把各席位上报的编组装进 state.hand。
+// 指挥值共享 400 上限（与单人局一致）—— 4 人各 400 会让舰队涨到 200 艘，
+// 而敌人强度是按单人量定的，会变成平推。
+// 超出上限时按「房主自己的舰优先、其次按加入时间」截断，
+// 保证房主的编组不会被队友挤掉。
+function coopMergeFleets(seats) {
+  const CAP = 400;
+  // 先排序：房主第一，其余按加入时间
+  const ordered = seats.slice().sort(function (a, b) {
+    const me = sbUser();
+    if (a.username === me && b.username !== me) return -1;
+    if (b.username === me && a.username !== me) return 1;
+    return String(a.joined_at || '').localeCompare(String(b.joined_at || ''));
+  });
+  const shipById = {};
+  (window.PLAYER_SHIPS || []).forEach(function (s) { shipById[s.id] = s; });
+
+  const merged = [];
+  const owners = {};
+  let used = 0;
+  let dropped = 0;
+
+  ordered.forEach(function (seat) {
+    const fleet = seat.fleet;
+    if (!fleet || !fleet.sh || !fleet.sh.length) return;
+    // p<N> 前缀里的 N 是该玩家在本局的稳定序号（席位顺序），
+    // 供接收端区分来源，也用于卡面色条。
+    const tag = seatTag(seat.username);
+    (fleet.sh || []).forEach(function (rec) {
+      const s = shipById[rec.sid];
+      if (!s) return;
+      const cmd = rec.cm || 0;
+      if (used + cmd > CAP) { dropped++; return; }
+      used += cmd;
+      const idx = merged.length;
+      merged.push({
+        ship: s,
+        // 带 owner，rebuildUnits 用它生成带前缀的 id
+        owner: seat.username,
+        tag: tag,
+        elite: !!rec.el,
+        equips: (rec.eq || []).map(function (id) { return { id: id }; }),
+        lv: rec.lv || {},
+        // en 是上报方算好的强化加成，直接用，不在本机重算
+        enhOverride: typeof rec.en === 'number' ? rec.en : null,
+        mod: rec.md || '',
+        kills: 0, lastFireTime: 0, spentTech: 0
+      });
+      owners[tag] = seat.username;
+    });
+  });
+
+  // 非舰船类手牌（装备 / 法术）只保留自己的 —— 队友的装备法术在合并后
+  // 无法区分归属，也不参与战斗计算，丢掉不影响战况。
+  state.hand = merged;
+  state.coopOwners = owners;
+  state.coopUsed = used;
+  state.coopDropped = dropped;
+  return { used: used, dropped: dropped, count: merged.length };
+}
+
+// 玩家稳定序号：按房间席位顺序，p1 起。用用户名反查座位表，
+// 保证同一局内同一人每次刷新拿到的序号不变（颜色才不会乱跳）。
+// 玩家序号映射。必须用 let：coopRebuildTags 每次重建房间态都要整体替换它，
+// 声明成 const 会在赋值时抛 Assignment to constant variable，
+// 表现为「点开始作战后什么都不发生」。
+let coopTagMap = {};
+function coopRebuildTags(snap) {
+  coopTagMap = {};
+  snap.seats.forEach(function (s, i) { coopTagMap[s.username] = 'p' + (i + 1); });
+}
+function seatTag(username) {
+  return coopTagMap[username] || ('p' + (Object.keys(coopTagMap).length + 1));
+}
+
+// 各玩家卡面配色：按序号在铜金/靛蓝/苔绿/赭石里循环，
+// 与参考项目用 mint/amber 区分队友的做法同思路，但色相取站内调色盘。
+const COOP_COLORS = ['#9b7247', '#4a6b8a', '#6b7a4a', '#8a5a4a', '#5a6b8a', '#7a5a8a'];
+function coopColor(tag) {
+  const m = /^p(\d+)$/.exec(tag || '');
+  if (!m) return COOP_COLORS[0];
+  return COOP_COLORS[(Number(m[1]) - 1) % COOP_COLORS.length];
+}
+
 function modOffset(card) {
   const mod = card.mod || '';
   const o = { dmgMul: 1, hpMul: 1, armorBonus: 0, repair: 0, carry: null };
@@ -711,6 +826,26 @@ function renderPrep() {
   html += '</div></div></div>';
   panel.innerHTML = html;
   renderPoolSectionBind();
+  coopReportFleet();
+}
+
+// 编组上报（防抖）。
+// renderPrep 是编组变化的统一出口 —— 买舰、合成、升级、配装、换模块
+// 全都会走到这里，所以挂在这里就不会漏。防抖 800ms 是因为连续点「+」
+// 会连续触发 renderPrep，逐次写库没意义。
+let coopReportTimer = null;
+function coopReportFleet() {
+  const R = window.WeishuRoom;
+  if (!R || !R.isHost || !R.isRoom()) return;
+  if (coopReportTimer) clearTimeout(coopReportTimer);
+  coopReportTimer = setTimeout(function () {
+    R.saveFleet(packFleet()).then(function (r) {
+      if (r && r.code !== 200) console.warn('[coop] 编组上报失败', r);
+      // 上报后让队友看到自己的编组已被房主收录
+      R.notifySeat();
+      R.refresh();
+    });
+  }, 800);
 }
 function renderBarge() {
   const b = CONFIG.BARGE[state.bargeLevel - 1];
@@ -1391,7 +1526,9 @@ function rebuildUnits() {
     if (!card.ship) return null;
     const s = card.ship;
     let dmgMul = 1, hpMul = 1, rateMul = 1, armorBonus = 0, rangeBonus = 0, energyMul = 1, critBonus = 0;
-    const enh = shipEnhanceBonus(s.name);
+    // 联机时用上报方算好的强化加成（队友的 ueg_enhance_state 本机读不到）；
+    // 单人局沿用本机计算。
+    const enh = (card.enhOverride != null) ? card.enhOverride : shipEnhanceBonus(s.name);
     dmgMul *= enh; hpMul *= enh;
     const lv = card.lv || {};
     dmgMul *= 1 + (lv.dmg || 0) * 0.1;
@@ -1418,7 +1555,11 @@ function rebuildUnits() {
     // 与 weapon 对齐：有 air 武器的舰船才具备拦截能力。
     const antiMissile = s.weapon === 'air' ? Math.round(s.dmg * 0.8 + (s.armor || 0) * 2) : 0;
     return {
-      cardIdx: i, id: 'my_' + i, name: s.name, shortName: s.shortName || s.name, cls: s.cls, row: s.row, repair: (s.repair ? 1 : 0) || (mo.repair ? 1 : 0),
+      // 联机联合舰队里id 带玩家序号前缀（p2_my_0）：快照里非房主靠它区分来源，
+// 也用于卡面上色。单人局保持 my_<i>，不做任何额外标记。
+      cardIdx: i, id: (card.tag ? card.tag + '_my_' : '') + i, name: s.name, shortName: s.shortName || s.name, cls: s.cls, row: s.row, repair: (s.repair ? 1 : 0) || (mo.repair ? 1 : 0),
+      // 联机：带玩家标签，卡面据此上色并加名字前缀
+      owner: card.owner || '', tag: card.tag || '',
       maxHp: maxHp, hp: maxHp,
       shield: hasShield ? Math.round(maxHp * 0.2) + ((card.equips || []).filter(function (e) { return e.id === 'shield'; }).length ? 40 : 0) : 0,
       dmg: Math.round(s.dmg * dmgMul * state.bonuses.dmgMul * waveScale),
@@ -1631,6 +1772,34 @@ function startBattle() {
   if (state.phase !== 'prep') return;
   if (typeof interTimer !== 'undefined' && interTimer) { clearInterval(interTimer); interTimer = null; }
   if (!state.hand.some(function (c) { return c.ship; })) { flashTip('编组中没有舰船'); return; }
+  // 联机：非房主不能「发起」战斗，但必须进入战斗界面 ——
+  // 进了界面才会订阅房主快照、才能看到联合舰队。拦住他等于让他永远看不到战况。
+  // 他本地的 units 只是占位，会被房主快照里的联合舰队整体替换掉。
+  if (coop.isRoom() && !coop.isHost()) {
+    state.phase = 'battle';
+    state.repairUntil = Date.now() + 2500;
+    rebuildUnits();
+    spawnEnemyWave();
+    renderBattle();
+    startBattleLoop();
+    flashTip('已接入联合舰队，等待房主数据');
+    return;
+  }
+  // 联机：房主先把各人的编组合并进联合舰队，再进战斗。
+  // 合并是同步的（读 seats 上已上报的 fleet），不做网络等待 ——
+  // 各玩家在休整期就调好了编组并随时可上报，到点直接取最新的一份。
+  if (coop.isRoom() && coop.isHost()) {
+    const snap = window.WeishuRoom.snapshot();
+    coopRebuildTags(snap);
+    const merged = coopMergeFleets(snap.seats);
+    if (merged.dropped > 0) {
+      pushNews('联合舰队受 400 指挥值上限限制，' + merged.dropped + ' 艘舰未编入', 'warn');
+    }
+    pushNews('联合舰队就绪：' + merged.count + ' 艘（指挥值 ' + merged.used + '/400）');
+    if (!merged.count) { flashTip('联合舰队为空'); return; }
+    // 把房间阶段推到作战中，非房主据此知道该切到战斗界面
+    window.WeishuRoom.hostUpdate({ phase: window.WeishuRoom.PHASE.COMBAT, round: state.wave });
+  }
   state.phase = 'battle';
   state.repairUntil = Date.now() + 2500;
   const spells = state.hand.filter(function (c) { return c.type === 'spell'; });
@@ -1712,7 +1881,12 @@ function unpackUnit(p, mine) {
     weapon: p.w, dmgType: p.dt, kills: p.k || 0, fortress: !!p.fs
   };
   if (mine) {
-    u.cardIdx = p.ix != null ? p.ix : parseInt(String(p.i).replace('my_', ''), 10) || 0;
+    // id 形如 my_3 或 p2_my_3（联机时带玩家序号前缀）
+    var raw = String(p.i);
+    var tag = /^p(\d+)_/.exec(raw);
+    u.tag = tag ? 'p' + tag[1] : '';
+    u.owner = u.tag ? (state.coopOwners && state.coopOwners[u.tag]) || '' : '';
+    u.cardIdx = parseInt(raw.replace(/^p\d+_my_/, 'my_').replace('my_', ''), 10) || 0;
     u.row = p.r; u.rate = p.rt; u.range = p.rg;
     u.energyMul = p.em; u.critBonus = p.cb; u.elite = !!p.el;
   } else {
@@ -1729,6 +1903,7 @@ function coopApply(d) {
   if (!d) return;
   const s = state;
   if (d.sh) {
+    if (d.sh.roster) s.coopRoster = d.sh.roster;
     s.phase = d.sh.ph || s.phase;
     s.wave = d.sh.rd != null ? d.sh.rd : s.wave;
     s.life = d.sh.life != null ? d.sh.life : s.life;
@@ -1760,13 +1935,16 @@ function coopApply(d) {
     d.mu.forEach(function (p) {
       const cur = unpackUnit(p, true);
       const old = byId[p.i];
-      // name / shortName 不能从快照来（压缩掉省体积），保留本地的
-      if (old) { cur.name = old.name; cur.shortName = old.shortName; }
+      // 名字来源：roster（房主下发的对照表）优先，其次本地 hand，
+      // 最后才回退到占位。队友的舰本地 hand 里没有，只能靠 roster。
+      const r = s.coopRoster && s.coopRoster[p.i];
+      if (r) { cur.name = r[0]; cur.shortName = r[1]; cur.cls = r[2]; cur.owner = r[3] || cur.owner; }
+      else if (old) { cur.name = old.name; cur.shortName = old.shortName; cur.owner = old.owner; }
       else {
         const handCard = s.hand[cur.cardIdx];
         const ship = handCard && handCard.ship;
-        cur.name = ship ? ship.name : '未知';
-        cur.shortName = ship ? (ship.shortName || ship.name) : '未知';
+        cur.name = ship ? ship.name : '未知舰船';
+        cur.shortName = ship ? (ship.shortName || ship.name) : '未知舰船';
       }
       if (old) Object.keys(cur).forEach(function (k) { old[k] = cur[k]; });
       else s.units.push(cur);
@@ -2335,9 +2513,14 @@ function renderFleetCard(u, side) {
   const countTxt = (side === 'en' && u.count && u.count > 1) ? ' ×' + u.count : '';
   const warping = side === 'en' && u.entered === false;
   const grpTxt = (side === 'en' && u.group !== undefined) ? '<span class="grp-tag">' + factionName(u.factionIdx) + '·第' + ((u.group % 2) + 1) + '组</span>' : '';
-  return '<div class="fleet-card' + (dead ? ' dead' : '') + (u.elite ? ' elite' : '') + (u.fortress ? ' fortress' : '') + (u.fortressHits ? ' fortress-hit' : '') + (side === 'en' ? ' enemy' : '') + (warping ? ' warp-in' : '') + '" id="' + u.id + '" data-hp="' + Math.round(u.hp) + '">' +
-    '<div class="fc-head"><span class="fc-icon" style="background:' + color + '26;border-color:' + color + ';">' + icon + '</span>' +
-    '<div class="fc-id"><div class="fc-name' + (u.fortress ? ' gold' : '') + '">' + (warping ? '跃迁中…' : (u.shortName || u.name)) + (u.fortressHits ? '<span class="fh-count">×' + u.fortressHits + '</span>' : '') + '</div><div class="fc-cls" style="color:' + color + ';">' + (CLS_ZH[u.cls] || '') + countTxt + grpTxt + (u.repair ? ' <span class="fc-repair">维修</span>' : '') + '</div></div></div>' +
+  // 联机联合舰队：左侧玩家色条 + 名字前缀，让队友认得出自己的舰。
+  // 只在联机局且该舰带 tag 时渲染 —— 单人局不产生任何额外标记。
+  const coopOn = side !== 'en' && !!u.tag;
+  const coopBar = coopOn ? '<span class="fc-owner" style="background:' + coopColor(u.tag) + '" title="' + escRoom(u.owner || '') + '"></span>' : '';
+  const coopPre = coopOn ? '<span class="fc-owner-tag" style="color:' + coopColor(u.tag) + ';">' + escRoom(u.owner || u.tag) + '·</span>' : '';
+  return '<div class="fleet-card' + (dead ? ' dead' : '') + (u.elite ? ' elite' : '') + (u.fortress ? ' fortress' : '') + (u.fortressHits ? ' fortress-hit' : '') + (side === 'en' ? ' enemy' : '') + (coopOn ? ' coop' : '') + (warping ? ' warp-in' : '') + '" id="' + u.id + '" data-hp="' + Math.round(u.hp) + '">' +
+    '<div class="fc-head">' + coopBar + '<span class="fc-icon" style="background:' + color + '26;border-color:' + color + ';">' + icon + '</span>' +
+    '<div class="fc-id"><div class="fc-name' + (u.fortress ? ' gold' : '') + '">' + coopPre + (warping ? '跃迁中…' : (u.shortName || u.name)) + (u.fortressHits ? '<span class="fh-count">×' + u.fortressHits + '</span>' : '') + '</div><div class="fc-cls" style="color:' + color + ';">' + (CLS_ZH[u.cls] || '') + countTxt + grpTxt + (u.repair ? ' <span class="fc-repair">维修</span>' : '') + '</div></div></div>' +
     '<div class="fc-bar"><div class="fc-hp"><div class="fill" style="width:' + pct + '%"></div></div>' +
     (u.shield > 0 ? '<div class="fc-shield"><div class="fill" style="width:' + shieldPct + '%"></div></div>' : '') + '</div>' +
     '<div class="fc-hpnum">' + Math.max(0, Math.round(u.hp)) + '/' + u.maxHp + '</div>' +
