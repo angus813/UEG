@@ -699,14 +699,6 @@ const AT = window.ENHANCE_ADJUST_EFFECTS || {};
     }
     h += '</div></div>';
     h += detailHtml(list);
-    h += '<div class="hint">节点方块＝官方强化项，图标与文字取自官方 <b>cfg_system_effect</b>；' +
-      '连线＝官方 <b>cfg_system_enhance_tree</b> 的前置关系（要求前置达到指定等级，未满足则锁定）。' +
-      '底部六边形＝官方的<b>扩展解锁</b>与<b>调教</b>项，不吃科技点：扩展解锁要登记并消耗武器技术（稀有度与总价值按配置门槛），' +
-      '调教要先把本系统的「系统调校」解锁，再按 <b>ADJUST_PROB</b> 逐级掷骰提升目标强化项（连续失败每次 +5%）。' +
-      '点击节点查看详情。<br>' +
-      '描述中的 <b>[Lv.N]</b>、<b>[周期]</b>、<b>[持续]</b> 是官方模板里由服务器按舰船实际数据下发的数值，' +
-      '本站未内置，故以标记显示，不代表最终数值。</div>';
-
     mainCol.innerHTML = h;
     scheduleLines(list);
     bindMain(list);
