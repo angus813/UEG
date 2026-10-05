@@ -201,7 +201,7 @@ function pushNews(msg, cls) {
 
 function computeEnhanceMul() {
   try {
-    const st = JSON.parse(localStorage.getItem('ueg_enhance_state') || '{}');
+    const st = JSON.parse(localStorage.getItem('ueg_tree_lv') || '{}');
     let total = 0;
     for (const k in st) for (const s in st[k]) for (const t in st[k][s]) total += st[k][s][t] || 0;
     return 1 + Math.min(0.5, total * 0.001);
@@ -215,7 +215,7 @@ function commonPrefixLen(x, y) {
 }
 function shipEnhanceBonus(shipName) {
   try {
-    const st = JSON.parse(localStorage.getItem('ueg_enhance_state') || '{}');
+    const st = JSON.parse(localStorage.getItem('ueg_tree_lv') || '{}');
     const a = shipName.replace(/[·\- ]/g, '');
     let lv = 0;
     for (const k in st) {
@@ -379,7 +379,7 @@ function canAcquireShip(s, quiet) {
 //   1. lv（逐项强化等级）—— 影响 dmg/hp/rate/armor/range 五项倍率
 //   2. eq（装备 id 列表）—— 影响同上，另有 shield 决定有无护盾
 //   3. mod（模块）—— modOffset 决定火力/装甲/维修倾向
-//   4. en（强化页加成）—— shipEnhanceBonus 读的是本机 ueg_enhance_state，
+//   4. en（强化页加成）—— shipEnhanceBonus 读的是本机 ueg_tree_lv，
 //      房主拿不到队友的强化进度，所以必须在各自浏览器上先算好再上报。
 //
 // 诚实说明信任边界：en 由客户端上报，房主无法核验（强化进度存在本地
@@ -447,8 +447,10 @@ function coopMergeFleets(seats) {
         elite: !!rec.el,
         equips: (rec.eq || []).map(function (id) { return { id: id }; }),
         lv: rec.lv || {},
-        // en 是上报方算好的强化加成，直接用，不在本机重算
-        enhOverride: typeof rec.en === 'number' ? rec.en : null,
+        // en 是上报方算好的强化加成，直接用，不在本机重算。
+        // 例外：自己的编组本地就能算细粒度加成，留给 rebuildUnits 走 ENHANCE_ATTRS，
+        // 否则房主自己的舰也会退回单标量，与单人局口径不一致。
+        enhOverride: (seat.username !== sbUser() && typeof rec.en === 'number') ? rec.en : null,
         mod: rec.md || '',
         kills: 0, lastFireTime: 0, spentTech: 0
       });
@@ -1570,10 +1572,25 @@ function rebuildUnits() {
     if (!card.ship) return null;
     const s = card.ship;
     let dmgMul = 1, hpMul = 1, rateMul = 1, armorBonus = 0, rangeBonus = 0, energyMul = 1, critBonus = 0;
-    // 联机时用上报方算好的强化加成（队友的 ueg_enhance_state 本机读不到）；
-    // 单人局沿用本机计算。
-    const enh = (card.enhOverride != null) ? card.enhOverride : shipEnhanceBonus(s.name);
-    dmgMul *= enh; hpMul *= enh;
+    // 强化加成（官方 EFFECT_TYPE==ADJUST 与普通强化节点共用一套口径）。
+    //
+    // 优先走 enhance.js 的细粒度桶，按属性分别生效：fireMul 已把 crit/攻速/射速
+    // 三项折进伤害期望，故不再单独累加 crit，避免与 fireMul 重复计算。
+    // physMul 是倍率而站内 armor 是加值，按基准装甲换算成等值加成。
+    //
+    // 联机时队友的 ueg_tree_lv 本机读不到，回退到上报方算好的单标量
+    // （= 1 + min(0.4, 加点总数 × 0.004)，由 packFleet 生成）。
+    const enhRemote = (card.enhOverride != null) ? card.enhOverride : null;
+    const ea = (enhRemote == null && typeof window.ENHANCE_ATTRS === 'function')
+      ? window.ENHANCE_ATTRS(s.name) : null;
+    if (ea) {
+      dmgMul *= ea.fireMul;
+      hpMul *= ea.hpMul;
+      energyMul *= ea.energyMul;
+      if (ea.physMul !== 1) armorBonus += (s.armor || 0) * (ea.physMul - 1);
+    } else if (enhRemote != null) {
+      dmgMul *= enhRemote; hpMul *= enhRemote;
+    }
     const lv = card.lv || {};
     dmgMul *= 1 + (lv.dmg || 0) * 0.1;
     hpMul *= 1 + (lv.hp || 0) * 0.1;

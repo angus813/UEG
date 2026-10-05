@@ -55,11 +55,15 @@ const AT = window.ENHANCE_ADJUST_EFFECTS || {};
   function icon(f) { return f ? '<img src="' + ICON + esc(f) + '?v=' + ICON_VER + '" alt="">' : ''; }
 
   // ---------- 等级 ----------
-  function lvOf(sn, tid) {
-    var s = levels[shipKey];
+  // 按指定 shipKey 取等级；lvOf 保持原语义（当前选中舰），供页面既有调用点使用。
+  function lvOfEx(sn, tid, key) {
+    var s = levels[key];
     if (!s || !s[sn]) return 0;
     var v = parseInt(s[sn][tid], 10);
     return isNaN(v) ? 0 : v;
+  }
+  function lvOf(sn, tid) {
+    return lvOfEx(sn, tid, shipKey);
   }
   function setLv(sn, tid, v) {
     var s = levels[shipKey] = levels[shipKey] || {};
@@ -197,16 +201,20 @@ const AT = window.ENHANCE_ADJUST_EFFECTS || {};
     }
   }
 
-  function mults() {
+  // sh / key 可选：不传即用当前选中舰（页面自身调用），
+  // 传入时供外部按舰名取该舰的加成，见 window.ENHANCE_ATTRS。
+  function mults(sh, key) {
+    if (sh === undefined) sh = ship;
+    if (key === undefined) key = shipKey;
     var acc = { dmg: 0, aa: 0, siege: 0, cd: 0, hit: 0, crit: 0, hp: 0, phys: 0, energy: 0,
                 cruise: 0, warp: 0, atkSpeed: 0, freq: 0, dur: 0,
                 hpAdd: 0, physAdd: 0, energyAdd: 0, invested: 0 };
-    if (ship) {
-      var names = Object.keys(ship.systems);
+    if (sh) {
+      var names = Object.keys(sh.systems);
       for (var i = 0; i < names.length; i++) {
-        var sn = names[i], techs = ship.systems[sn].techs || [];
+        var sn = names[i], techs = sh.systems[sn].techs || [];
         for (var j = 0; j < techs.length; j++) {
-          var t = techs[j], lv = lvOf(sn, t.id);
+          var t = techs[j], lv = lvOfEx(sn, t.id, key);
           // 调教（官方 EFFECT_TYPE==ADJUST）：第 N 级的累计加成 = 总值 × N / 等级上限，
           // 作用于它的目标强化节点，见 ops/gen_adjust_effects.py
           var at = AT[t.id];
@@ -243,6 +251,51 @@ const AT = window.ENHANCE_ADJUST_EFFECTS || {};
       invested: acc.invested
     };
   }
+
+  // 按舰名取该舰的强化加成倍率，供 weishu.js 战斗端使用。
+  // 名称匹配与 weishu.js 的 shipEnhanceBonus 同口径：去掉 ·、-、空格后比前缀，
+  // 因为 SHIPS_DATA 的键是「舰名·型号」而 PLAYER_SHIPS 的 name 是「舰名-全称」，
+  // 两者分隔符不同、不构成字面相等。
+  function keyForShipName(name) {
+    if (!name) return null;
+    var n = String(name).replace(/[·\- ]/g, '');
+    var fuzzy = null;
+    for (var k in DATA) {
+      var d = DATA[k] || {};
+      var a = String(d.name || '').replace(/[·\- ]/g, '');
+      var b = a + String(d.model || '').replace(/[·\- ]/g, '');
+      if (a === n || b === n) return k;
+      if (fuzzy === null && a.length >= 4 && n.length >= 4) {
+        var p = 0, m = Math.min(a.length, n.length);
+        while (p < m && a.charAt(p) === n.charAt(p)) p++;
+        if (p >= Math.max(4, Math.min(a.length, n.length) / 2)) fuzzy = k;
+      }
+    }
+    return fuzzy;
+  }
+
+  // 返回值直接沿用 mults() 的口径：
+  //   fireMul 含 crit/atkSpeed/freq 三项（crit 概率已折进伤害期望）
+  //   hpMul / physMul / energyMul 分别对应结构、装甲、能量装甲
+  // 其余桶（cd/hit/aa/siege/cruise/warp/dur）站内战斗没有对应机制，不返回。
+  window.ENHANCE_ATTRS = function (shipName) {
+    try {
+      var k = keyForShipName(shipName);
+      if (!k || !OFF[k]) return null;
+      var m = mults(OFF[k], k);
+      if (!m) return null;
+      return {
+        fireMul: m.fireMul || 1,
+        hpMul: m.hpMul || 1,
+        physMul: m.physMul || 1,
+        energyMul: m.energyMul || 1,
+        hpAdd: m.hpAdd || 0,
+        physAdd: m.physAdd || 0,
+        energyAdd: m.energyAdd || 0,
+        invested: m.invested || 0
+      };
+    } catch (e) { return null; }
+  };
 
   function sec1(n) { return Math.round(n * 10) / 10; }
   // 有加成时用高亮数字显示加成后的值
