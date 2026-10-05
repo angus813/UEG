@@ -1602,16 +1602,186 @@ function startEntranceSequence() {
   });
 }
 
+// ==================== 联机：战斗同步（房主权威） ====================
+// 单人局与旧行为完全一致：联机未开房时 coop.isRoom() 为 false，
+// 下面所有分支都走原路径。
+//
+// 房主跑完整模拟（gameTick），并按 SYNC_HZ_MS 广播增量快照；
+// 其他客户端不跑 gameTick，只把快照合进本地 state 再渲染 ——
+// 这样所有人看到的是同一份房主算出来的结果，客户端无法伪造战果。
+const coop = {
+  isRoom: function () {
+    return !!(window.WeishuRoom && window.WeishuRoom.snapshot().code);
+  },
+  isHost: function () {
+    return !!(window.WeishuRoom && window.WeishuRoom.isHost());
+  },
+  syncing: false,
+  // 房主关页面时本地战斗要停下，否则「同一份结果」就不成立了
+  hostLostHandled: false,
+  applySnapshot: null
+};
+
+// 把快照解包成与 gameTick 产出一致的结构。
+// 字段名是压缩过的（见 weishu_room.js 的 packUnit），这里一一还原。
+function unpackUnit(p, mine) {
+  const u = {
+    id: p.i, cls: p.c, alive: !!p.al, hp: p.hp, maxHp: p.mhp, shield: p.s,
+    dmg: p.d, armor: p.a, lastFireTime: p.lf, antiMissile: p.am, repair: p.rp,
+    weapon: p.w, dmgType: p.dt, kills: p.k || 0, fortress: !!p.fs
+  };
+  if (mine) {
+    u.cardIdx = p.ix != null ? p.ix : parseInt(String(p.i).replace('my_', ''), 10) || 0;
+    u.row = p.r; u.rate = p.rt; u.range = p.rg;
+    u.energyMul = p.em; u.critBonus = p.cb; u.elite = !!p.el;
+  } else {
+    u.zone = p.z; u.group = p.g; u.factionIdx = p.f;
+    u.tier = p.t; u.empUntil = p.eu; u.frozenUntil = p.fu;
+  }
+  return u;
+}
+
+// 合一份增量。d.mu / d.en 只含变化的单位，d.ids 是完整名单，
+// 据此删掉已阵亡并被移除的单位（阵亡单位 alive=0 仍在名单里，
+// 只有真正消失的才删 —— 也就是 renderRows 用到的那些）。
+function coopApply(d) {
+  if (!d) return;
+  const s = state;
+  if (d.sh) {
+    s.phase = d.sh.ph || s.phase;
+    s.wave = d.sh.rd != null ? d.sh.rd : s.wave;
+    s.life = d.sh.life != null ? d.sh.life : s.life;
+    s.maxLife = d.sh.mlife != null ? d.sh.mlife : s.maxLife;
+    s.funds = d.sh.fu != null ? d.sh.fu : s.funds;
+    if (d.sh.clk != null) clockLeft = d.sh.clk;
+    if (Array.isArray(d.sh.fhp)) s.factionHp = d.sh.fhp;
+    if (Array.isArray(d.sh.fmhp)) s.factionMaxHp = d.sh.fmhp;
+    if (d.sh.tk != null) s.totalKills = d.sh.tk;
+    if (d.sh.rk != null) s.roundKills = d.sh.rk;
+    if (d.sh.rll != null) s.roundLifeLost = d.sh.rll;
+    if (d.sh.bl != null) s.bargeLevel = d.sh.bl;
+    if (d.sh.sh != null) s.shield = d.sh.sh;
+  }
+  if (d.fr !== undefined) {
+    if (d.fr === null) {
+      if (s.finalRound && s.finalRound.fortress) s.finalRound.fortress = null;
+    } else {
+      if (!s.finalRound) s.finalRound = { active: true, wave: 0, timer: 0, fortress: null };
+      s.finalRound.active = true;
+      const f = s.finalRound.fortress || (s.finalRound.fortress = {});
+      f.hp = d.fr.hp; f.maxHp = d.fr.mhp; f.shield = d.fr.sh;
+      f.maxShield = d.fr.ms; f.alive = !!d.fr.al; f.hits = d.fr.hits;
+    }
+  }
+  if (d.mu && d.mu.length) {
+    const byId = {};
+    s.units.forEach(function (u) { byId[u.id] = u; });
+    d.mu.forEach(function (p) {
+      const cur = unpackUnit(p, true);
+      const old = byId[p.i];
+      // name / shortName 不能从快照来（压缩掉省体积），保留本地的
+      if (old) { cur.name = old.name; cur.shortName = old.shortName; }
+      else {
+        const handCard = s.hand[cur.cardIdx];
+        const ship = handCard && handCard.ship;
+        cur.name = ship ? ship.name : '未知';
+        cur.shortName = ship ? (ship.shortName || ship.name) : '未知';
+      }
+      if (old) Object.keys(cur).forEach(function (k) { old[k] = cur[k]; });
+      else s.units.push(cur);
+    });
+  }
+  if (d.en && d.en.length) {
+    const byId = {};
+    s.enemies.forEach(function (u) { byId[u.id] = u; });
+    d.en.forEach(function (p) {
+      const cur = unpackUnit(p, false);
+      cur.count = 1;
+      const old = byId[p.i];
+      if (old) { cur.name = old.name; cur.shortName = old.shortName; Object.keys(cur).forEach(function (k) { old[k] = cur[k]; }); }
+      else s.enemies.push(cur);
+    });
+  }
+  if (d.ids) {
+    const keepM = {}, keepE = {};
+    d.ids.mu.forEach(function (i) { keepM[i] = 1; });
+    d.ids.en.forEach(function (i) { keepE[i] = 1; });
+    s.units = s.units.filter(function (u) { return keepM[u.id]; });
+    s.enemies = s.enemies.filter(function (u) { return keepE[u.id]; });
+  }
+}
+
+// 非房主：只渲染快照，不跑 gameTick。
+function coopApplyAndRender(d) {
+  coopApply(d);
+  renderBattle();
+  updateBattleUI();
+}
+
+function coopOnSnapshot(d, seq) {
+  coop.lastSeq = seq;
+  coop.lastAt = Date.now();
+  coopApplyAndRender(d);
+}
+
+function coopStart(onLog) {
+  const R = window.WeishuRoom;
+  if (!R || !R.isRoom()) return Promise.resolve(false);
+  if (R.isHost()) {
+    return R.startSync(function () {
+      return {
+        phase: state.phase, round: state.wave, life: state.life, maxLife: state.maxLife,
+        funds: state.funds, clockLeft: clockLeft, factionHp: state.factionHp,
+        factionMaxHp: state.factionMaxHp, totalKills: state.totalKills,
+        roundKills: state.roundKills, roundLifeLost: state.roundLifeLost,
+        bargeLevel: state.bargeLevel, shield: state.shield,
+        units: state.units, enemies: state.enemies, finalRound: state.finalRound
+      };
+    }, onLog);
+  }
+  return R.watchSync(coopOnSnapshot, onLog);
+}
+
+function coopStop() {
+  const R = window.WeishuRoom;
+  if (!R) return;
+  R.stopSync();
+  R.stopWatch();
+  coop.syncing = false;
+}
+
+// 房主的快照超过 1.5s 没来：本地战斗暂停并提示。
+// 继续跑会算出与房主不同的结果，那比停下更糟。
+function coopWatchdog() {
+  if (!coop.isRoom() || coop.isHost()) return;
+  if (state.phase !== 'battle') return;
+  if (!coop.lastAt) { coop.lastAt = Date.now(); return; }
+  if (Date.now() - coop.lastAt > 1500 && !coop.hostLostHandled) {
+    coop.hostLostHandled = true;
+    stopBattleLoop();
+    flashTip('与房主失联，战斗已暂停（等待房主重连）');
+  }
+}
+
 function startBattleLoop() {
   stopBattleLoop();
   let last = Date.now();
+  const remote = coop.isRoom() && !coop.isHost();
   battleTimer = setInterval(function () {
     const now = Date.now();
     const dt = Math.min(0.25, (now - last) / 1000);
     last = now;
-    gameTick(now, dt);
+    // 非房主不跑模拟：只等快照。否则会算出与房主不同的战况，
+    // 屏幕上就会出现两套数字。
+    if (!remote) gameTick(now, dt);
+    else coopWatchdog();
   }, 100);
   uiTimer = setInterval(function () { updateBattleUI(); }, 150);
+  // 房主开跑时启动广播；非房主订阅
+  coopStart(function (msg) { console.warn('[coop]', msg); });
+  coop.syncing = coop.isRoom();
+  coop.hostLostHandled = false;
+  coop.lastAt = Date.now();
 }
 function stopBattleLoop() {
   if (battleTimer) { clearInterval(battleTimer); battleTimer = null; }
@@ -2185,17 +2355,27 @@ function updateBattleUI() {
 function skipRound() {
   if (state.phase !== 'prep') { flashTip('当前无法跳过'); return; }
   if (state.finalRound && state.finalRound.active) { flashTip('最终回合波次无法跳过'); return; }
+  // 联机时跳过是全局动作，只有房主能发起
+  if (coop.isRoom() && !coop.isHost()) { flashTip('只有房主能跳过回合'); return; }
   state.phase = 'battle';
   state.shield = 0;
   state.enemies.forEach(function (e) { e.alive = false; });
   state.units.forEach(function (u) { u.alive = false; });
   settleRound(true);
+  if (coop.isRoom() && coop.isHost()) {
+    window.WeishuRoom.pushEvent('skip', { round: state.wave });
+  }
 }
 function abortRun() {
   if (state.phase !== 'prep') { flashTip('战斗中无法放弃'); return; }
+  if (coop.isRoom() && !coop.isHost()) { flashTip('只有房主能放弃本局'); return; }
   showConfirm('放弃战斗', '放弃后本场模拟直接结束，不进入作战结算。确定放弃？', function () {
     state.phase = 'end';
     endGame(false);
+    if (coop.isRoom() && coop.isHost()) {
+      window.WeishuRoom.pushEvent('abort', {});
+      coopStop();
+    }
   });
 }
 
@@ -2203,6 +2383,8 @@ function endGame(victory) {
   if (state.phase === 'end') return;
   state.phase = 'end';
   stopBattleLoop();
+  // 本局结束就停广播，别让非房主继续收一个不再更新的战场
+  if (coop.isRoom()) coopStop();
   state.stats = state.stats || {};
   if (victory) {
     state.stats.wins = (state.stats.wins || 0) + 1;

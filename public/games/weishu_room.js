@@ -373,6 +373,10 @@
 
   function teardown() {
     stopPolling();
+    // stopSync / stopWatch 定义在本函数之后（battle 同步块）。函数声明会提升，
+    // 这里调用没问题；但 syncState 必须已初始化，否则首次调用会读 undefined。
+    if (typeof stopSync === 'function') stopSync();
+    if (typeof stopWatch === 'function') stopWatch();
     if (channel && subRoom) { try { subRoom.removeChannel(channel); } catch (e) {} }
     channel = null;
     subRoom = null;
@@ -400,6 +404,239 @@
     channel.send({ type: 'broadcast', event: 'seat', payload: { by: username(), at: Date.now() } });
   }
 
+  // ============================================================
+  //  战斗同步：房主权威
+  //
+  //  实测的流量压力（字段按 weishu.js 的 rebuildUnits / spawnEnemyWave 结构）：
+  //    单我方单位 334B · 单敌方 308B · 共享状态 177B
+  //    1人+36 敌 = 11.3 KB/帧 · 8人+60 敌 = 20.8 KB/帧
+  //    按 100ms 全量广播 = 每客户端 113~234 KB/s —— 太浪费。
+  //
+  //  所以：5Hz 广播 + 只发变化的单位。
+  //    每 200ms 一次，8人+60 敌满载约 104 KB/s 下行，4 人房间约 0.3 MB/s。
+  //    静默期（没单位变化）只发共享状态，约 180 B/次。
+  //
+  //  房间专属频道：host-sync-<房间码>，与 room-<房间码> 分开，
+  //  免得房间管理消息与高频战斗快照混在一条流里。
+  // ============================================================
+
+  const SYNC_HZ_MS = 200;
+  const syncState = {
+    channel: null,
+    lastSent: {},          // id -> 上次发出的关键数值，用于算增量
+    lastShared: '',
+    timer: null,
+    lastFrameAt: 0,
+    lastStats: null
+  };
+  const syncListeners = [];
+
+  function isHost() { return !!state.code && state.host === username(); }
+
+  function syncEmit(snapshotData) {
+    syncListeners.forEach(function (fn) {
+      try { fn(snapshotData); } catch (e) { console.error('[weishu-sync] 监听器异常', e); }
+    });
+  }
+
+  // 只保留渲染与命中判定要用的字段；name/shortName 由接收端按 id 查表。
+  // 全字段照搬会把 name 重复 40 遍，体积翻倍且毫无意义。
+  function packUnit(u, mine) {
+    const base = mine ? {
+      i: u.id, c: u.cls, r: u.row, hp: u.hp, mhp: u.maxHp, s: u.shield,
+      d: u.dmg, a: u.armor, rt: u.rate, rg: u.range, w: u.weapon,
+      dt: u.dmgType, em: u.energyMul, cb: u.critBonus, am: u.antiMissile,
+      rp: u.repair, el: u.elite, al: u.alive ? 1 : 0, k: u.kills, lf: u.lastFireTime
+    } : {
+      i: u.id, c: u.cls, z: u.zone, g: u.group, f: u.factionIdx,
+      hp: u.hp, mhp: u.maxHp, s: u.shield, d: u.dmg, a: u.armor,
+      dt: u.dmgType, w: u.weapon, t: u.tier, rp: u.repair, am: u.antiMissile,
+      al: u.alive ? 1 : 0, lf: u.lastFireTime, eu: u.empUntil, fu: u.frozenUntil
+    };
+    if (u.fortress) base.fs = 1;
+    return base;
+  }
+
+  function unitChanged(prev, cur) {
+    if (!prev) return true;
+    // 生命/护盾/位置性状态变了才重发；kills 这类累计值也算
+    return prev.hp !== cur.hp || prev.s !== cur.s || prev.al !== cur.al
+      || prev.lf !== cur.lf || prev.eu !== cur.eu || prev.fu !== cur.fu
+      || prev.k !== cur.k;
+  }
+
+  // 把 weishu.js 的 state 压成快照。s 由 weishu.js 传入（它在闭包里，
+  // 外部读不到，只能由它主动喂进来）。
+  function buildSnapshot(s) {
+    const mine = s.units.map(function (u) { return packUnit(u, true); });
+    const enemies = s.enemies.map(function (u) { return packUnit(u, false); });
+    const shared = {
+      ph: s.phase, rd: s.round, life: s.life, mlife: s.maxLife,
+      fu: s.funds, clk: Math.max(0, Math.ceil(s.clockLeft)),
+      fhp: s.factionHp, fmhp: s.factionMaxHp,
+      tk: s.totalKills, rk: s.roundKills, rll: s.roundLifeLost,
+      bl: s.bargeLevel, sh: s.shield
+    };
+    const fr = (s.finalRound && s.finalRound.active && s.finalRound.fortress)
+      ? { hp: s.finalRound.fortress.hp, mhp: s.finalRound.fortress.maxHp,
+          sh: s.finalRound.fortress.shield, ms: s.finalRound.fortress.maxShield,
+          al: s.finalRound.fortress.alive ? 1 : 0, hits: s.finalRound.fortress.hits }
+      : null;
+    return { t: Date.now(), sh: shared, fr: fr, mu: mine, en: enemies,
+             ids: { mu: mine.map(function (u) { return u.i; }),
+                    en: enemies.map(function (u) { return u.i; }) } };
+  }
+
+  // 增量：与上一帧比，只发变化过的单位，并给出完整 id 名单供接收端对齐。
+  // 接收端靠 ids 删除已消失的单位（阵亡单位 alive=0 仍留在名单里，
+  // 由 renderRows 负责显示；只有真正不再出现的才删）。
+  function diffSnapshot(prev, cur) {
+    const ids = {
+      mu: cur.mu.map(function (u) { return u.i; }),
+      en: cur.en.map(function (u) { return u.i; })
+    };
+    // 首帧没有 prev 可比，整帧都算变化。仍要带 ids ——
+    // 早先这里直接 return cur，把 ids 漏掉了，接收端拿不到名单就无法清理单位。
+    if (!prev) {
+      return { t: cur.t, sh: cur.sh, fr: cur.fr, mu: cur.mu, en: cur.en, ids: ids };
+    }
+    const prevMap = {};
+    prev.mu.forEach(function (u) { prevMap[u.i] = u; });
+    const prevEn = {};
+    prev.en.forEach(function (u) { prevEn[u.i] = u; });
+    const mu = cur.mu.filter(function (u) { return unitChanged(prevMap[u.i], u); });
+    const en = cur.en.filter(function (u) { return unitChanged(prevEn[u.i], u); });
+    const sharedChanged = JSON.stringify(prev.sh) !== JSON.stringify(cur.sh);
+    const frChanged = JSON.stringify(prev.fr) !== JSON.stringify(cur.fr);
+    // id 名单也变了（有人上场/退场）时必须发，哪怕数值都没变
+    const idsChanged = JSON.stringify(prev.ids) !== JSON.stringify(ids)
+      || !prev.ids;   // prev 若是旧格式（无 ids）则强制带一次
+    if (!sharedChanged && !frChanged && !mu.length && !en.length && !idsChanged) return null;
+    return {
+      t: cur.t,
+      sh: sharedChanged ? cur.sh : null,
+      fr: frChanged ? cur.fr : null,
+      mu: mu,
+      en: en,
+      ids: idsChanged ? ids : prev.ids
+    };
+  }
+
+  function startSync(getState, onLog) {
+    stopSync();
+    if (!state.code) return Promise.resolve(false);
+    if (!isHost()) return Promise.resolve(false);
+    syncState.getState = getState;
+    syncState.onLog = onLog;
+    const chName = 'host-sync-' + state.code;
+    return loadSupabase().then(function (mod) {
+      if (!subRoom) subRoom = mod.createClient(
+        window.UEG_CONFIG.supabase.url, window.UEG_CONFIG.supabase.publishableKey);
+      syncState.channel = subRoom.channel(chName, { config: { broadcast: { self: false } } });
+      // null 而非 {}：diffSnapshot 用 prev.mu.forEach 遍历，
+      // 空对象没有 mu，首帧就会抛「Cannot read properties of undefined」。
+      syncState.lastSent = null;
+      return new Promise(function (resolve) {
+        let settled = false;
+        const to = setTimeout(function () {
+          if (settled) return;
+          settled = true;
+          resolve(false);
+        }, 8000);
+        syncState.channel.subscribe(function (status) {
+          if (status === 'SUBSCRIBED') {
+            if (settled) return;
+            settled = true; clearTimeout(to);
+            syncTimer();
+            resolve(true);
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            if (settled) return;
+            settled = true; clearTimeout(to);
+            resolve(false);
+          }
+        });
+      });
+    }).catch(function (e) {
+      console.error('[weishu-sync] 订阅失败', e);
+      return false;
+    });
+  }
+
+  function syncTimer() {
+    if (syncState.timer) clearInterval(syncState.timer);
+    syncState.timer = setInterval(function () {
+      if (!syncState.channel || !state.code || !syncState.getState) return;
+      let full;
+      try { full = buildSnapshot(syncState.getState()); }
+      catch (e) { console.error('[weishu-sync] 取状态失败', e); return; }
+      const delta = diffSnapshot(syncState.lastSent, full);
+      syncState.lastSent = full;
+      syncState.lastStats = { bytes: 0, sent: 0, at: Date.now() };
+      if (!delta) return;                       // 无变化就不发
+      const payload = JSON.stringify(delta);
+      syncState.lastStats.bytes = payload.length;
+      syncState.lastStats.sent = 1;
+      syncState.channel.send({
+        type: 'broadcast', event: 'snap',
+        payload: { seq: (syncState.seq = (syncState.seq || 0) + 1), d: delta }
+      }).then(function (r) {
+        if (r && r.error && syncState.onLog) {
+          syncState.onLog('广播失败：' + (r.error.message || r.error));
+        }
+      });
+    }, SYNC_HZ_MS);
+  }
+
+  function stopSync() {
+    if (syncState.timer) { clearInterval(syncState.timer); syncState.timer = null; }
+    if (syncState.channel && subRoom) {
+      try { subRoom.removeChannel(syncState.channel); } catch (e) {}
+    }
+    syncState.channel = null;
+    syncState.lastSent = null;
+    syncState.seq = 0;
+  }
+
+  // 非房主：订阅房主的快照频道
+  function watchSync(onSnapshot, onLog) {
+    stopWatch();
+    if (!state.code || isHost()) return Promise.resolve(false);
+    return loadSupabase().then(function (mod) {
+      if (!subRoom) subRoom = mod.createClient(
+        window.UEG_CONFIG.supabase.url, window.UEG_CONFIG.supabase.publishableKey);
+      const ch = subRoom.channel('host-sync-' + state.code, { config: { broadcast: { self: false } } });
+      syncState.watch = ch;
+      ch.on('broadcast', { event: 'snap' }, function (msg) {
+        if (!msg || !msg.payload || !msg.payload.d) return;
+        try { onSnapshot(msg.payload.d, msg.payload.seq); }
+        catch (e) { console.error('[weishu-sync] 处理快照出错', e); }
+      });
+      return new Promise(function (resolve) {
+        let settled = false;
+        const to = setTimeout(function () { if (!settled) { settled = true; resolve(false); } }, 8000);
+        ch.subscribe(function (status) {
+          if (status === 'SUBSCRIBED') {
+            if (settled) return;
+            settled = true; clearTimeout(to); resolve(true);
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            if (settled) return;
+            settled = true; clearTimeout(to); resolve(false);
+          }
+        });
+      });
+    }).catch(function (e) {
+      console.error('[weishu-sync] 观看订阅失败', e);
+      return false;
+    });
+  }
+
+  function stopWatch() {
+    if (syncState.watch && subRoom) {
+      try { subRoom.removeChannel(syncState.watch); } catch (e) {}
+    }
+    syncState.watch = null;
+  }
+
   window.WeishuRoom = {
     PHASE: PHASE,
     PHASE_LABEL: PHASE_LABEL,
@@ -417,11 +654,27 @@
     eventsSince: eventsSince,
     notifySeat: notifySeat,
     snapshot: snapshot,
+    isHost: isHost,
+    // 战斗同步（房主权威）
+    SYNC_HZ_MS: SYNC_HZ_MS,
+    startSync: startSync,
+    stopSync: stopSync,
+    watchSync: watchSync,
+    stopWatch: stopWatch,
+    buildSnapshot: buildSnapshot,
+    // 暴露给自测与调试：增量算法不外露就没法在没有真实战斗的情况下验它
+    diffSnapshot: diffSnapshot,
+    onSnapshot: function (fn) { syncListeners.push(fn); return function () {
+      const i = syncListeners.indexOf(fn);
+      if (i >= 0) syncListeners.splice(i, 1);
+    }; },
+    syncStats: function () { return syncState.lastStats; },
     onChange: function (fn) { listeners.push(fn); return function () {
       const i = listeners.indexOf(fn);
       if (i >= 0) listeners.splice(i, 1);
     }; },
     // 仅供调试与自测
-    _state: state
+    _state: state,
+    _sync: syncState
   };
 })();
