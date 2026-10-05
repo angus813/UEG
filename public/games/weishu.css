@@ -347,6 +347,37 @@ body {
 
 .prep-fleet { background: var(--rhine-panel2); border: 1px solid var(--rhine-line); border-radius: 2px; padding: 10px; }
 .pf-title { font-size: 0.8rem; color: var(--rhine-ink); font-weight: 700; margin-bottom: 8px; font-family: var(--rhine-title-font, 'Oswald', 'Helvetica Neue', Arial, sans-serif); text-transform: uppercase; letter-spacing: 0.04em; }
+/* 手牌区默认折叠：HAND_LIMIT 已取消（对局中买舰不限数量），编组会随买舰
+   无限变长，不折叠会把整条右栏顶出视口。
+   标题本身做成 button —— 原生可聚焦、回车可开合，且文字仍是
+   「我方编组（手牌区）」一字未改；箭头走 ::before，不进 textContent。
+   展开态存 JS 的 prepFleetOpen，因为 renderPrep 每次买舰都整块重绘。 */
+button.pf-title {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-bottom: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+button.pf-title::before {
+  content: '';
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border: 4px solid transparent;
+  border-left-color: currentColor;
+  margin-right: 6px;
+  vertical-align: middle;
+  transition: transform .15s ease;
+}
+.prep-fleet.open button.pf-title::before { transform: rotate(90deg); }
+/* 收起时去掉标题下边距，让这一块只剩标题一行 */
+.prep-fleet:not(.open) button.pf-title { margin-bottom: 0; }
+.pf-body { display: none; }
+.prep-fleet.open .pf-body { display: block; }
 .pool-section, .hand-section { background: var(--rhine-panel2); border: 1px solid var(--rhine-line); border-radius: 2px; padding: 10px; }
 .pool-head, .hand-head {
   display: flex;
@@ -1107,8 +1138,7 @@ body {
 #warpCanvas { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; z-index: 300; pointer-events: none; }
 
 /* ---------- 跃迁（去发光，改柠檬黄细线 + 透明度） ---------- */
-.fleet-card.warp-in { opacity: .35; border-color: var(--rhine-accent); box-shadow: none; animation: warpPulse .35s infinite alternate; }
-@keyframes warpPulse { from { opacity: .12; } to { opacity: .5; } }
+
 
 /* ---------- 部署锁标记 ---------- */
 .dp-lock-badge { display: inline-block; margin: 2px 0 0; padding: 1px 8px; font-size: 11px; color: #a8503f; border: 1px solid #a8503f; border-radius: 2px; background: transparent; }

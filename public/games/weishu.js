@@ -801,6 +801,10 @@ function renderHudBottom() {
   return '<div class="hud-bottom"><div class="hud-hint">' + escRoom(text) + '</div></div>';
 }
 
+// 「我方编组（手牌区）」默认折叠，点标题展开。
+// 存模块变量而不是只记 DOM 类名：renderPrep 每次买舰/合成都整块重绘，
+// 只记类名的话买一次舰就会打回默认，展开态丢失。
+let prepFleetOpen = false;
 function renderPrep() {
   const panel = document.getElementById('leftPanel');
   panel.dataset.mode = 'prep';
@@ -817,14 +821,20 @@ function renderPrep() {
   html += renderHudBottom();
   html += '</div><div class="ws-side">';
   html += renderBarge();
-  html += '<div class="prep-fleet">';
-  html += '<div class="pf-title">我方编组（手牌区）</div>';
-  html += renderFleetRows();
+  html += '<div class="prep-fleet' + (prepFleetOpen ? ' open' : '') + '">';
+  html += '<button type="button" class="pf-title" id="prepFleetToggle" aria-expanded="' + (prepFleetOpen ? 'true' : 'false') + '" aria-controls="prepFleetBody">我方编组（手牌区）</button>';
+  html += '<div class="pf-body" id="prepFleetBody">' + renderFleetRows() + '</div>';
   html += '</div>';
   html += renderHandSection();
   html += renderActionBar('prep');
   html += '</div></div></div>';
   panel.innerHTML = html;
+  const pfToggle = document.getElementById('prepFleetToggle');
+  if (pfToggle) pfToggle.addEventListener('click', function () {
+    prepFleetOpen = !prepFleetOpen;
+    pfToggle.setAttribute('aria-expanded', prepFleetOpen ? 'true' : 'false');
+    pfToggle.closest('.prep-fleet').classList.toggle('open', prepFleetOpen);
+  });
   renderPoolSectionBind();
   coopReportFleet();
 }
@@ -1831,25 +1841,8 @@ function startBattle() {
   state.roundLifeLost = 0;
   state.finalRound.waveEnded = false;
   renderBattle();
-  startEntranceSequence();
-}
-function startEntranceSequence() {
-  const W = window.innerWidth || 1280;
-  const H = window.innerHeight || 800;
-  const positions = state.enemies.map(function (e) {
-    const el = document.getElementById(e.id);
-    if (el && el.getBoundingClientRect) {
-      const r = el.getBoundingClientRect();
-      return { id: e.id, grp: e.group, x: r.left + r.width / 2, y: r.top + r.height / 2 };
-    }
-    return { id: e.id, grp: e.group, x: W * 0.6 + Math.random() * W * 0.3, y: H * 0.15 + Math.random() * H * 0.6 };
-  });
-  warpPlayEntrance(positions, function () {
-    state.enemies.forEach(function (e) { e.entered = true; });
-    renderBattle();
-    pushNews('敌方舰队跃迁完成，战斗开始', 'warn');
-    startBattleLoop();
-  });
+  pushNews('战斗开始', 'warn');
+  startBattleLoop();
 }
 
 // ==================== 联机：战斗同步（房主权威） ====================
@@ -2511,16 +2504,15 @@ function renderFleetCard(u, side) {
   const icon = CLS_ICON[u.cls] || '◇';
   const color = CLS_COLOR[u.cls] || '#8fa3c8';
   const countTxt = (side === 'en' && u.count && u.count > 1) ? ' ×' + u.count : '';
-  const warping = side === 'en' && u.entered === false;
   const grpTxt = (side === 'en' && u.group !== undefined) ? '<span class="grp-tag">' + factionName(u.factionIdx) + '·第' + ((u.group % 2) + 1) + '组</span>' : '';
   // 联机联合舰队：左侧玩家色条 + 名字前缀，让队友认得出自己的舰。
   // 只在联机局且该舰带 tag 时渲染 —— 单人局不产生任何额外标记。
   const coopOn = side !== 'en' && !!u.tag;
   const coopBar = coopOn ? '<span class="fc-owner" style="background:' + coopColor(u.tag) + '" title="' + escRoom(u.owner || '') + '"></span>' : '';
   const coopPre = coopOn ? '<span class="fc-owner-tag" style="color:' + coopColor(u.tag) + ';">' + escRoom(u.owner || u.tag) + '·</span>' : '';
-  return '<div class="fleet-card' + (dead ? ' dead' : '') + (u.elite ? ' elite' : '') + (u.fortress ? ' fortress' : '') + (u.fortressHits ? ' fortress-hit' : '') + (side === 'en' ? ' enemy' : '') + (coopOn ? ' coop' : '') + (warping ? ' warp-in' : '') + '" id="' + u.id + '" data-hp="' + Math.round(u.hp) + '">' +
+  return '<div class="fleet-card' + (dead ? ' dead' : '') + (u.elite ? ' elite' : '') + (u.fortress ? ' fortress' : '') + (u.fortressHits ? ' fortress-hit' : '') + (side === 'en' ? ' enemy' : '') + (coopOn ? ' coop' : '') + '" id="' + u.id + '" data-hp="' + Math.round(u.hp) + '">' +
     '<div class="fc-head">' + coopBar + '<span class="fc-icon" style="background:' + color + '26;border-color:' + color + ';">' + icon + '</span>' +
-    '<div class="fc-id"><div class="fc-name' + (u.fortress ? ' gold' : '') + '">' + coopPre + (warping ? '跃迁中…' : (u.shortName || u.name)) + (u.fortressHits ? '<span class="fh-count">×' + u.fortressHits + '</span>' : '') + '</div><div class="fc-cls" style="color:' + color + ';">' + (CLS_ZH[u.cls] || '') + countTxt + grpTxt + (u.repair ? ' <span class="fc-repair">维修</span>' : '') + '</div></div></div>' +
+    '<div class="fc-id"><div class="fc-name' + (u.fortress ? ' gold' : '') + '">' + coopPre + (u.shortName || u.name) + (u.fortressHits ? '<span class="fh-count">×' + u.fortressHits + '</span>' : '') + '</div><div class="fc-cls" style="color:' + color + ';">' + (CLS_ZH[u.cls] || '') + countTxt + grpTxt + (u.repair ? ' <span class="fc-repair">维修</span>' : '') + '</div></div></div>' +
     '<div class="fc-bar"><div class="fc-hp"><div class="fill" style="width:' + pct + '%"></div></div>' +
     (u.shield > 0 ? '<div class="fc-shield"><div class="fill" style="width:' + shieldPct + '%"></div></div>' : '') + '</div>' +
     '<div class="fc-hpnum">' + Math.max(0, Math.round(u.hp)) + '/' + u.maxHp + '</div>' +
@@ -3073,17 +3065,8 @@ function warpInit() {
   window.addEventListener('resize', resize);
   let phase = 'off';
   let t = 0, flash = 0, shake = 0, speed = 8, charge = 0, autoSeq = 0;
-  const shipP = [];
   const rings = [];
-  const entrance = { list: [], idx: 0, timer: 0, done: null };
   let last = 0;
-  function spawnShipParticles(item) {
-    for (let i = 0; i < 14; i++) {
-      const ang = Math.random() * 6.2832;
-      const rad = Math.random() * 160;
-      shipP.push({ bx: item.x, by: item.y, dx: Math.cos(ang) * rad, dy: Math.sin(ang) * rad, v: 90 + Math.random() * 140, life: 0.5 + Math.random() * 0.4, maxLife: 0.5 + Math.random() * 0.4 });
-    }
-  }
   function step(now) {
     requestAnimationFrame(step);
     if (!last) last = now;
@@ -3102,26 +3085,6 @@ function warpInit() {
     else if (phase === 'exit') { shake = Math.max(0, shake - 20 * dt); }
     else if (phase === 'charge') { charge = Math.min(1, charge + 0.5 * dt); shake = Math.min(5, shake + 10 * dt); }
     else { charge = Math.max(0, charge - 0.3 * dt); shake = Math.max(0, shake - 6 * dt); }
-    if (phase === 'entrance') {
-      shake = Math.min(5, shake + 3 * dt);
-      entrance.timer -= dt;
-      if (entrance.timer <= 0) {
-        entrance.timer = 0.3;
-        for (let k = 0; k < 5 && entrance.idx < entrance.list.length; k++) {
-          const it = entrance.list[entrance.idx];
-          spawnShipParticles(it);
-          rings.push({ x: it.x, y: it.y, r: 10, a: 0.85, grp: it.grp });
-          entrance.idx++;
-        }
-        if (entrance.idx >= entrance.list.length) {
-          phase = 'off';
-          flash = 0.8;
-          const cb = entrance.done;
-          entrance.list = []; entrance.done = null;
-          if (cb) setTimeout(cb, 350);
-        }
-      }
-    }
     shake = Math.max(0, shake - 6 * dt);
     flash = Math.max(0, flash - 0.09 * dt * 60);
     const offX = Math.sin(t * 6.9) * shake;
@@ -3129,29 +3092,6 @@ function warpInit() {
     ctx.clearRect(0, 0, W, H);
     ctx.save();
     ctx.translate(offX, offY);
-    for (let i = shipP.length - 1; i >= 0; i--) {
-      const p = shipP[i];
-      p.life -= dt;
-      if (p.life <= 0) { shipP.splice(i, 1); continue; }
-      p.dx *= 0.985;
-      p.dy *= 0.985;
-      const prx = p.bx + p.dx;
-      const pry = p.by + p.dy;
-      const a = Math.max(0, p.life / p.maxLife);
-      const dl = Math.max(1, Math.sqrt(p.dx * p.dx + p.dy * p.dy));
-      const ux = p.dx / dl, uy = p.dy / dl;
-      const len = Math.min(60, p.v * 0.8 * a);
-      ctx.strokeStyle = 'rgba(150,220,255,' + (a * 0.95) + ')';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(prx, pry);
-      ctx.lineTo(prx - ux * len, pry - uy * len);
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,' + a + ')';
-      ctx.beginPath();
-      ctx.arc(prx, pry, 1.5, 0, 6.2832);
-      ctx.fill();
-    }
     ctx.shadowBlur = 0;
     for (let i = rings.length - 1; i >= 0; i--) {
       const r = rings[i];
@@ -3210,10 +3150,6 @@ function warpInit() {
         if (phase === 'off' || phase === 'idle') { phase = 'charge'; charge = 0; speed = 8; autoSeq = 2.2; }
         else if (phase === 'charge') { phase = 'warp'; }
       }
-    },
-    entrancePlay: function (list, done) {
-      entrance.list = list; entrance.idx = 0; entrance.timer = 0.15; entrance.done = done;
-      phase = 'entrance'; shake = 0; speed = 60;
     }
   };
 }
@@ -3221,23 +3157,6 @@ let warpFX = null;
 function warpTrigger(mode) {
   if (!warpFX) { try { warpFX = warpInit(); } catch (e) { return; } }
   warpFX.trigger(mode || 'auto');
-}
-function warpPlayEntrance(list, done) {
-  try {
-    if (!warpFX) warpFX = warpInit();
-  } catch (e) { if (done) done(); return; }
-  const f = warpFX;
-  if (f.entrancePlay) { f.entrancePlay(list, done); return; }
-  warpInitEntranceFallback(list, done);
-}
-function warpInitEntranceFallback(list, done) {
-  let idx = 0;
-  function nextBatch() {
-    for (let k = 0; k < 5 && idx < list.length; k++) idx++;
-    if (idx >= list.length) { setTimeout(done, 2200); return; }
-    setTimeout(nextBatch, 60);
-  }
-  nextBatch();
 }
 window.addEventListener('keydown', function (e) {
   if (e.code === 'Space') { e.preventDefault(); warpTrigger('manual'); }
