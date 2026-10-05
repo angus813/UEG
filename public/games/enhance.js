@@ -37,6 +37,7 @@ const AT = window.ENHANCE_ADJUST_EFFECTS || {};
       localStorage.setItem(LS_POINTS, String(points));
       localStorage.setItem(LS_LV, JSON.stringify(levels));
     } catch (e) {}
+    saveAttrs();
   }
 
   const $ = function (id) { return document.getElementById(id); };
@@ -252,50 +253,37 @@ const AT = window.ENHANCE_ADJUST_EFFECTS || {};
     };
   }
 
-  // 按舰名取该舰的强化加成倍率，供 weishu.js 战斗端使用。
-  // 名称匹配与 weishu.js 的 shipEnhanceBonus 同口径：去掉 ·、-、空格后比前缀，
-  // 因为 SHIPS_DATA 的键是「舰名·型号」而 PLAYER_SHIPS 的 name 是「舰名-全称」，
-  // 两者分隔符不同、不构成字面相等。
-  function keyForShipName(name) {
-    if (!name) return null;
-    var n = String(name).replace(/[·\- ]/g, '');
-    var fuzzy = null;
-    for (var k in DATA) {
-      var d = DATA[k] || {};
-      var a = String(d.name || '').replace(/[·\- ]/g, '');
-      var b = a + String(d.model || '').replace(/[·\- ]/g, '');
-      if (a === n || b === n) return k;
-      if (fuzzy === null && a.length >= 4 && n.length >= 4) {
-        var p = 0, m = Math.min(a.length, n.length);
-        while (p < m && a.charAt(p) === n.charAt(p)) p++;
-        if (p >= Math.max(4, Math.min(a.length, n.length) / 2)) fuzzy = k;
-      }
-    }
-    return fuzzy;
-  }
-
-  // 返回值直接沿用 mults() 的口径：
-  //   fireMul 含 crit/atkSpeed/freq 三项（crit 概率已折进伤害期望）
-  //   hpMul / physMul / energyMul 分别对应结构、装甲、能量装甲
-  // 其余桶（cd/hit/aa/siege/cruise/warp/dur）站内战斗没有对应机制，不返回。
-  window.ENHANCE_ATTRS = function (shipName) {
+  // 把已加点舰船的加成倍率缓存给对局页读（读侧见 public/games/enhance_calc.js）。
+  //
+  // 为什么是缓存而不是让对局页直接算：算的前提是 ships_data.js +
+  // official_enhance_data.js + enhance_effects.js，合计约 5MB
+  // （3.0MB + 1.86MB + 252KB），塞进对局页不现实。
+  // 缓存体积只有「玩家点过的舰 × 5 个数」，且强化页是唯一改 levels 的地方，
+  // 缓存不存在失效问题。
+  //
+  // 数值与 mults() 同口径：d=fireMul（含 crit/攻速/射速折算后的伤害期望）
+  // h=hpMul、a=physMul、e=energyMul。
+  const LS_ATTRS = 'ueg_ship_attrs';
+  function saveAttrs() {
     try {
-      var k = keyForShipName(shipName);
-      if (!k || !OFF[k]) return null;
-      var m = mults(OFF[k], k);
-      if (!m) return null;
-      return {
-        fireMul: m.fireMul || 1,
-        hpMul: m.hpMul || 1,
-        physMul: m.physMul || 1,
-        energyMul: m.energyMul || 1,
-        hpAdd: m.hpAdd || 0,
-        physAdd: m.physAdd || 0,
-        energyAdd: m.energyAdd || 0,
-        invested: m.invested || 0
-      };
-    } catch (e) { return null; }
-  };
+      var out = {};
+      for (var k in levels) {
+        if (!OFF[k]) continue;
+        var m = mults(OFF[k], k);
+        if (!m) continue;
+        var w = DATA[k] || {};
+        out[k] = {
+          n: String(w.name || ''),
+          d: Math.round(m.fireMul * 1e4) / 1e4,
+          h: Math.round(m.hpMul * 1e4) / 1e4,
+          a: Math.round(m.physMul * 1e4) / 1e4,
+          e: Math.round(m.energyMul * 1e4) / 1e4,
+          t: m.invested || 0
+        };
+      }
+      localStorage.setItem(LS_ATTRS, JSON.stringify(out));
+    } catch (e) {}
+  }
 
   function sec1(n) { return Math.round(n * 10) / 10; }
   // 有加成时用高亮数字显示加成后的值
@@ -1472,4 +1460,7 @@ const AT = window.ENHANCE_ADJUST_EFFECTS || {};
   for (var i = 0; i < keys.length; i++) if (OFF[keys[i]]) { pickShip(keys[i]); break; }
   if (!shipKey) { mainCol.innerHTML = '<div class="empty">没有已对齐官方数据的舰船</div>'; }
   console.log('官方强化数据：' + Object.keys(OFF).length + ' 艘舰船');
+  // 冷启动也刷一次加成缓存：玩家可能先在别处改过 levels 再打开本页，
+  // 不刷的话对局页要等到下一次改动才拿到缓存。
+  saveAttrs();
 })();
