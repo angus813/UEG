@@ -860,6 +860,89 @@ body {
   font-size: 1rem;
 }
 
+/* ---------- 联机房间 ---------- */
+.room-code {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin: 6px 0 14px;
+}
+.room-code input {
+  width: 46px;
+  height: 54px;
+  text-align: center;
+  font-size: 1.5rem;
+  font-family: var(--rhine-title-font, monospace);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--rhine-ink);
+  background: var(--rhine-bg);
+  border: 1px solid var(--rhine-line);
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+.room-code input:focus { outline: none; border-color: var(--rhine-accent); }
+.room-seats { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.room-seat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  color: var(--rhine-body);
+  background: var(--rhine-bg);
+  border: 1px solid var(--rhine-line);
+  border-left: 3px solid var(--rhine-line);
+  border-radius: 2px;
+}
+.room-seat.is-host { border-left-color: var(--rhine-accent); }
+.room-seat.is-me { background: var(--rhine-accent-soft); }
+.room-seat.is-empty { opacity: 0.5; border-left-style: dashed; }
+.room-seat.is-spectator { border-left-color: var(--rhine-mute); }
+.rs-name { font-weight: 700; color: var(--rhine-ink); }
+.rs-tag {
+  font-size: 0.66rem;
+  padding: 0 5px;
+  border: 1px solid currentColor;
+  color: var(--rhine-mute);
+  border-radius: 2px;
+}
+.rs-tag.host { color: var(--rhine-accent); }
+.rs-tag.spectator { color: var(--rhine-mute); }
+.rs-ready { color: #62805a; font-size: 0.72rem; }
+.rs-wait { color: var(--rhine-mute); font-size: 0.72rem; }
+.room-phase-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  font-size: 0.78rem;
+  background: var(--rhine-panel);
+  border: 1px solid var(--rhine-line);
+  border-radius: 2px;
+}
+.room-phase-label { font-weight: 700; color: var(--rhine-accent); }
+.room-conn { font-size: 0.7rem; color: var(--rhine-mute); }
+.room-conn.on { color: #62805a; }
+.room-conn.off { color: #a8503f; }
+.room-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.room-err { color: #a8503f; font-size: 0.76rem; margin-top: 8px; min-height: 18px; }
+/* 队友面板：挂在顶栏右下，为联机预留（单人局不显示） */
+.room-mates { display: none; gap: 6px; align-items: center; }
+.room-mates.on { display: flex; }
+.rm-chip {
+  font-size: 0.68rem;
+  padding: 2px 7px;
+  border: 1px solid var(--rhine-line);
+  border-radius: 2px;
+  color: var(--rhine-body);
+  white-space: nowrap;
+}
+.rm-chip.host { border-color: var(--rhine-accent); color: var(--rhine-accent); }
+.rm-chip.ready { border-color: #62805a; color: #62805a; }
+
 @media (max-width: 1100px) {
   .deploy-layout { flex-direction: column; }
   .deploy-right { width: 100%; }

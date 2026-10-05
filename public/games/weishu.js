@@ -2329,7 +2329,229 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   document.getElementById('confirmOk').addEventListener('click', function () {});
   document.getElementById('confirmCancel').addEventListener('click', function () {});
+  initRoomUi();
 });
+
+// ============================================================
+//  联机房间界面
+//  只负责「开/加入/准备/解散」的显示与调用；房间状态与同步在 weishu_room.js。
+//  战斗逻辑仍走单人路径：联机接入战斗模拟是下一步，本轮先把房间层跑通。
+// ============================================================
+let roomState = null;
+let roomUnsub = null;
+
+function escRoom(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function renderRoomLobby(snap) {
+  roomState = snap;
+  const box = document.getElementById('roomLobby');
+  if (!box) return;
+
+  // 未加入：只显示「建房 / 输入房间码加入」
+  if (!snap.code) {
+    box.innerHTML =
+      '<div class="room-actions">' +
+      '<button class="btn-action" id="roomCreate">创建房间</button>' +
+      '</div>' +
+      '<div class="sp-sec-title" style="margin-top:16px">加入房间</div>' +
+      '<div class="room-code">' +
+      '<input maxlength="1" data-rc="0" autocomplete="off">' +
+      '<input maxlength="1" data-rc="1" autocomplete="off">' +
+      '<input maxlength="1" data-rc="2" autocomplete="off">' +
+      '<input maxlength="1" data-rc="3" autocomplete="off">' +
+      '</div>' +
+      '<div class="room-actions">' +
+      '<button class="btn-action" id="roomJoin">加入</button>' +
+      '<button class="btn-action" id="roomJoinSpec">观战</button>' +
+      '</div>' +
+      '<div class="room-err" id="roomErr"></div>';
+    bindRoomLobby(box);
+    return;
+  }
+
+  // 已加入：显示房间码、席位、阶段与操作
+  let seats = '';
+  const me = snap.me;
+  const taken = {};
+  snap.seats.forEach(function (s) { taken[s.username] = s.role; });
+  const seatsToShow = snap.seats.slice();
+  for (let i = seatsToShow.length; i < snap.seatSlots; i++) seatsToShow.push(null);
+  seatsToShow.forEach(function (s) {
+    if (!s) {
+      seats += '<div class="room-seat is-empty"><span class="rs-name">空席</span></div>';
+      return;
+    }
+    const isHost = s.username === snap.host;
+    const isMe = s.username === me;
+    seats += '<div class="room-seat' + (isHost ? ' is-host' : '') + (isMe ? ' is-me' : '') +
+      (s.role === 'spectator' ? ' is-spectator' : '') + '">' +
+      '<span class="rs-name">' + escRoom(s.username) + '</span>' +
+      (isHost ? '<span class="rs-tag host">房主</span>' : '') +
+      (s.role === 'spectator' ? '<span class="rs-tag spectator">观战</span>' : '') +
+      '<span style="flex:1"></span>' +
+      (s.ready ? '<span class="rs-ready">已准备</span>' : '<span class="rs-wait">未准备</span>') +
+      '</div>';
+    void taken;
+  });
+  for (let i = 0; i < snap.spectatorSlots; i++) {
+    seats += '<div class="room-seat is-empty is-spectator"><span class="rs-name">观战席 ' + (i + 1) + '</span></div>';
+  }
+
+  const mine = snap.seats.filter(function (s) { return s.username === me; })[0];
+  const allReady = snap.seats.filter(function (s) { return s.role === 'seat'; })
+    .every(function (s) { return s.ready; }) && snap.seatCount > 0;
+
+  box.innerHTML =
+    '<div class="room-phase-row">' +
+    '<span class="room-phase-label">' + escRoom(snap.phaseLabel) + '</span>' +
+    '<span class="room-mates-conn room-conn ' + (snap.connected ? 'on' : 'off') + '">' +
+    (snap.connected ? '实时同步中' : '轮询同步中') + '</span>' +
+    '</div>' +
+    '<div class="sp-sec-title">房间码</div>' +
+    '<div class="room-code">' + escRoom(snap.code).split('').map(function (ch) {
+      return '<input value="' + escRoom(ch) + '" readonly>';
+    }).join('') + '</div>' +
+    '<div class="sp-sec-title">席位 ' + snap.seatCount + '/' + snap.seatSlots + '</div>' +
+    '<div class="room-seats">' + seats + '</div>' +
+    '<div class="room-actions">' +
+    '<button class="btn-action" id="roomReady">' + (mine && mine.ready ? '取消准备' : '准备就绪') + '</button>' +
+    '<button class="btn-action" id="roomCopy">复制邀请链接</button>' +
+    (snap.isHost ? '<button class="btn-action" id="roomStart"' + (allReady ? '' : ' disabled') + '>开始作战</button>' : '') +
+    (snap.isHost ? '<button class="btn-action" id="roomClose">解散房间</button>' : '') +
+    '<button class="btn-action" id="roomLeave">离开</button>' +
+    '</div>' +
+    '<div class="room-err" id="roomErr"></div>';
+  bindRoomLobby(box);
+}
+
+function roomErr(msg) {
+  const el = document.getElementById('roomErr');
+  if (el) el.textContent = msg || '';
+}
+
+function bindRoomLobby(box) {
+  const R = window.WeishuRoom;
+  if (!R) return;
+
+  // 房间码输入：自动跳格、退格回退、只接受字母数字
+  const cells = box.querySelectorAll('.room-code input[data-rc]');
+  cells.forEach(function (inp) {
+    inp.addEventListener('input', function () {
+      inp.value = inp.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 1);
+      const i = Number(inp.dataset.rc);
+      if (inp.value && cells[i + 1]) cells[i + 1].focus();
+      roomErr('');
+    });
+    inp.addEventListener('keydown', function (e) {
+      const i = Number(inp.dataset.rc);
+      if (e.key === 'Backspace' && !inp.value && cells[i - 1]) {
+        cells[i - 1].focus();
+        cells[i - 1].value = '';
+      }
+    });
+  });
+
+  function codeOf() {
+    let s = '';
+    box.querySelectorAll('.room-code input[data-rc]').forEach(function (i) { s += i.value; });
+    return s;
+  }
+
+  const b = function (id) { return box.querySelector('#' + id); };
+  if (b('roomCreate')) {
+    b('roomCreate').addEventListener('click', function () {
+      roomErr('');
+      R.makeRoom(state.mode).then(function (r) {
+        if (r.code !== 200) roomErr(r.msg || '创建失败');
+      });
+    });
+  }
+  const doJoin = function (role) {
+    roomErr('');
+    const c = codeOf();
+    if (c.length !== R.MAX_SEATS && c.length !== 4) { roomErr('房间码为 4 位'); return; }
+    R.join(c, role).then(function (r) {
+      if (r.code !== 200) roomErr(r.msg || '加入失败');
+    });
+  };
+  if (b('roomJoin')) b('roomJoin').addEventListener('click', function () { doJoin('seat'); });
+  if (b('roomJoinSpec')) b('roomJoinSpec').addEventListener('click', function () { doJoin('spectator'); });
+  if (b('roomReady')) {
+    b('roomReady').addEventListener('click', function () {
+      const snap = R.snapshot();
+      const mine = snap.seats.filter(function (s) { return s.username === snap.me; })[0];
+      R.setReady(!(mine && mine.ready)).then(function (r) {
+        if (r.code !== 200) roomErr(r.msg || '操作失败');
+        R.notifySeat();
+      });
+    });
+  }
+  if (b('roomCopy')) {
+    b('roomCopy').addEventListener('click', function () {
+      const snap = R.snapshot();
+      const url = location.origin + location.pathname + '?room=' + snap.code;
+      const done = function () { flashTip('邀请链接已复制'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(done, function () { flashTip(url); });
+      } else {
+        flashTip(url);
+      }
+    });
+  }
+  if (b('roomStart')) {
+    b('roomStart').addEventListener('click', function () {
+      R.hostUpdate({ phase: R.PHASE.PREP, round: 1 }).then(function (r) {
+        if (r.code !== 200) roomErr(r.msg || '开始失败');
+      });
+    });
+  }
+  if (b('roomClose')) {
+    b('roomClose').addEventListener('click', function () {
+      showConfirm('解散房间', '将解散房间并让所有成员退出，确定？', function () {
+        R.closeRoom().then(function (r) { if (r.code !== 200) roomErr(r.msg || '解散失败'); });
+      });
+    });
+  }
+  if (b('roomLeave')) {
+    b('roomLeave').addEventListener('click', function () {
+      R.leave().then(function () { flashTip('已离开房间'); });
+    });
+  }
+}
+
+function initRoomUi() {
+  const R = window.WeishuRoom;
+  const btn = document.getElementById('btnRoom');
+  if (!R || !btn) return;
+
+  btn.addEventListener('click', function () {
+    if (state.phase === 'prep' || state.phase === 'battle') {
+      showModal('联机房间', '<div class="supply-panel"><div class="sp-row"><span>当前状态</span><span class="v">对局进行中，可在休整期切换</span></div></div>');
+      return;
+    }
+    renderRoomLobby(R.snapshot());
+    document.getElementById('roomModal').classList.add('active');
+  });
+
+  roomUnsub = R.onChange(function (snap) {
+    const modal = document.getElementById('roomModal');
+    if (modal && modal.classList.contains('active')) renderRoomLobby(snap);
+  });
+
+  // 支持 ?room=CODE 直达：进房后自动打开面板并填好
+  const m = /[?&]room=([A-Za-z0-9]{4})/.exec(location.search);
+  if (m) {
+    R.join(m[1].toUpperCase(), 'seat').then(function (r) {
+      if (r.code !== 200) { flashTip('加入失败：' + (r.msg || '')); return; }
+      renderRoomLobby(R.snapshot());
+      document.getElementById('roomModal').classList.add('active');
+    });
+  }
+}
 
 function warpInit() {
   let c = document.getElementById('warpCanvas');
