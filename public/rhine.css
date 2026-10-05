@@ -592,18 +592,55 @@ label { font-size: 11px; letter-spacing: 0.08em; color: var(--rl-muted); }
   padding-top: 30px;
 }
 .home-left .menu-subtitle { margin-bottom: 34px; }
-/* 5 张卡：3 + 2 两行。故意用 flex-wrap 而不是 grid 3 列 ——
-   grid 固定 3 列会让第二行的 2 张卡靠左，flex 的 justify-content 会自动居中。 */
+/* 卡片为横条、单列从上到下。宽度撑满左栏，靠 grid 的 1fr 而不是写死 px：
+   左栏宽度随断点在 636 / 296px 之间变，写死宽度会在其中一档溢出或留白。 */
 .home-left .menu-options {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 16px;
-  max-width: 476px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  width: 100%;
+  max-width: 520px;
 }
-.home-left .menu-card { width: 148px; height: 148px; }
-.home-left .menu-card-text { font-size: 1.02rem; }
-.home-left .menu-card-desc { font-size: 9.5px; line-height: 1.5; padding: 0 8px; }
+.home-left .menu-card {
+  width: 100%;
+  height: auto;
+  min-height: 66px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 12px 18px;
+  text-align: left;
+}
+/* 图标原本是空 div（全站都没填内容），方卡里只是 12px 空白，
+   改成横条后会变成一根 25px 宽的空气柱，所以显式定高并居中。 */
+.home-left .menu-card-icon {
+  font-size: 1.05rem;
+  line-height: 1;
+  margin-bottom: 0;
+  flex: none;
+  width: 1.5em;
+  height: 1.5em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+}
+/* 标题与描述竖排在右侧，占满剩余宽度并左对齐 */
+.home-left .menu-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.home-left .menu-card-text { font-size: 1rem; line-height: 1.4; }
+.home-left .menu-card-desc {
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 0;
+}
 
 .home-right {
   min-width: 0;
@@ -729,8 +766,9 @@ label { font-size: 11px; letter-spacing: 0.08em; color: var(--rl-muted); }
   .home-right { position: static; max-height: none; }
 }
 @media (max-width: 620px) {
-  .home-left .menu-card { width: 132px; height: 132px; }
-  .home-left .menu-options { max-width: 296px; gap: 14px; }
+  /* 窄屏下横条压缩内边距，min-height 交给内容撑 */
+  .home-left .menu-card { padding: 10px 14px; gap: 11px; }
+  .home-left .menu-options { gap: 10px; }
   .home-left .menu-card-text { font-size: 0.95rem; }
   .home-left .menu-subtitle { margin-bottom: 26px; }
 }

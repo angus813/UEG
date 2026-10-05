@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="public/admin.css">
   <link rel="stylesheet" href="public/rhine-fonts.css" media="print" onload="this.media='all'"> <!-- MiSans（异步加载，不阻塞首屏） -->
   <noscript><link rel="stylesheet" href="public/rhine-fonts.css"></noscript> <!-- MiSans webfont -->
-  <link rel="stylesheet" href="public/rhine.css?v=20261005a"> <!-- Rhine Lab Archive 设计系统 -->
+  <link rel="stylesheet" href="public/rhine.css?v=20261005b"> <!-- Rhine Lab Archive 设计系统 -->
   <link rel="stylesheet" href="public/rhine-motion.css"> <!-- 动效层 -->
   <!-- 页面视觉统一由 public/rhine.css 设计系统提供 -->
   <script src="public/rhine-motion.js"></script>
@@ -30,29 +30,39 @@
         <div class="menu-options">
           <!-- 链接到 public/ 下的页面 -->
           <a href="public/xinghebei.html" class="menu-card" id="cardXinghebei">
-            <div class="menu-card-icon"></div>
-            <div class="menu-card-text">星河杯</div>
-            <div class="menu-card-desc">舰队指标选择器</div>
+            <div class="menu-card-icon" aria-hidden="true">◈</div>
+            <div class="menu-card-body">
+              <div class="menu-card-text">星河杯</div>
+              <div class="menu-card-desc">舰队指标选择器</div>
+            </div>
           </a>
           <a href="public/mata.html" class="menu-card">
-            <div class="menu-card-icon"></div>
-            <div class="menu-card-text">MATA</div>
-            <div class="menu-card-desc">自动化助手 · 素材共享 · 排行榜</div>
+            <div class="menu-card-icon" aria-hidden="true">◈</div>
+            <div class="menu-card-body">
+              <div class="menu-card-text">MATA</div>
+              <div class="menu-card-desc">自动化助手 · 素材共享 · 排行榜</div>
+            </div>
           </a>
           <a href="public/games.html" class="menu-card">
-            <div class="menu-card-icon"></div>
-            <div class="menu-card-text">小游戏</div>
-            <div class="menu-card-desc">娱乐模块</div>
+            <div class="menu-card-icon" aria-hidden="true">◈</div>
+            <div class="menu-card-body">
+              <div class="menu-card-text">小游戏</div>
+              <div class="menu-card-desc">娱乐模块</div>
+            </div>
           </a>
           <div class="menu-card" onclick="alert('纪念堂建设中')">
-            <div class="menu-card-icon"></div>
-            <div class="menu-card-text">纪念堂</div>
-            <div class="menu-card-desc">历史记录与成就</div>
+            <div class="menu-card-icon" aria-hidden="true">◈</div>
+            <div class="menu-card-body">
+              <div class="menu-card-text">纪念堂</div>
+              <div class="menu-card-desc">历史记录与成就</div>
+            </div>
           </div>
           <a href="public/guild.html" class="menu-card">
-            <div class="menu-card-icon"></div>
-            <div class="menu-card-text">公会</div>
-            <div class="menu-card-desc">组织与协作</div>
+            <div class="menu-card-icon" aria-hidden="true">◈</div>
+            <div class="menu-card-body">
+              <div class="menu-card-text">公会</div>
+              <div class="menu-card-desc">组织与协作</div>
+            </div>
           </a>
         </div>
       </section>
