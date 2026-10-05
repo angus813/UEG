@@ -590,35 +590,116 @@ function startPrepRound() {
   }
   renderPrep();
 }
-function renderTopStatus() {
-  const m = CONFIG.MODES[state.mode];
-  let html = '<div class="top-status">';
+// ==================== 对局 HUD ====================
+// 布局参照 sganggs/Stronghold-Protocol 的 screens/game.css：
+// 顶栏三段（左资源 / 中回合 / 右时钟）+ 队友列 + 底部提示条。
+// 配色沿用站内浅色档案风。
+// 单人局不显示队友列 —— 没有队友，显示空面板只是噪音。
+function renderHudTop(opts) {
+  const o = opts || {};
+  const waveNow = Math.min(state.wave, CONFIG.TOTAL_ROUNDS);
+  let html = '<div class="hud-top">';
+
+  // 左段：两个势力血条
+  html += '<div class="hud-left"><div class="hud-faction-bar">';
   for (let i = 0; i < 2; i++) {
     const pct = state.factionMaxHp[i] ? Math.max(0, state.factionHp[i] / state.factionMaxHp[i] * 100) : 0;
-    html += '<div class="faction-bar"><div class="fb-name">' + factionName(i) + '</div><div class="fb-track"><div class="fb-fill" style="width:' + pct + '%"></div></div><div class="fb-num">' + Math.max(0, state.factionHp[i]) + '</div></div>';
+    html += '<div class="hud-faction"><div class="fb-name">' + factionName(i) + '</div>' +
+      '<div class="fb-track"><div class="fb-fill" style="width:' + pct + '%"></div></div>' +
+      '<div class="fb-num">' + Math.max(0, state.factionHp[i]) + '</div></div>';
   }
-  html += '<div class="my-bar">';
+  html += '</div><div class="hud-meta">';
   html += '<div class="mb-row"><span class="mb-label">护盾</span><div class="shield-bar"><div class="fill" style="width:' + Math.min(100, state.shield / Math.max(1, bargeShield() + 5) * 100) + '%"></div></div><span class="mb-val">' + Math.round(state.shield) + '</span></div>';
   html += '<div class="mb-row"><span class="mb-label">生命</span><div class="life-bar"><div class="fill" style="width:' + Math.max(0, state.life / state.maxLife * 100) + '%"></div></div><span class="mb-val">' + Math.max(0, state.life) + '/' + state.maxLife + '</span></div>';
   html += '<div class="mb-row"><span class="mb-label">资金</span><span class="mb-val">' + state.funds + '</span></div>';
   html += '<div class="mb-row"><span class="mb-label">强化点</span><span class="mb-val">' + state.techPoints + '</span></div>';
-  html += '<div class="mb-row"><span class="mb-label">回合</span><span class="mb-val">' + Math.min(state.wave, CONFIG.TOTAL_ROUNDS) + '/' + CONFIG.TOTAL_ROUNDS + '</span></div>';
   html += '</div></div>';
+
+  // 中段：回合 + 进度格 + 阶段
+  html += '<div class="hud-center">';
+  html += '<div class="hud-round"><span class="hud-round-num">' + waveNow + '</span><span class="hud-round-cap">/ ' + CONFIG.TOTAL_ROUNDS + ' 回合</span></div>';
+  html += '<div class="hud-phase">' + (o.phaseLabel || (state.phase === 'battle' ? '作战中' : '休整期')) + '</div>';
+  html += '<div class="hud-progress">';
+  for (let i = 1; i <= CONFIG.TOTAL_ROUNDS; i++) {
+    // UPGRADE_ROUNDS 是强化回合（3/6/10/12/14），描边区分
+    const isUp = CONFIG.UPGRADE_ROUNDS.indexOf(i) > -1;
+    let cls = 'hud-pip';
+    if (i < waveNow) cls += ' done';
+    else if (i === waveNow) cls += ' now';
+    if (isUp) cls += ' upgrade';
+    html += '<div class="' + cls + '" title="第 ' + i + ' 回合' + (isUp ? '（强化）' : '') + '"></div>';
+  }
+  html += '</div></div>';
+
+  // 右段：时钟（仅战斗期）
+  html += '<div class="hud-right">';
+  if (o.showClock) {
+    const warn = clockLeft <= 15;
+    html += '<div class="hud-clock' + (warn ? ' warn' : '') + '"><span>' + Math.max(0, Math.ceil(clockLeft)) + '</span><span class="hud-clock-cap">秒</span></div>';
+  }
+  html += renderHudTeam();
+  html += '</div>';
+
+  html += '</div>';
   return html;
 }
+
+// 队友列。座位信息来自 weishu_room.js；单人局返回空串。
+function renderHudTeam() {
+  const R = window.WeishuRoom;
+  if (!R || !R.isHost) return '';
+  const snap = R.snapshot();
+  if (!snap.code) return '';
+  let html = '<div class="hud-team"><div class="hud-team-title">队友 ' + snap.seatCount + '/' + snap.seatSlots + '</div>';
+  snap.seats.forEach(function (s) {
+    const isMe = s.username === snap.me;
+    const isHost = s.username === snap.host;
+    html += '<div class="hud-mate' + (isMe ? ' is-me' : '') + (isHost ? ' is-host' : '') +
+      (!s.connected ? ' is-off' : '') + (s.role === 'spectator' ? ' is-spec' : '') + '">' +
+      '<span class="hm-dot' + (s.connected ? ' on' : '') + '"></span>' +
+      '<span class="hm-name">' + escRoom(s.username) + '</span>' +
+      (isHost ? '<span class="hm-tag host">房主</span>' : '') +
+      (s.role === 'spectator' ? '<span class="hm-tag">观战</span>' : '') +
+      '<span class="hm-units">' + (s.ready ? '已备' : '未备') + '</span>' +
+      '</div>';
+  });
+  for (let i = snap.seatCount; i < snap.seatSlots; i++) {
+    html += '<div class="hud-mate is-off"><span class="hm-dot"></span><span class="hm-name">空席</span></div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// 底部提示条：单人局给下一步该做什么，联机局报同步状态
+function renderHudBottom() {
+  let text;
+  if (state.finalRound && state.finalRound.active) {
+    text = '最终回合 · 第 ' + state.finalRound.wave + ' 波次' +
+      (state.finalRound.intermission ? '（间期 ' + Math.max(0, state.finalRound.timer) + ' 秒，可驳船补给）' : '');
+  } else if (state.phase === 'battle') {
+    text = '自动作战中 · 漏过敌舰会扣目标生命值';
+  } else {
+    const poolLeft = (state.pool || []).filter(function (c) { return !c.bought; }).length;
+    text = '休整期 · 补给池剩 ' + poolLeft + ' 项' +
+      (coop.isRoom() ? (coop.isHost() ? ' · 你是房主，准备完毕后由你开始作战' : ' · 等待房主开始作战') : '');
+  }
+  return '<div class="hud-bottom"><div class="hud-hint">' + escRoom(text) + '</div></div>';
+}
+
 function renderPrep() {
   const panel = document.getElementById('leftPanel');
   panel.dataset.mode = 'prep';
   // 顶栏（回合/资金/势力血条）全宽通栏，下方分屏：主区放卡池与手牌，
   // 右栏放驳船、编组与行动按钮。理由见 weishu.css 的 .ws-split 注释。
   let html = '<div class="game-header">';
-  html += renderTopStatus();
+  html += renderHudTop({});
   html += renderNewsTicker();
   html += '<div class="ws-split"><div class="ws-main">';
   if (state.finalRound && state.finalRound.active) {
     html += '<div class="final-banner">最终回合 · 第 ' + state.finalRound.wave + ' 波次' + (state.finalRound.intermission ? '（间期 <span id="interTimer">' + Math.max(0, state.finalRound.timer) + '</span> 秒，可驳船补给）' : '') + '</div>';
   }
   html += renderPoolSection();
+  html += renderHudBottom();
   html += '</div><div class="ws-side">';
   html += renderBarge();
   html += '<div class="prep-fleet">';
@@ -2184,7 +2265,7 @@ function renderBattle() {
   const panel = document.getElementById('leftPanel');
   panel.dataset.mode = 'battle';
   let html = '<div class="game-header battle-layout">';
-  html += renderTopStatus();
+  html += renderHudTop({ showClock: true, phaseLabel: '作战中' });
   const fsB = state.finalRound && state.finalRound.fortress;
   if (fsB) {
     html += '<div class="fortress-bar"><div class="fb-name">要塞舰 · 特拉法加' + (fsB.alive ? '' : '（已击毁）') + '</div>';
@@ -2192,7 +2273,6 @@ function renderBattle() {
     html += '<div class="fort-sh"><div class="fill" style="width:' + (fsB.shield / fsB.maxShield * 100) + '%"></div><span>护盾 ' + Math.max(0, Math.round(fsB.shield)) + ' / ' + fsB.maxShield + '</span></div></div>';
   }
   html += renderNewsTicker();
-  html += '<div class="battle-clock" id="battleClock">' + Math.ceil(clockLeft) + '</div>';
   // 战斗期战场本身已是三栏（左我方 / 中日志 / 右敌方），再套一层分屏会把它挤扁，
   // 所以战斗期只把行动按钮收进右栏，战场保持满宽。
   html += '<div class="ws-split"><div class="ws-main">';
@@ -2204,13 +2284,13 @@ function renderBattle() {
   html += '<div class="battle-center">';
   html += '<div class="bc-info">舰队等级 <b>' + cityLevelOf(state.wave) + '</b></div>';
   html += '<div class="bc-log" id="bcLog"></div>';
-  html += '<div class="bc-hint">自动作战中 · 剩余时间 <span id="clockNum">' + Math.ceil(clockLeft) + '</span>s</div>';
   html += '</div>';
   html += '<div class="fleet-panel right">';
   html += '<div class="fleet-title"><span class="ft-tag en">敌</span>敌方舰队 <span class="fp-cnt">' + state.enemies.filter(function (e) { return e.alive; }).length + '/' + state.enemies.length + '</span></div>';
   html += renderRows(state.enemies, 'en');
   html += '</div>';
   html += '</div>';
+  html += renderHudBottom();
   html += '</div><div class="ws-side">';
   html += renderActionBar('battle');
   html += '</div></div>';
@@ -2290,10 +2370,14 @@ function renderAtkLog() {
 function updateBattleUI() {
   const panel = document.getElementById('leftPanel');
   if (!panel || state.phase !== 'battle' || state.paused) return;
-  const clockEl = document.getElementById('battleClock');
-  if (clockEl) clockEl.textContent = Math.max(0, Math.ceil(clockLeft));
-  const clockNum = document.getElementById('clockNum');
-  if (clockNum) clockNum.textContent = Math.max(0, Math.ceil(clockLeft));
+  // 时钟现在只存在于 HUD 顶栏（renderHudTop 的 hud-clock），
+  // 战场里的 battleClock / clockNum 都已移除。
+  const hudClock = panel.querySelector('.hud-clock span');
+  if (hudClock) {
+    hudClock.textContent = Math.max(0, Math.ceil(clockLeft));
+    const hc = panel.querySelector('.hud-clock');
+    if (hc) hc.classList.toggle('warn', clockLeft <= 15);
+  }
   const cntEl = panel.querySelector('.fleet-panel.right .fp-cnt');
   if (cntEl) cntEl.textContent = state.enemies.filter(function (e) { return e.alive; }).length + '/' + state.enemies.length;
   const fsb = state.finalRound && state.finalRound.fortress;
@@ -2348,8 +2432,69 @@ function updateBattleUI() {
   });
   const log = document.getElementById('bcLog');
   if (log) log.innerHTML = renderAtkLog();
-  const statusEl = panel.querySelector('.top-status');
-  if (statusEl) statusEl.outerHTML = renderTopStatus();
+  updateHudTop();
+}
+
+// HUD 顶栏的定点刷新。
+// 不能每 150ms outerHTML 换掉整个 hud-top：一来重绘代价大，
+// 二来会连带重建 .hud-team（队友列表由 onChange 驱动，会被这次替换冲掉）。
+function updateHudTop() {
+  const panel = document.getElementById('leftPanel');
+  if (!panel) return;
+  const hud = panel.querySelector('.hud-top');
+  if (!hud) return;
+
+  // 势力血条
+  const fbs = hud.querySelectorAll('.hud-faction');
+  for (let i = 0; i < fbs.length && i < 2; i++) {
+    const max = state.factionMaxHp[i];
+    const pct = max ? Math.max(0, state.factionHp[i] / max * 100) : 0;
+    const fill = fbs[i].querySelector('.fb-fill');
+    const num = fbs[i].querySelector('.fb-num');
+    if (fill) fill.style.width = pct + '%';
+    if (num) num.textContent = Math.max(0, state.factionHp[i]);
+  }
+
+  // 护盾 / 生命 / 资金 / 强化点：按 mb-label 定位，避免依赖顺序
+  const rows = hud.querySelectorAll('.hud-meta .mb-row');
+  for (let i = 0; i < rows.length; i++) {
+    const label = rows[i].querySelector('.mb-label');
+    const val = rows[i].querySelector('.mb-val');
+    if (!label || !val) continue;
+    const t = label.textContent;
+    if (t === '护盾') {
+      val.textContent = Math.round(state.shield);
+      const f = rows[i].querySelector('.shield-bar .fill');
+      if (f) f.style.width = Math.min(100, state.shield / Math.max(1, bargeShield() + 5) * 100) + '%';
+    } else if (t === '生命') {
+      val.textContent = Math.max(0, state.life) + '/' + state.maxLife;
+      const f = rows[i].querySelector('.life-bar .fill');
+      if (f) f.style.width = Math.max(0, state.life / state.maxLife * 100) + '%';
+    } else if (t === '资金') {
+      val.textContent = state.funds;
+    } else if (t === '强化点') {
+      val.textContent = state.techPoints;
+    }
+  }
+
+  // 时钟
+  const hc = hud.querySelector('.hud-clock');
+  if (hc) {
+    const s = hc.querySelector('span');
+    if (s) s.textContent = Math.max(0, Math.ceil(clockLeft));
+    hc.classList.toggle('warn', clockLeft <= 15);
+  }
+
+  // 回合数与进度格
+  const waveNow = Math.min(state.wave, CONFIG.TOTAL_ROUNDS);
+  const rn = hud.querySelector('.hud-round-num');
+  if (rn) rn.textContent = waveNow;
+  const pips = hud.querySelectorAll('.hud-progress .hud-pip');
+  for (let i = 0; i < pips.length; i++) {
+    const round = i + 1;
+    pips[i].classList.toggle('done', round < waveNow);
+    pips[i].classList.toggle('now', round === waveNow);
+  }
 }
 
 function skipRound() {

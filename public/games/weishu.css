@@ -860,6 +860,119 @@ body {
   font-size: 1rem;
 }
 
+/* ---------- 对局 HUD（信息架构参照 sganggs/Stronghold-Protocol 的
+   screens/game.css：顶栏三段 left/center/right、左侧队友列、右侧效果列、
+   底部 HUD。配色沿用站内浅色档案风，不跟参考项目一样走深色终端。） ---------- */
+.hud-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  background: var(--rhine-panel);
+  border: 1px solid var(--rhine-line);
+  border-radius: 2px;
+  padding: 9px 14px;
+}
+.hud-left { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.hud-center { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.hud-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; min-width: 0; }
+.hud-faction-bar { display: flex; flex-direction: column; gap: 4px; }
+.hud-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.hud-round { display: flex; align-items: baseline; gap: 6px; }
+.hud-round-num {
+  font-family: var(--rhine-title-font, sans-serif);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--rhine-ink);
+}
+.hud-round-cap { font-size: 0.66rem; letter-spacing: 0.14em; color: var(--rhine-mute); }
+.hud-phase {
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  padding: 1px 7px;
+  border: 1px solid var(--rhine-accent);
+  color: var(--rhine-accent);
+}
+/* 回合进度：15 格，已打过 / 当前 / 未打，一眼看到节奏 */
+.hud-progress { display: flex; gap: 2px; }
+.hud-pip { width: 7px; height: 12px; background: var(--rhine-field); border: 1px solid var(--rhine-line); }
+.hud-pip.done { background: var(--rhine-line-strong); }
+.hud-pip.now { background: var(--rhine-accent); border-color: var(--rhine-accent); }
+.hud-pip.upgrade { border-color: var(--rhine-accent); }
+.hud-pip.upgrade.done { background: var(--rhine-accent); }
+
+.hud-clock {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: var(--rhine-title-font, sans-serif);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--rhine-ink);
+  min-width: 64px;
+  justify-content: flex-end;
+}
+.hud-clock.warn { color: var(--rhine-accent); }
+.hud-clock-cap { font-size: 0.64rem; letter-spacing: 0.12em; color: var(--rhine-mute); }
+
+.hud-faction { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.hud-faction .fb-name { flex: none; max-width: 44%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud-faction .fb-track { flex: 1; }
+.hud-faction .fb-num { min-width: 34px; text-align: right; flex: none; }
+
+/* 队友列：左侧竖排。参考项目里是 .team 绝对定位，这里做成常规流 ——
+   竖排卡片会随内容增高，绝对定位反而容易与主区重叠。 */
+.hud-team { display: flex; flex-direction: column; gap: 5px; }
+.hud-team-title {
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  color: var(--rhine-mute);
+  border-bottom: 1px solid var(--rhine-line);
+  padding-bottom: 3px;
+}
+.hud-mate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  background: var(--rhine-bg);
+  border: 1px solid var(--rhine-line);
+  border-left: 3px solid var(--rhine-line);
+  border-radius: 2px;
+  font-size: 0.72rem;
+  color: var(--rhine-body);
+}
+.hud-mate.is-me { border-left-color: var(--rhine-accent); background: var(--rhine-accent-soft); }
+.hud-mate.is-host { border-left-color: var(--rhine-accent); }
+.hud-mate.is-off { opacity: 0.5; }
+.hud-mate.is-spec { border-left-style: dashed; }
+.hm-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--rhine-mute); }
+.hm-dot.on { background: #5f7a4a; }
+.hm-name { color: var(--rhine-ink); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-tag {
+  font-size: 0.6rem;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  color: var(--rhine-mute);
+  flex: none;
+}
+.hm-tag.host { color: var(--rhine-accent); }
+.hm-units { margin-left: auto; font-size: 0.68rem; color: var(--rhine-mute); flex: none; }
+
+/* 底部 HUD：进度提示 + 提示轮播 */
+.hud-bottom { display: flex; flex-direction: column; gap: 5px; }
+.hud-hint {
+  font-size: 0.7rem;
+  color: var(--rhine-mute);
+  padding: 5px 9px;
+  background: var(--rhine-panel);
+  border: 1px solid var(--rhine-line);
+  border-radius: 2px;
+  min-height: 26px;
+}
+
 /* ---------- 联机房间 ---------- */
 .room-code {
   display: flex;
