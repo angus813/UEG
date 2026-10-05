@@ -2,7 +2,7 @@
 """从解包 cfg + 官方百科 xlsx 重新生成 official_enhance.json / official_enhance_data.js
 
 数据来源
-  结构/所属/等级/成本/图标/类型 : memory/星际猎人_蓝图加点解包/config/_Tb_cfg_system_enhance{,_tree}.json
+  结构/所属/等级/成本/图标/类型 : assets/星际猎人_蓝图加点解包/config/_Tb_cfg_system_enhance{,_tree}.json
   文案（英文）                  : memory/Lagrange's encyclopedia.xlsx（Enhancements 表）
   已有中文文案                  : 现有 official_enhance.json（复用，不重译）
 

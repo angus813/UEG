@@ -41,9 +41,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, 'public', 'games', 'official_enhance_data.js')
 OUT = os.path.join(ROOT, 'public', 'games', 'enhance_effects.js')
 BAK = os.path.join(ROOT, 'ops', 'bak')
-CFG = r'D:\ai\memory\星际猎人_蓝图加点解包\config'
-LANG_TXT = r'D:\ai\memory\星际猎人_蓝图加点解包\language\zh_CN\tb_cfg_system_effect.txt'
-EDEF = r'D:\ai\memory\星际猎人_战斗系统全量解包\解包\py_src\common\config\effect_def.py'
+CFG = r'D:\ai\assets\星际猎人_蓝图加点解包\config'
+LANG_TXT = r'D:\ai\assets\星际猎人_蓝图加点解包\language\zh_CN\tb_cfg_system_effect.txt'
+EDEF = r'D:\ai\assets\星际猎人_战斗系统全量解包\解包\py_src\common\config\effect_def.py'
 
 MIN_SAMPLES = 5
 MIN_BUCKET_RATE = 0.85

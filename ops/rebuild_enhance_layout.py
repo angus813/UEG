@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, 'public', 'games', 'official_enhance_data.js')
-CFG = r'D:\ai\memory\星际猎人_蓝图加点解包\config'
+CFG = r'D:\ai\assets\星际猎人_蓝图加点解包\config'
 LANG_TXT = os.path.join(os.path.dirname(CFG), 'language', 'zh_CN', 'tb_cfg_system_effect.txt')
 TREE_JSON = os.path.join(CFG, '_Tb_cfg_system_enhance_tree.json')
 ENH_JSON = os.path.join(CFG, '_Tb_cfg_system_enhance.json')

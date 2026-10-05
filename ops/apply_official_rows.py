@@ -18,7 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'ops'))
 import fix_tree_crossings as F
 
-CFG = r'D:\ai\memory\星际猎人_蓝图加点解包\config'
+CFG = r'D:\ai\assets\星际猎人_蓝图加点解包\config'
 DATA = os.path.join(ROOT, 'public', 'games', 'official_enhance.json')
 DATA_JS = os.path.join(ROOT, 'public', 'games', 'official_enhance_data.js')
 BAK = os.path.join(ROOT, 'ops', 'bak')
