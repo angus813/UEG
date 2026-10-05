@@ -15,12 +15,18 @@ const CONFIG = {
   SPELL_LIMIT: 8,
   DEATH_COST: {fighter: 1, corvette: 1, frigate: 2, destroyer: 3, cruiser: 4, support: 4, battlecruiser: 5, battleship: 6, carrier: 7},
   ASSAULT_FACTOR: 0.06,
-  // DEPLOY_LIMIT: 舰种数量上限已取消；配队仍受指挥值 400 上限约束（对局中购买不限），保留定义供参考
+  // DEPLOY_LIMIT: 舰种数量上限已取消；配队与对局中购买统一受指挥值 400 上限约束，保留定义供参考
   DEPLOY_LIMIT: {carrier: 2, battlecruiser: 2, battleship: 2, cruiser: 5, destroyer: 5, frigate: 5, fighter: 5, corvette: 5, support: 5},
   MODES: {
-    beginner: {name: '入门协议', life: 500, funds: [60, 70, 9999], reward: 1},
-    prototype: {name: '原型协议', life: 700, funds: [50, 60, 9999], reward: 1.5},
-    core: {name: '核心协议', life: 1000, funds: [40, 50, 9999], reward: 2}
+    // funds = [第1波, 每波增量, 单波上限]，fundsOfRound = min(上限, m0 + (波-1)*m1)。
+    // 15 波累计：入门 615 / 原型 480 / 核心 420。
+    // 原值累计 5850~8250，但去处只有驳船 132 + 装备 36 + 战术 32（约 200），
+    // 加上 400 指挥值封顶后的补舰余量也不到 500 —— 94% 的钱花不出去。
+    // enemyPow = 敌方标定难度系数。原来三档只改初始生命与资金，
+    // 敌方强度一个数都没动，「选核心更难」基本不成立。
+    beginner: {name: '入门协议', life: 500, funds: [20, 3, 9999], reward: 1, enemyPow: 0.8},
+    prototype: {name: '原型协议', life: 700, funds: [18, 2, 9999], reward: 1.5, enemyPow: 1},
+    core: {name: '核心协议', life: 1000, funds: [14, 2, 9999], reward: 2, enemyPow: 1.25}
   },
   BARGE: [
     {slots: 1, equipSlots: 0, shield: 1, cost: 2},
@@ -349,6 +355,23 @@ function countOfId(id) {
 }
 function totalCommand() {
   return state.hand.reduce(function (a, c) { return a + (c.ship && c.ship.cls !== 'fighter' && c.ship.cls !== 'corvette' ? c.ship.command : 0); }, 0);
+}
+// 舰载机不占指挥值（与 totalCommand 同口径），否则补舰时会被误拦。
+function shipCommandCost(s) {
+  return (!s || s.cls === 'fighter' || s.cls === 'corvette') ? 0 : (s.command || 0);
+}
+// 对局中加舰的统一闸门。
+// 此前 400 上限只在初始配队（deployModal）里硬拦，补给池买舰、军火商人赠舰、
+// 驳船升级赠舰、增援编队四个口子都能把编组推过上限；配合当时近乎无限的资金
+//（15 波累计 5850~8250、舰船单价 10），实测可把编组堆到几百艘。
+// 静默模式（quiet）给后台白送舰用，避免一次购买刷一排提示。
+function canAcquireShip(s, quiet) {
+  const cost = shipCommandCost(s);
+  if (totalCommand() + cost > 400) {
+    if (!quiet) flashTip('指挥值不足（' + totalCommand() + '+' + cost + '>400）');
+    return false;
+  }
+  return true;
 }
 // ==================== 联机：舰队编组序列化与合并 ====================
 // 联机局里房主要把各人的 hand 合并成一支联合舰队。三件事必须跟着走，
@@ -974,9 +997,12 @@ function upgradeBarge() {
   pushNews('补给驳船升级至 Lv.' + state.bargeLevel, 'good');
   if (state.gacha) {
     const s = randomShipByLevel(0);
-    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: (s.mods && s.mods.length) ? s.mods[0] : '' });
-    pushNews('军火商人：获得舰船 ' + s.name, 'good');
-    tryMergeShips();
+    // 指挥值已满则只升级驳船、不送舰（静默，避免升级提示被挤掉）
+    if (canAcquireShip(s, true)) {
+      state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: (s.mods && s.mods.length) ? s.mods[0] : '' });
+      pushNews('军火商人：获得舰船 ' + s.name, 'good');
+      tryMergeShips();
+    }
   }
   renderPrep();
 }
@@ -1089,6 +1115,8 @@ function buyPoolItem(idx) {
   if (state.funds < price) { flashTip('资金不足'); return; }
   if (item.type === 'equip' && countHand('equip') >= CONFIG.EQUIP_LIMIT) { flashTip('装备栏已满'); return; }
   if (item.type === 'spell' && countHand('spell') >= CONFIG.SPELL_LIMIT) { flashTip('战术指令栏已满'); return; }
+  // 必须在扣款之前拦，否则钱已扣、舰没进编组。
+  if (item.type === 'ship' && !canAcquireShip(item.ship)) return;
   state.funds -= price;
   state.spentFunds += price;
   if (item.type === 'ship') {
@@ -1109,13 +1137,14 @@ function buyPoolItem(idx) {
 }
 
 function checkGacha() {
-  if (state.spentFunds >= 18) {
-    const s = randomShipByLevel(0);
-    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: (s.mods && s.mods.length) ? s.mods[0] : '' });
-    state.spentFunds -= 18;
-    pushNews('军火商人：获得舰船 ' + s.name, 'good');
-    tryMergeShips();
-  }
+  if (state.spentFunds < 18) return;
+  const s = randomShipByLevel(0);
+  // 指挥值满了就不送、也不扣累计值 —— 留到编组腾出空间后自然触发。
+  if (!canAcquireShip(s, true)) return;
+  state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: (s.mods && s.mods.length) ? s.mods[0] : '' });
+  state.spentFunds -= 18;
+  pushNews('军火商人：获得舰船 ' + s.name, 'good');
+  tryMergeShips();
 }
 
 function renderPoolSection() {
@@ -1319,9 +1348,14 @@ function castSpell(sp) {
     pushNews('紧急修复：我方全体恢复40%生命', 'good');
   } else if (sp.id === 'reinforce') {
     const s = randomShipByLevel(0);
-    state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: (s.mods && s.mods.length) ? s.mods[0] : '' });
-    pushNews('增援编队：获得舰船 ' + s.name, 'good');
-    tryMergeShips();
+    if (canAcquireShip(s, true)) {
+      state.hand.push({ ship: s, elite: false, equips: [], lv: {}, kills: 0, lastFireTime: 0, mod: (s.mods && s.mods.length) ? s.mods[0] : '' });
+      pushNews('增援编队：获得舰船 ' + s.name, 'good');
+      tryMergeShips();
+    } else {
+      // 战术卡已消耗却拿不到舰，必须在纸带上留痕，否则玩家不知道为什么没反应
+      pushNews('增援编队：指挥值已满，未获得舰船', 'warn');
+    }
   } else if (sp.id === 'freeze') {
     state.enemies.forEach(function (e) { e.frozenUntil = now + 5000; });
     pushNews('时间冻结：敌方停止移动3秒', 'good');
@@ -1755,14 +1789,76 @@ function fortressAttack(now) {
   });
 }
 
+// ==================== 敌方强度标定 ====================
+// 原来是 Math.pow(1.1, wave - 1)：只看波次，与我方编组完全无关 ——
+// 编组强则平推，编组弱则打不动。改为按我方实际战力标定：玩家变强敌方跟着变强，
+// 再乘一个随波次上升的倾斜系数，保留「前易后难」但把曲线拉平。
+const ENEMY_SCALE = {
+  START_TILT: 0.85,  // 第1波敌方战力为我方的 85%（<1 即前易）
+  TILT_STEP: 0.025,  // 每波 +2.5%，第15波到 1.20（>1 即后难）
+  MIN: 0.15,         // 钳制：编组异常强时别把敌方刷成纸
+  MAX: 6,            // 钳制：编组异常弱时别把敌方刷成铁板
+  FALLBACK: 1        // 拿不到我方战力时退回不标定
+};
+
+// 战力口径两边必须一致：有效血量 × 输出。
+// 有效血量 = (血 + 护盾) × (1 + 护甲/10)，护甲每 10 点等效一倍血。
+// 敌方 rate 按 1（CITY_DEFENSE 没有该字段），我方用真实 rate —— 双方同式才可比。
+function powerOf(hp, armor, shield, dmg, rate) {
+  return (hp + shield) * (1 + armor / 10) * dmg * rate;
+}
+function playerPower() {
+  return state.units.reduce(function (a, u) {
+    return a + (u.alive ? 1 : 0) * powerOf(u.maxHp, u.armor, u.shield, u.dmg, u.rate);
+  }, 0);
+}
+// 解出让敌方总战力等于 target 的 scale。
+// 不能用 sqrt(target / base) 反解：敌方血、护甲、攻击都随 scale 线性放大，
+// 而护甲在 (1 + armor/10) 里是线性项，战力随 scale 并非平方关系，
+// 开方反解在护甲较大时会明显偏离目标。直接二分，40 次 × N 艘、每波一次，可忽略。
+//
+// state.enemyHpMul / enemyDmgMul 故意不计入：它们是玩家选的策略修正
+//（如「全域防御」在入门协议给敌方 -30%），标定若把它们算进基线，
+// 就会自动放大 scale 把这份削弱吃掉，玩家拿不到应得的收益。
+function solveEnemyScale(units, target) {
+  const powerAt = function (scale) {
+    return units.reduce(function (a, e) {
+      return a + powerOf(e.hp * scale, e.armor * scale, e.shield * scale, e.atk * scale, 1);
+    }, 0);
+  };
+  if (!(target > 0)) return ENEMY_SCALE.FALLBACK;
+  let lo = 0.01, hi = 50;
+  if (powerAt(hi) < target) return hi;
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    if (powerAt(mid) < target) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 function spawnEnemyWave() {
   const lv = cityLevelOf(state.wave);
   const config = (window.CITY_DEFENSE || {})[lv] || [];
-  const scale = Math.pow(1.1, state.wave - 1);
+  if (!config.length) {
+    // 空配置会让下面 config[...] 取到 undefined，随后 e.cls 直接抛错。
+    // 标定要读 config 算战力，先在这里兜住。
+    state.enemies = [];
+    pushNews('城市防御配置为空（' + lv + ' 级），本波没有敌舰', 'bad');
+    return;
+  }
   const units = [];
   config.slice(0, 6).forEach(function (e) { for (let k = 0; k < e.count; k++) units.push(e); });
   for (let k = 0; k < 30; k++) units.push(config[Math.floor(Math.random() * config.length)]);
   const seg = Math.max(1, Math.ceil(units.length / 4));
+  // 标定目标：敌方总战力 = 我方总战力 × 波次倾斜 × 难度系数
+  const tilt = ENEMY_SCALE.START_TILT + ENEMY_SCALE.TILT_STEP * (state.wave - 1);
+  const modeF = CONFIG.MODES[state.mode].enemyPow || 1;
+  let scale = ENEMY_SCALE.FALLBACK;
+  const myPow = playerPower();
+  if (myPow > 0) {
+    scale = solveEnemyScale(units, myPow * tilt * modeF);
+    scale = Math.max(ENEMY_SCALE.MIN, Math.min(ENEMY_SCALE.MAX, scale));
+  }
   state.enemies = units.map(function (e, i) {
     const grp = Math.min(3, Math.floor(i / seg));
     const zone = e.cls === 'cruiser' ? 'mid' : (e.cls === 'destroyer' || e.cls === 'frigate' || e.cls === 'corvette' ? 'front' : 'back');
@@ -1776,7 +1872,7 @@ function spawnEnemyWave() {
       alive: true, lastFireTime: 0, empUntil: 0, frozenUntil: 0
     };
   });
-  pushNews('敌方舰队抵达：' + lv + ' 级舰队，' + state.enemies.length + ' 艘敌舰（势力1两组 / 势力2两组，强度 ' + scale.toFixed(2) + '）', 'warn');
+  pushNews('敌方舰队抵达：' + lv + ' 级舰队，' + state.enemies.length + ' 艘敌舰（标定强度 ' + scale.toFixed(2) + '，战力比 ' + (tilt * modeF).toFixed(2) + '×）', 'warn');
 }
 function startBattle() {
   if (state.phase !== 'prep') return;
