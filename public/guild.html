@@ -44,8 +44,8 @@
             <p>聊天式交流 · 图片视频表情</p>
           </div>
         </a>
-        <!-- 配队攻略：由「小游戏 → 舰船强化」迁移而来；仅管理员/会长可见（gateEnhance 判定后放开） -->
-        <a href="games/enhance.html" class="feature-card" id="cardEnhance" style="text-decoration:none; color:inherit; display:none;">
+        <!-- 配队攻略：由「小游戏 → 舰船强化」迁移而来 -->
+        <a href="games/enhance.html" class="feature-card" id="cardEnhance" style="text-decoration:none; color:inherit;">
           <div class="feature-icon"></div>
           <div class="feature-text">
             <h3>配队攻略 · 舰船强化</h3>
@@ -183,18 +183,8 @@
       container.innerHTML = html;
     }
 
-    // 配队攻略·舰船强化入口仅管理员/会长可见（口径与页面守卫一致：is_admin 或 is_owner）。
-    // 卡片默认 display:none，判定通过才放开；数据层不可用时保持隐藏。
-    async function gateEnhance() {
-      const card = document.getElementById('cardEnhance');
-      if (!card) return;
-      const role = await myRole();
-      card.style.display = (role.admin || role.owner) ? '' : 'none';
-    }
-
     (async function init() {
       try { if (window.UEG_SESSION_READY) await window.UEG_SESSION_READY; } catch (e) {}
-      await gateEnhance();
       await renderMemberList();
     })();
   </script>

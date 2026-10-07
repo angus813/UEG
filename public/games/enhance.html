@@ -235,8 +235,6 @@ body {
   font-size: .7rem; color: #b6bbbd; }
 .fx-desc { color: #9aa0a2; font-size: .66rem; margin-top: 2px; }
 </style>
-<!-- 仅管理员/会长可进：先整页隐藏，避免未授权时闪出内容；判定见页尾守卫脚本 -->
-<script>document.documentElement.style.visibility = 'hidden';</script>
 <script src="../supabase-client.js"></script>
   <script src="../bgm.js?v=20261004i"></script>
 </head>
@@ -286,30 +284,5 @@ body {
 
 <div id="flashTip" style="position:fixed;left:50%;bottom:30px;transform:translateX(-50%);background:rgba(30,34,36,.95);color:#fff;font-weight:700;border:1px solid rgba(255,255,255,.3);border-left:3px solid #ffd24a;padding:9px 20px;z-index:99;opacity:0;transition:opacity .3s;font-size:.82rem;border-radius:2px"></div>
 
-<script>
-  // 页面守卫：仅 is_admin / is_owner 可进，其余一律拦下并退回公会页。
-  // 判定以服务端档案（DB.myProfile）为准；数据层或未登录时一律拒绝（fail-closed）。
-  (function () {
-    var ready = window.UEG_DB_READY || Promise.resolve(false);
-    ready.then(function (ok) {
-      var cu = null;
-      try { cu = JSON.parse(localStorage.getItem('ueg_current_user') || 'null'); } catch (e) {}
-      if (!ok || !window.DB || !cu || !cu.username) return false;
-      return window.DB.myProfile().then(function (r) {
-        return !!(r && r.code === 200 && r.data && (r.data.is_admin || r.data.is_owner));
-      });
-    }).catch(function () { return false; }).then(function (allowed) {
-      if (allowed) { document.documentElement.style.visibility = ''; return; }
-      document.documentElement.style.visibility = '';
-      document.body.innerHTML =
-        '<div style="max-width:520px;margin:16vh auto;padding:24px;background:rgba(40,44,46,.9);' +
-        'border:1px solid rgba(255,255,255,.2);border-left:3px solid #ffd24a;border-radius:2px;' +
-        'font-family:inherit;color:#e8e9ea;text-align:center;line-height:1.9">' +
-        '<p style="font-size:.95rem;font-weight:700">您没有管理员权限，无法访问此页面。</p>' +
-        '<p style="font-size:.8rem"><a href="../guild.html" style="color:#ffd24a">← 返回公会</a></p></div>';
-      setTimeout(function () { window.location.replace('../guild.html'); }, 1500);
-    });
-  })();
-</script>
 </body>
 </html>
