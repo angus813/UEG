@@ -3120,7 +3120,12 @@ function bindRoomLobby(box) {
   if (b('roomStart')) {
     b('roomStart').addEventListener('click', function () {
       R.hostUpdate({ phase: R.PHASE.PREP, round: 1 }).then(function (r) {
-        if (r.code !== 200) roomErr(r.msg || '开始失败');
+        if (r.code !== 200) { roomErr(r.msg || '开始失败'); return; }
+        // 房间阶段推进后必须把游戏侧也启动起来。
+        // 原来成功就直接返回：只改房间的 phase，游戏仍停在欢迎界面，
+        // 表现为「点开始作战毫无反应」。startSimulation 全站只有配队确认
+        // 一处调用，没有任何地方响应房间进入 PREP —— 断链就在这里。
+        startGameFromRoom();
       });
     });
   }
@@ -3136,6 +3141,18 @@ function bindRoomLobby(box) {
       R.leave().then(function () { flashTip('已离开房间'); });
     });
   }
+}
+
+// 从房间进入对局：关房间面板，再走与「开始模拟」完全相同的开局入口
+// （initGame + showModeSelect -> 模式 -> 防守策略 -> 配队 -> 休整期）。
+// 房主由 roomStart 调用，非房主在房间 phase 变为 PREP 时调用。
+// 守卫：已在对局中就不重复开，避免房间里来回切换把当前对局冲掉。
+function startGameFromRoom() {
+  if (state.phase === 'prep' || state.phase === 'battle') return;
+  const modal = document.getElementById('roomModal');
+  if (modal) modal.classList.remove('active');
+  initGame();
+  showModeSelect();
 }
 
 function initRoomUi() {
@@ -3155,6 +3172,11 @@ function initRoomUi() {
   roomUnsub = R.onChange(function (snap) {
     const modal = document.getElementById('roomModal');
     if (modal && modal.classList.contains('active')) renderRoomLobby(snap);
+    // 非房主跟随房主开局：房间一进 PREP 就把游戏也带起来。
+    // 房主自己由 roomStart 直接调 startGameFromRoom，这里只负责跟随者，
+    // 否则队友会一直停在房间面板上等一个永远不会来的开局。
+    // 已在对局中时 startGameFromRoom 内部会返回，不会重复开。
+    if (snap && snap.phase === R.PHASE.PREP && !snap.isHost) startGameFromRoom();
   });
 
   // 支持 ?room=CODE 直达：进房后自动打开面板并填好
