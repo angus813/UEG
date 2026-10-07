@@ -2954,6 +2954,13 @@ document.addEventListener('DOMContentLoaded', function () {
 // ============================================================
 let roomState = null;
 let roomUnsub = null;
+// 上一次见到的房间阶段，用于边沿检测（声明在模块级：doJoin 与
+// initRoomUi 都要读写它，放函数内够不着）。
+// 只有阶段真正从别的值跳到 PREP 那一刻才让非房主跟随开局。
+// 不能只看「当前是不是 PREP」——那样队友进房时房间若已是 PREP
+//（房主已开局或上一局残留）、以及关闭房间后再打开面板，
+// 都会被当成开局信号，表现为「一进房就直接开始」「再点联机房间就直接开始」。
+let lastRoomPhase = null;
 
 function escRoom(s) {
   return String(s == null ? '' : s)
@@ -3090,7 +3097,10 @@ function bindRoomLobby(box) {
     const c = codeOf();
     if (c.length !== R.MAX_SEATS && c.length !== 4) { roomErr('房间码为 4 位'); return; }
     R.join(c, role).then(function (r) {
-      if (r.code !== 200) roomErr(r.msg || '加入失败');
+      if (r.code !== 200) { roomErr(r.msg || '加入失败'); return; }
+      // 加入成功后对齐当前阶段：否则上一个房间残留的 PREP 会被
+      // 下一次 onChange 当成「房主刚开局」，队友一进房就被拉进对局。
+      lastRoomPhase = R.snapshot().phase;
     });
   };
   if (b('roomJoin')) b('roomJoin').addEventListener('click', function () { doJoin('seat'); });
@@ -3165,6 +3175,7 @@ function initRoomUi() {
       showModal('联机房间', '<div class="supply-panel"><div class="sp-row"><span>当前状态</span><span class="v">对局进行中，可在休整期切换</span></div></div>');
       return;
     }
+    lastRoomPhase = R.snapshot().phase;
     renderRoomLobby(R.snapshot());
     document.getElementById('roomModal').classList.add('active');
   });
@@ -3172,11 +3183,16 @@ function initRoomUi() {
   roomUnsub = R.onChange(function (snap) {
     const modal = document.getElementById('roomModal');
     if (modal && modal.classList.contains('active')) renderRoomLobby(snap);
-    // 非房主跟随房主开局：房间一进 PREP 就把游戏也带起来。
+    if (!snap) return;
+    const was = lastRoomPhase;
+    lastRoomPhase = snap.phase;
+    // 非房主跟随房主开局：只在阶段「变化」到 PREP 时启动。
     // 房主自己由 roomStart 直接调 startGameFromRoom，这里只负责跟随者，
     // 否则队友会一直停在房间面板上等一个永远不会来的开局。
     // 已在对局中时 startGameFromRoom 内部会返回，不会重复开。
-    if (snap && snap.phase === R.PHASE.PREP && !snap.isHost) startGameFromRoom();
+    if (was && was !== R.PHASE.PREP && snap.phase === R.PHASE.PREP && !snap.isHost) {
+      startGameFromRoom();
+    }
   });
 
   // 支持 ?room=CODE 直达：进房后自动打开面板并填好
@@ -3184,6 +3200,8 @@ function initRoomUi() {
   if (m) {
     R.join(m[1].toUpperCase(), 'seat').then(function (r) {
       if (r.code !== 200) { flashTip('加入失败：' + (r.msg || '')); return; }
+      // 同上：直达进房也要对齐阶段，不把已有的 PREP 当成开局信号
+      lastRoomPhase = R.snapshot().phase;
       renderRoomLobby(R.snapshot());
       document.getElementById('roomModal').classList.add('active');
     });
