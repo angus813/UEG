@@ -1051,6 +1051,31 @@ button.pf-title::before {
   background: var(--rhine-bg);
   color: var(--rhine-body);
 }
+
+/* 两段式购买（参照参考项目 .scard.is-armed）：
+   首次点击抬起 + 强调框 + 底部确认条，其余卡压暗，再次点击才成交。 */
+.pool-card { position: relative; transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease; }
+.pool-card.is-armed {
+  transform: translateY(-4px) scale(1.03);
+  border-color: var(--rhine-accent);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+  z-index: 2;
+}
+.pool-card.is-armed::after {
+  content: '再次点击确认购买';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 5px 0;
+  text-align: center;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  color: #fff;
+  background: var(--rhine-accent);
+}
+/* 已有卡处于待确认时，其余卡压暗，视线只落在这一张上 */
+.pool-list:has(.pool-card.is-armed) .pool-card:not(.is-armed) { filter: brightness(0.78); }
 .hud-faction-bar { display: flex; flex-direction: column; gap: 4px; }
 .hud-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 

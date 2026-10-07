@@ -1272,7 +1272,21 @@ function renderPoolSectionBind() {
   const f = document.getElementById('freezePoolBtn');
   if (f) f.addEventListener('click', freezePool);
   document.querySelectorAll('.pool-card').forEach(function (el) {
-    el.addEventListener('click', function () { buyPoolItem(parseInt(el.dataset.idx, 10)); });
+    el.addEventListener('click', function () {
+      const idx = parseInt(el.dataset.idx, 10);
+      // 两段式购买：首次点击抬起并出确认条，再次点击才扣款成交。
+      // 参考项目的 .scard.is-armed 用同一套状态防误触，同时把其余卡压暗。
+      // 卡池每次成交或刷新都会重建 DOM，armed 状态随之自然复位。
+      if (!el.classList.contains('is-armed')) {
+        document.querySelectorAll('.pool-card.is-armed').forEach(function (x) {
+          x.classList.remove('is-armed');
+        });
+        el.classList.add('is-armed');
+        return;
+      }
+      el.classList.remove('is-armed');
+      buyPoolItem(idx);
+    });
   });
   document.querySelectorAll('.hand-card').forEach(function (el) {
     el.addEventListener('click', function () {
