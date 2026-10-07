@@ -280,6 +280,38 @@
 
   // ---------- Realtime ----------
 
+  // 联机客户端的存储策略：一律走内存，不碰 localStorage / IndexedDB。
+  //
+  // supabase-js 由 CDN 动态插入（见下 loadSupabase），属于跨站源，
+  // 浏览器的 Tracking Prevention 会阻止跨站脚本访问存储，控制台表现为
+  //   Tracking Prevention blocked access to storage for cdn.jsdelivr.net
+  // 而 Realtime 的会话与重连状态要靠存储，被拦下来联机就起不来。
+  //
+  // 联机是临时场景，本就不需要跨刷新保持会话，所以把 auth 持久化整个关掉，
+  // 再显式给一份内存 storage 兜底——即使某处仍按默认路径读写 storage，
+  // 读到的也是这个对象，永远不落到浏览器存储上，跟踪防护无从拦截。
+  function memStorage() {
+    var m = {};
+    return {
+      getItem: function (k) { return Object.prototype.hasOwnProperty.call(m, k) ? m[k] : null; },
+      setItem: function (k, v) { m[k] = String(v); },
+      removeItem: function (k) { delete m[k]; },
+      clear: function () { m = {}; },
+      key: function (i) { return Object.keys(m)[i] || null; },
+      get length() { return Object.keys(m).length; }
+    };
+  }
+  function supabaseOpts() {
+    return {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        storage: memStorage()
+      }
+    };
+  }
+
   function loadSupabase() {
     if (window.supabase && typeof window.supabase.createClient === 'function') {
       return Promise.resolve(window.supabase);
@@ -306,7 +338,7 @@
     const code = state.code;
     return loadSupabase().then(function (mod) {
       subRoom = mod.createClient(
-        window.UEG_CONFIG.supabase.url, window.UEG_CONFIG.supabase.publishableKey);
+        window.UEG_CONFIG.supabase.url, window.UEG_CONFIG.supabase.publishableKey, supabaseOpts());
       channel = subRoom.channel('room-' + code, { config: { broadcast: { self: false } } });
 
       // 轻量消息：队友间的即时通知（准备状态、表情、倒计时提示）
@@ -541,7 +573,7 @@
     const chName = 'host-sync-' + state.code;
     return loadSupabase().then(function (mod) {
       if (!subRoom) subRoom = mod.createClient(
-        window.UEG_CONFIG.supabase.url, window.UEG_CONFIG.supabase.publishableKey);
+        window.UEG_CONFIG.supabase.url, window.UEG_CONFIG.supabase.publishableKey, supabaseOpts());
       syncState.channel = subRoom.channel(chName, { config: { broadcast: { self: false } } });
       // null 而非 {}：diffSnapshot 用 prev.mu.forEach 遍历，
       // 空对象没有 mu，首帧就会抛「Cannot read properties of undefined」。
@@ -637,7 +669,7 @@ function syncTimer() {
     if (!state.code || isHost()) return Promise.resolve(false);
     return loadSupabase().then(function (mod) {
       if (!subRoom) subRoom = mod.createClient(
-        window.UEG_CONFIG.supabase.url, window.UEG_CONFIG.supabase.publishableKey);
+        window.UEG_CONFIG.supabase.url, window.UEG_CONFIG.supabase.publishableKey, supabaseOpts());
       const ch = subRoom.channel('host-sync-' + state.code, { config: { broadcast: { self: false } } });
       syncState.watch = ch;
       ch.on('broadcast', { event: 'snap' }, function (msg) {
