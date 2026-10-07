@@ -163,7 +163,7 @@
       setToken(token);
       setRefresh(r.data.refresh_token);   // 免登录：保留刷新令牌
       // 读取档案（不存在则自动补建，兼容注册后未建档的情况）
-      const me = await this.rest('/rest/v1/users?select=username,is_admin,highest_record&username=eq.' + enc(username));
+      const me = await this.rest('/rest/v1/users?select=username,is_admin,is_official,highest_record&username=eq.' + enc(username));
       let profile = null;
       if (me.code === 200 && Array.isArray(me.data) && me.data.length) profile = me.data[0];
       if (!profile) {
@@ -171,7 +171,10 @@
         if (pr.code !== 200) { setToken(null); return { code: 500, msg: '登录成功但档案初始化失败（' + pr.msg + '），请稍后重试' }; }
         profile = { username, is_admin: false, highest_record: 0 };
       }
-      const data = { username, is_admin: !!profile.is_admin, highest_record: profile.highest_record || 0 };
+      // is_official 必须一起存：卫戍协议入口的本地判定依赖它，
+      // 只存 is_admin 会让官员登录后立即访问时被本地那关挡住
+      // （refreshSession 已经写 is_official/is_owner，两处口径要一致）。
+      const data = { username, is_admin: !!profile.is_admin, is_official: !!profile.is_official, highest_record: profile.highest_record || 0 };
       setCurrentUser(data);
       return { code: 200, msg: '登录成功', data: data };
     },

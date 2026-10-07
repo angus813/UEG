@@ -57,7 +57,7 @@
     dbPromise = loadScript(scriptCandidates('config.js'))
       .then(function (ok) {
         if (!ok) { console.error('数据层：无法加载 config.js（站点根目录应有该文件）'); return false; }
-        return loadScript(scriptCandidates('github-db.js'));
+        return loadScript(scriptCandidates('github-db.js?v=20261007a'));
       })
       .then(function (ok) {
         if (ok === false) return false;
