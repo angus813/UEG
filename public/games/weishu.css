@@ -948,6 +948,109 @@ button.pf-title::before {
 .readybtn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .readybtn__box { width: 14px; height: 14px; border: 2px solid var(--rhine-accent); background: #fff; flex: none; }
 .readybtn__label { line-height: 1; }
+
+/* 舰船详情：贴边侧滑面板（参照参考项目 .dpanel 的停靠 + 滑入，非居中模态）。
+   z-index 取 90：低于通用 modal(200)、高于 HUD 内容，与参考的分层档位一致。 */
+.dpanel {
+  position: fixed;
+  top: 90px;
+  left: 0;
+  bottom: 24px;
+  width: 300px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  background: var(--rhine-panel);
+  border: 1px solid var(--rhine-line);
+  border-left: 3px solid var(--rhine-accent);
+  box-shadow: 4px 0 16px rgba(0, 0, 0, 0.12);
+  transform: translateX(-100%);
+  transition: transform 0.2s ease;
+  pointer-events: none;
+}
+.dpanel.active { transform: translateX(0); pointer-events: auto; }
+.dpanel__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--rhine-line);
+  background: var(--rhine-bg);
+  color: var(--rhine-mute);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.dpanel__close:hover { color: var(--rhine-accent); border-color: var(--rhine-accent); }
+.dpanel__body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+
+/* 头部：名称 + 舰种 */
+.dhead { padding-right: 32px; margin-bottom: 12px; }
+.dhead__name { font-size: 1.02rem; font-weight: 700; color: var(--rhine-ink); line-height: 1.3; }
+.dhead__cls { font-size: 0.76rem; color: var(--rhine-mute); margin-top: 3px; letter-spacing: 0.06em; }
+
+/* 属性网格：1px gap + 容器底色直接画出分隔线（参考 .dstats 的做法） */
+.dstats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--rhine-line);
+  border: 1px solid var(--rhine-line);
+}
+.dst {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  background: var(--rhine-bg);
+}
+.dst__l { font-size: 0.74rem; color: var(--rhine-mute); flex: none; }
+.dst__v {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--rhine-ink);
+  text-align: right;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 分区标题 */
+.dsec {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  color: var(--rhine-mute);
+  padding-bottom: 5px;
+  margin: 14px 0 7px;
+  border-bottom: 1px solid var(--rhine-line);
+}
+
+/* 强化等级：左侧 3px 强调条（参考用左竖条表达强调块） */
+.dlvs { display: flex; flex-direction: column; gap: 4px; }
+.dlv {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 9px;
+  background: var(--rhine-panel2);
+  border-left: 3px solid var(--rhine-accent);
+}
+.dlv__l { font-size: 0.76rem; color: var(--rhine-body); }
+.dlv__v { font-size: 0.8rem; font-weight: 700; color: var(--rhine-ink); }
+
+/* 装备 */
+.deq { display: flex; flex-wrap: wrap; gap: 6px; }
+.deq__i {
+  font-size: 0.74rem;
+  padding: 4px 8px;
+  border: 1px solid var(--rhine-line);
+  background: var(--rhine-bg);
+  color: var(--rhine-body);
+}
 .hud-faction-bar { display: flex; flex-direction: column; gap: 4px; }
 .hud-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 

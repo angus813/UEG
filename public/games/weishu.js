@@ -1334,9 +1334,58 @@ function renderPoolSectionBind() {
 function selectHandCard(i) {
   const card = state.hand[i];
   if (!card || !card.ship) return;
+  showShipDetail(card);
+}
+
+// 舰船详情：贴边侧滑面板，不再走居中模态。
+// 参考项目用 .dpanel 从侧边停靠滑入，内容是结构化字段（头 / 属性网格 /
+// 分区标题）而不是换行拼接的纯文本，所以这里按分区组织。
+// 面板 DOM 惰性创建一次后复用，避免每次开详情都重建与重复绑事件。
+function showShipDetail(card) {
   const s = card.ship;
   const lv = card.lv || {};
-  showConfirm('舰船详情：' + s.name, '舰种 ' + CLS_ZH[s.cls] + '\n生命 ' + s.hp + ' 攻击 ' + s.dmg + ' 装甲 ' + s.armor + '\n武器 ' + WEAPON_LABEL[s.weapon] + '·' + DMGTYPE_LABEL[s.dmgType] + '\n强化等级：攻击' + (lv.dmg || 0) + ' 生命' + (lv.hp || 0) + ' 攻速' + (lv.rate || 0) + ' 装甲' + (lv.armor || 0) + ' 射程' + (lv.range || 0) + (card.elite ? '\n状态：精锐' : '') + (card.equips && card.equips.length ? '\n装备：' + card.equips.map(function (e) { return e.name; }).join('、') : ''), null);
+  let dp = document.getElementById('shipDetail');
+  if (!dp) {
+    dp = document.createElement('div');
+    dp.className = 'dpanel';
+    dp.id = 'shipDetail';
+    dp.innerHTML =
+      '<button class="dpanel__close" id="shipDetailClose" type="button" aria-label="关闭">X</button>' +
+      '<div class="dpanel__body" id="shipDetailBody"></div>';
+    document.body.appendChild(dp);
+    document.getElementById('shipDetailClose').addEventListener('click', function () {
+      dp.classList.remove('active');
+    });
+  }
+
+  const stat = function (label, val) {
+    return '<div class="dst"><span class="dst__l">' + label + '</span><span class="dst__v">' + val + '</span></div>';
+  };
+  const lvRow = function (label, v) {
+    return '<div class="dlv"><span class="dlv__l">' + label + '</span><span class="dlv__v">' + (v || 0) + '</span></div>';
+  };
+
+  let html = '<div class="dhead">' +
+    '<div class="dhead__name">' + escRoom(s.name) + '</div>' +
+    '<div class="dhead__cls">' + CLS_ZH[s.cls] + (card.elite ? ' · 精锐' : '') + '</div>' +
+    '</div>';
+  html += '<div class="dstats">' +
+    stat('生命', s.hp) + stat('攻击', s.dmg) + stat('装甲', s.armor) +
+    stat('武器', WEAPON_LABEL[s.weapon]) + stat('伤害', DMGTYPE_LABEL[s.dmgType]) +
+    '</div>';
+  html += '<div class="dsec">强化等级</div><div class="dlvs">' +
+    lvRow('攻击', lv.dmg) + lvRow('生命', lv.hp) + lvRow('攻速', lv.rate) +
+    lvRow('装甲', lv.armor) + lvRow('射程', lv.range) +
+    '</div>';
+  if (card.equips && card.equips.length) {
+    html += '<div class="dsec">装备</div><div class="deq">' +
+      card.equips.map(function (e) {
+        return '<span class="deq__i">' + escRoom(e.name) + '</span>';
+      }).join('') +
+      '</div>';
+  }
+  document.getElementById('shipDetailBody').innerHTML = html;
+  dp.classList.add('active');
 }
 
 const BATTLE_ONLY_SPELLS = { bomb: 1, emp: 1, freeze: 1, corrode: 1 };
