@@ -1022,12 +1022,111 @@ button.pf-title::before {
 }
 
 /* ---------- 联机房间 ---------- */
+/* 全屏覆盖层：保留 .modal 的 id 与 .active 开合机制，initRoomUi /
+   startGameFromRoom 等逻辑层零改动，只把外壳从居中弹窗改成全屏屏。 */
+#roomModal.room-screen {
+  padding: 0;
+  background: var(--rhine-bg);
+  align-items: stretch;
+  justify-content: stretch;
+}
+.room-screen__inner { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+#roomLobby { flex: 1; display: flex; flex-direction: column; min-height: 0; padding: 0 18px; }
+
+/* 顶栏三栏：左=离开+连接状态，中=标题，右=房间码邀请卡 */
+.room-topbar {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--rhine-line);
+}
+.room-topbar__left { display: flex; align-items: center; gap: 10px; justify-self: start; }
+.room-topbar__center { display: flex; flex-direction: column; align-items: center; gap: 2px; justify-self: center; }
+.room-topbar__right { justify-self: end; }
+.room-eyebrow { font-size: 0.66rem; letter-spacing: 0.18em; color: var(--rhine-mute); }
+.room-title { font-size: 1rem; font-weight: 700; color: var(--rhine-ink); }
+
+/* 邀请卡：标签 + 逐字符码 + 复制按钮竖排 */
+.room-invite { display: flex; align-items: center; gap: 10px; }
+.room-invite__label { font-size: 0.7rem; color: var(--rhine-mute); }
+.room-invite__btns { display: flex; flex-direction: column; gap: 4px; }
+
+/* 席位区吃掉全部剩余高度，内容垂直居中 */
+.room-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 10px 0;
+}
+
+/* 观战条：有观战者才渲染，紧贴底栏之上 */
+.room-specbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 18px;
+  border-top: 1px solid var(--rhine-line);
+}
+.specbar__label { font-size: 0.72rem; font-weight: 700; color: var(--rhine-mute); }
+.spec-who {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border: 1px solid var(--rhine-line);
+  color: var(--rhine-body);
+  border-radius: 2px;
+}
+.spec-who.is-me { border-color: var(--rhine-accent); color: var(--rhine-accent); }
+
+/* 底栏三栏：左=就绪计数，中=状态行，右=主操作按钮组 */
+.room-bar {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--rhine-line);
+}
+.room-bar__left { justify-self: start; }
+.room-bar__center { justify-self: center; text-align: center; }
+.room-bar__right { justify-self: end; display: flex; align-items: center; gap: 8px; }
+.ready-count { font-size: 0.76rem; color: var(--rhine-mute); }
+.ready-count b { font-size: 0.95rem; color: var(--rhine-ink); }
+.ready-count .dim { color: var(--rhine-mute); }
+.room-status { font-size: 0.76rem; color: var(--rhine-body); }
+
 .room-code {
   display: flex;
   gap: 6px;
   justify-content: center;
-  margin: 6px 0 14px;
+  margin: 0;
 }
+/* 展示态：已在房间内，逐字符分格 + 底部强调线 */
+.room-code span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 42px;
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--rhine-ink);
+  background: var(--rhine-panel);
+  border: 1px solid var(--rhine-line);
+  border-bottom: 2px solid var(--rhine-accent);
+  border-radius: 2px;
+  font-family: var(--rhine-title-font, monospace);
+}
+/* 输入态：尚未加入时的房间码输入框 */
 .room-code input {
   width: 46px;
   height: 54px;
@@ -1043,23 +1142,48 @@ button.pf-title::before {
   text-transform: uppercase;
 }
 .room-code input:focus { outline: none; border-color: var(--rhine-accent); }
-.room-seats { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+/* 席位网格：列数由 --seat-cols 控制（2 席排 2 列、4 席排 4 列），整块居中 */
+.room-seats {
+  display: grid;
+  grid-template-columns: repeat(var(--seat-cols, 4), minmax(0, 1fr));
+  gap: 10px;
+  justify-content: center;
+  align-content: center;
+  margin: 10px 0;
+}
 .room-seat {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px;
   font-size: 0.8rem;
   color: var(--rhine-body);
   background: var(--rhine-bg);
   border: 1px solid var(--rhine-line);
-  border-left: 3px solid var(--rhine-line);
+  border-top: 3px solid var(--rhine-line);
   border-radius: 2px;
 }
-.room-seat.is-host { border-left-color: var(--rhine-accent); }
+.seat__head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.seat__no {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--rhine-mute);
+  font-family: var(--rhine-title-font, monospace);
+}
+.seat__who { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 30px; }
+.seat__foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--rhine-line);
+}
+.room-seat.is-host { border-top-color: var(--rhine-accent); }
 .room-seat.is-me { background: var(--rhine-accent-soft); }
-.room-seat.is-empty { opacity: 0.5; border-left-style: dashed; }
-.room-seat.is-spectator { border-left-color: var(--rhine-mute); }
+.room-seat.is-empty { opacity: 0.55; border-top-style: dashed; }
+.room-seat.is-empty .seat__foot { border-top-style: dashed; }
 .rs-name { font-weight: 700; color: var(--rhine-ink); }
 .rs-tag {
   font-size: 0.66rem;

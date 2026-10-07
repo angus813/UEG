@@ -2934,6 +2934,8 @@ document.addEventListener('DOMContentLoaded', function () {
       if (e.target === m) {
         // 回合强化必须三选一：点遮罩不关闭（否则会跳过强化且不刷新界面，流程卡住）
         if (m.id === 'upgradeModal') return;
+        // 房间是持续状态且已全屏，点空白不应退出 —— 只能走顶栏「离开」按钮
+        if (m.id === 'roomModal') return;
         m.classList.remove('active');
         if (m.id === 'blueModal' && state && state.blueOpenedIn === 'settle') {
           state.blueOpenedIn = null;
@@ -3002,50 +3004,81 @@ function renderRoomLobby(snap) {
   snap.seats.forEach(function (s) { taken[s.username] = s.role; });
   const seatsToShow = snap.seats.slice();
   for (let i = seatsToShow.length; i < snap.seatSlots; i++) seatsToShow.push(null);
-  seatsToShow.forEach(function (s) {
+  // 观战者不占席位网格，单独汇入观战条；网格按 seatSlots 精确补齐
+  const gridSeats = seatsToShow.filter(function (s) { return s && s.role !== 'spectator'; });
+  const specList = snap.seats.filter(function (s) { return s.role === 'spectator'; });
+  while (gridSeats.length < snap.seatSlots) gridSeats.push(null);
+  let seatIdx = 0;
+  gridSeats.forEach(function (s) {
+    seatIdx++;
+    const no = '<span class="seat__no">P' + seatIdx + '</span>';
     if (!s) {
-      seats += '<div class="room-seat is-empty"><span class="rs-name">空席</span></div>';
+      seats += '<div class="room-seat is-empty">' +
+        '<div class="seat__head">' + no + '</div>' +
+        '<div class="seat__who"><span class="rs-name">空席</span></div>' +
+        '<div class="seat__foot"><span class="rs-wait">等待加入</span></div></div>';
       return;
     }
     const isHost = s.username === snap.host;
     const isMe = s.username === me;
-    seats += '<div class="room-seat' + (isHost ? ' is-host' : '') + (isMe ? ' is-me' : '') +
-      (s.role === 'spectator' ? ' is-spectator' : '') + '">' +
-      '<span class="rs-name">' + escRoom(s.username) + '</span>' +
-      (isHost ? '<span class="rs-tag host">房主</span>' : '') +
-      (s.role === 'spectator' ? '<span class="rs-tag spectator">观战</span>' : '') +
-      '<span style="flex:1"></span>' +
+    seats += '<div class="room-seat' + (isHost ? ' is-host' : '') + (isMe ? ' is-me' : '') + '">' +
+      '<div class="seat__head">' + no +
+      (isHost ? '<span class="rs-tag host">房主</span>' : '') + '</div>' +
+      '<div class="seat__who"><span class="rs-name">' + escRoom(s.username) + '</span></div>' +
+      '<div class="seat__foot">' +
       (s.ready ? '<span class="rs-ready">已准备</span>' : '<span class="rs-wait">未准备</span>') +
-      '</div>';
+      '</div></div>';
     void taken;
   });
-  for (let i = 0; i < snap.spectatorSlots; i++) {
-    seats += '<div class="room-seat is-empty is-spectator"><span class="rs-name">观战席 ' + (i + 1) + '</span></div>';
-  }
+  const specs = specList.map(function (s) {
+    return '<span class="spec-who' + (s.username === me ? ' is-me' : '') + '">' + escRoom(s.username) + '</span>';
+  }).join('');
 
   const mine = snap.seats.filter(function (s) { return s.username === me; })[0];
-  const allReady = snap.seats.filter(function (s) { return s.role === 'seat'; })
-    .every(function (s) { return s.ready; }) && snap.seatCount > 0;
+  const seatList = snap.seats.filter(function (s) { return s.role === 'seat'; });
+  const allReady = seatList.every(function (s) { return s.ready; }) && snap.seatCount > 0;
+  const readyCount = seatList.filter(function (s) { return s.ready; }).length;
+  const statusText = snap.isHost
+    ? (allReady ? '人数达标，准许进入模拟' : '等待所有队员准备就绪')
+    : (mine && mine.ready ? '已就绪 · 等待房主开始' : '准备就绪后，房主即可开始作战');
 
   box.innerHTML =
-    '<div class="room-phase-row">' +
-    '<span class="room-phase-label">' + escRoom(snap.phaseLabel) + '</span>' +
-    '<span class="room-mates-conn room-conn ' + (snap.connected ? 'on' : 'off') + '">' +
+    '<header class="room-topbar">' +
+    '<div class="room-topbar__left">' +
+    '<button class="btn-action" id="roomLeave">离开</button>' +
+    '<span class="room-conn ' + (snap.connected ? 'on' : 'off') + '">' +
     (snap.connected ? '实时同步中' : '轮询同步中') + '</span>' +
     '</div>' +
-    '<div class="sp-sec-title">房间码</div>' +
-    '<div class="room-code">' + escRoom(snap.code).split('').map(function (ch) {
-      return '<input value="' + escRoom(ch) + '" readonly>';
-    }).join('') + '</div>' +
-    '<div class="sp-sec-title">席位 ' + snap.seatCount + '/' + snap.seatSlots + '</div>' +
-    '<div class="room-seats">' + seats + '</div>' +
-    '<div class="room-actions">' +
-    '<button class="btn-action" id="roomReady">' + (mine && mine.ready ? '取消准备' : '准备就绪') + '</button>' +
-    '<button class="btn-action" id="roomCopy">复制邀请链接</button>' +
-    (snap.isHost ? '<button class="btn-action" id="roomStart"' + (allReady ? '' : ' disabled') + '>开始作战</button>' : '') +
-    (snap.isHost ? '<button class="btn-action" id="roomClose">解散房间</button>' : '') +
-    '<button class="btn-action" id="roomLeave">离开</button>' +
+    '<div class="room-topbar__center">' +
+    '<span class="room-eyebrow">CO-OP ROOM</span>' +
+    '<span class="room-title">' + escRoom(snap.phaseLabel) + '</span>' +
     '</div>' +
+    '<div class="room-topbar__right">' +
+    '<div class="room-invite">' +
+    '<span class="room-invite__label">房间码</span>' +
+    '<div class="room-code">' + escRoom(snap.code).split('').map(function (ch) {
+      return '<span>' + escRoom(ch) + '</span>';
+    }).join('') + '</div>' +
+    '<div class="room-invite__btns"><button class="btn-action" id="roomCopy">复制邀请链接</button></div>' +
+    '</div></div></header>' +
+    '<main class="room-main">' +
+    '<div class="sp-sec-title">席位 ' + snap.seatCount + '/' + snap.seatSlots + '</div>' +
+    '<div class="room-seats" style="--seat-cols:' + snap.seatSlots + '">' + seats + '</div>' +
+    '</main>' +
+    (specList.length
+      ? '<section class="room-specbar"><span class="specbar__label">观战席 ' +
+        specList.length + '/' + snap.spectatorSlots + '</span>' + specs + '</section>'
+      : '') +
+    '<footer class="room-bar">' +
+    '<div class="room-bar__left">' +
+    '<span class="ready-count">已就绪 <b>' + readyCount + '</b><span class="dim">/' + snap.seatCount + '</span></span>' +
+    '</div>' +
+    '<div class="room-bar__center"><span class="room-status">' + statusText + '</span></div>' +
+    '<div class="room-bar__right">' +
+    '<button class="btn-action" id="roomReady">' + (mine && mine.ready ? '取消准备' : '准备就绪') + '</button>' +
+    (snap.isHost ? '<button class="btn-action primary" id="roomStart"' + (allReady ? '' : ' disabled') + '>开始作战</button>' : '') +
+    (snap.isHost ? '<button class="btn-action" id="roomClose">解散房间</button>' : '') +
+    '</div></footer>' +
     '<div class="room-err" id="roomErr"></div>';
   bindRoomLobby(box);
 }
