@@ -312,6 +312,27 @@
     };
   }
 
+  // 进程内唯一的 supabase client，跨进房 / 离房复用。
+  //
+  // 不能每次都 new：supabase-js 初始化时会用 storage key 去检测同浏览器里
+  // 的其他实例（控制台那条 Multiple GoTrueClient instances detected 就来自此），
+  // 这一步直接读浏览器存储 —— 既是 Tracking Prevention 拦截的来源，
+  // 多实例同时开 Realtime 也会互相踩，表现为
+  //   WebSocket is closed before the connection is established。
+  //
+  // teardown() 只断开频道、把 subRoom 置空，不销毁这个客户端，
+  // 下次进房 clientOf 直接复用，全程只有一个实例。
+  let supaClient = null;
+  function clientOf(mod) {
+    if (!supaClient) {
+      supaClient = mod.createClient(
+        window.UEG_CONFIG.supabase.url,
+        window.UEG_CONFIG.supabase.publishableKey,
+        supabaseOpts());
+    }
+    return supaClient;
+  }
+
   function loadSupabase() {
     if (window.supabase && typeof window.supabase.createClient === 'function') {
       return Promise.resolve(window.supabase);
@@ -337,8 +358,7 @@
     if (state.channel) return Promise.resolve(true);
     const code = state.code;
     return loadSupabase().then(function (mod) {
-      subRoom = mod.createClient(
-        window.UEG_CONFIG.supabase.url, window.UEG_CONFIG.supabase.publishableKey, supabaseOpts());
+      subRoom = clientOf(mod);
       channel = subRoom.channel('room-' + code, { config: { broadcast: { self: false } } });
 
       // 轻量消息：队友间的即时通知（准备状态、表情、倒计时提示）
@@ -572,8 +592,7 @@
     syncState.onLog = onLog;
     const chName = 'host-sync-' + state.code;
     return loadSupabase().then(function (mod) {
-      if (!subRoom) subRoom = mod.createClient(
-        window.UEG_CONFIG.supabase.url, window.UEG_CONFIG.supabase.publishableKey, supabaseOpts());
+      if (!subRoom) subRoom = clientOf(mod);
       syncState.channel = subRoom.channel(chName, { config: { broadcast: { self: false } } });
       // null 而非 {}：diffSnapshot 用 prev.mu.forEach 遍历，
       // 空对象没有 mu，首帧就会抛「Cannot read properties of undefined」。
@@ -668,8 +687,7 @@ function syncTimer() {
     stopWatch();
     if (!state.code || isHost()) return Promise.resolve(false);
     return loadSupabase().then(function (mod) {
-      if (!subRoom) subRoom = mod.createClient(
-        window.UEG_CONFIG.supabase.url, window.UEG_CONFIG.supabase.publishableKey, supabaseOpts());
+      if (!subRoom) subRoom = clientOf(mod);
       const ch = subRoom.channel('host-sync-' + state.code, { config: { broadcast: { self: false } } });
       syncState.watch = ch;
       ch.on('broadcast', { event: 'snap' }, function (msg) {
