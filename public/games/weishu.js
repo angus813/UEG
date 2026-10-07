@@ -771,17 +771,31 @@ function renderHudTop(opts) {
   }
   html += '</div></div>';
 
-  // 右段：时钟（仅战斗期）
+  // 右段：时钟（仅战斗期）+ 主行动钮（备战期）
   html += '<div class="hud-right">';
   if (o.showClock) {
     const warn = clockLeft <= 15;
     html += '<div class="hud-clock' + (warn ? ' warn' : '') + '"><span>' + Math.max(0, Math.ceil(clockLeft)) + '</span><span class="hud-clock-cap">秒</span></div>';
   }
-  html += renderHudTeam();
+  if (state.phase === 'prep') html += renderReadyBtn();
   html += '</div>';
 
   html += '</div>';
+  // 队友列移出 hud-top：updateHudTop 每 150ms 定点刷新 hud-top 内的数值，
+  // 队友列由房间 onChange 驱动，留在里面会被这类替换连带重建（见 updateHudTop 注释）。
+  // 放到外面既解掉那个隐患，也便于按参考项目布局在内容区左侧独立成列。
+  html += renderHudTeam();
   return html;
+}
+
+// 主行动钮：参考项目把全屏唯一的主行动放在顶栏右下（.readybtn 三段式），
+// 战斗期底部不放行动按钮。开始作战上移到这里，跳过回合 / 放弃战斗 留在底部行动条。
+function renderReadyBtn() {
+  return '<div class="hud-ready">' +
+    '<button class="readybtn" id="startBattleBtn" type="button">' +
+    '<span class="readybtn__box"></span>' +
+    '<span class="readybtn__label">开始作战</span>' +
+    '</button></div>';
 }
 
 // 队友列。座位信息来自 weishu_room.js；单人局返回空串。
@@ -1243,7 +1257,8 @@ function renderFleetRows() {
 
 function renderActionBar(phase) {
   if (phase === 'prep') {
-    return '<div class="action-bar"><button class="btn-action primary-btn" id="startBattleBtn">开始作战</button><button class="btn-action" id="skipRoundBtn">跳过回合</button><button class="btn-action" id="abortBtn">放弃战斗</button></div>';
+    // 开始作战已上移到顶栏右下（renderReadyBtn），底部只留两个次要动作
+    return '<div class="action-bar"><button class="btn-action" id="skipRoundBtn">跳过回合</button><button class="btn-action" id="abortBtn">放弃战斗</button></div>';
   }
   if (phase === 'battle') {
     return '<div class="action-bar"><span class="ab-note">自动作战中</span></div>';

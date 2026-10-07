@@ -924,6 +924,30 @@ button.pf-title::before {
 .hud-left { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .hud-center { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .hud-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; min-width: 0; }
+
+/* 主行动钮：顶栏右下，三段式（勾选框 + 文案）。
+   参考项目把全屏唯一的主行动放在顶栏（.readybtn），战斗期底部不放行动按钮。 */
+.hud-ready { margin-top: 2px; }
+.readybtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--rhine-ink);
+  background: var(--rhine-accent-soft);
+  border: 2px solid var(--rhine-accent);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.readybtn:hover { background: var(--rhine-accent); color: #fff; transform: translateY(-1px); }
+.readybtn:active { transform: translateY(0); }
+.readybtn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.readybtn__box { width: 14px; height: 14px; border: 2px solid var(--rhine-accent); background: #fff; flex: none; }
+.readybtn__label { line-height: 1; }
 .hud-faction-bar { display: flex; flex-direction: column; gap: 4px; }
 .hud-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
@@ -972,7 +996,20 @@ button.pf-title::before {
 
 /* 队友列：左侧竖排。参考项目里是 .team 绝对定位，这里做成常规流 ——
    竖排卡片会随内容增高，绝对定位反而容易与主区重叠。 */
-.hud-team { display: flex; flex-direction: column; gap: 5px; }
+/* 队友列：独立于顶栏，浮在内容区左侧（参考项目 .team 用 left/top 绝对定位）。
+   .side-panel 是 position:relative，作为定位基准；该列只在联机时存在。 */
+.hud-team {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  position: absolute;
+  left: 16px;
+  top: 124px;
+  width: 168px;
+  z-index: 5;
+}
+/* 有队友列时主区左侧让位，避免与列表重叠；单人局该列不渲染，故不生效 */
+.side-panel:has(> .game-header > .hud-team) .ws-main { padding-left: 184px; }
 .hud-team-title {
   font-size: 0.62rem;
   letter-spacing: 0.16em;
