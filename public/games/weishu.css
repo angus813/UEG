@@ -260,6 +260,8 @@ body {
   gap: 12px;
   align-items: start;
 }
+/* 战斗期右栏已不渲染（.ws-side 不存在），单列让战场铺满宽度 */
+.ws-split.no-side { grid-template-columns: minmax(0, 1fr); }
 .ws-main { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .ws-side { min-width: 0; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 12px; }
 
@@ -379,6 +381,43 @@ button.pf-title::before {
 .pf-body { display: none; }
 .prep-fleet.open .pf-body { display: block; }
 .pool-section, .hand-section { background: var(--rhine-panel2); border: 1px solid var(--rhine-line); border-radius: 2px; padding: 10px; }
+
+/* 补给池搬到右下横条（参照参考项目的 .shopbar：right/bottom 绝对定位、
+   只占一条横带、不改变页面布局）。
+   position:fixed 让它脱离文档流 —— DOM 仍留在 ws-main 里，无需移动节点，
+   视觉上落在视口右下；只在备战期存在（battle 期不渲染 pool-section），
+   因此等价于参考里「备战期才出现」的行为。
+   手牌区 .hand-section 共用上面的规则，此处单独覆盖，不影响它。 */
+.pool-section {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 12;                       /* 面板档（8-12），低于模态 70 */
+  max-width: calc(100vw - 36px);
+  background: var(--rhine-panel);
+  border: 1px solid var(--rhine-line);
+  border-top: 2px solid var(--rhine-accent);
+  box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.1);
+  padding: 10px 14px 12px;
+}
+/* 只有存在补给池的那一页才在底部留白，战斗期不匹配就不会白空一段 */
+.game-header:has(> .ws-split > .ws-main > .pool-section) { padding-bottom: 176px; }
+/* 横条里卡片横排不换行，超出横向滚动，保证条形高度固定 */
+.pool-section .pool-list { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+.pool-section .pool-card { flex: 0 0 176px; min-width: 176px; }
+
+/* 商店条右端的资金（参考 .funds 的位置）：与 HUD 里的资金同源，
+   由 updateHudTop 一并定点刷新，不额外引入更新路径 */
+.shop-funds {
+  font-size: 0.76rem;
+  color: var(--rhine-mute);
+  border-left: 1px solid var(--rhine-line);
+  padding-left: 10px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.shop-funds b { font-size: 0.92rem; color: var(--rhine-ink); font-variant-numeric: tabular-nums; }
+
 .pool-head, .hand-head {
   display: flex;
   justify-content: space-between;
@@ -469,7 +508,6 @@ button.pf-title::before {
 .btn-action.danger:hover { background: #a8503f; border-color: #a8503f; color: #eae5e1; }
 
 .action-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.ab-note { color: var(--rhine-mute); font-size: 0.8rem; }
 
 /* ---------- 编组行 ---------- */
 .fleet-rows { display: flex; flex-direction: column; gap: 10px; }
@@ -1184,15 +1222,19 @@ button.pf-title::before {
 .hm-units { margin-left: auto; font-size: 0.68rem; color: var(--rhine-mute); flex: none; }
 
 /* 底部 HUD：进度提示 + 提示轮播 */
-.hud-bottom { display: flex; flex-direction: column; gap: 5px; }
+/* 底部状态提示：参考项目是屏幕底部居中的药丸（.chud__bottom > .chud__msg），
+   不是靠左的方块。这里保留原信息，只改形态与对齐。 */
+.hud-bottom { display: flex; flex-direction: column; align-items: center; gap: 5px; }
 .hud-hint {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   color: var(--rhine-mute);
-  padding: 5px 9px;
+  padding: 7px 18px;
   background: var(--rhine-panel);
   border: 1px solid var(--rhine-line);
-  border-radius: 2px;
+  border-radius: 999px;
   min-height: 26px;
+  letter-spacing: 0.04em;
+  text-align: center;
 }
 
 /* ---------- 联机房间 ---------- */

@@ -1174,7 +1174,7 @@ function checkGacha() {
 
 function renderPoolSection() {
   let html = '<div class="pool-section">';
-  html += '<div class="pool-head"><span>补给池（驳船补给）</span><span class="pool-actions"><button class="btn-action tiny" id="refreshPoolBtn">刷新 ' + refreshCost() + '资金</button><button class="btn-action tiny" id="freezePoolBtn">冻结 2资金</button></span></div>';
+  html += '<div class="pool-head"><span>补给池（驳船补给）</span><span class="pool-actions"><button class="btn-action tiny" id="refreshPoolBtn">刷新 ' + refreshCost() + '资金</button><button class="btn-action tiny" id="freezePoolBtn">冻结 2资金</button></span><span class="shop-funds">资金 <b>' + state.funds + '</b></span></div>';
   html += '<div class="pool-list">';
   if (!state.pool.length) html += '<div class="pool-empty">补给已售罄，请刷新</div>';
   state.pool.forEach(function (item, i) {
@@ -1269,10 +1269,10 @@ function renderActionBar(phase) {
     // 开始作战已上移到顶栏右下（renderReadyBtn），底部只留两个次要动作
     return '<div class="action-bar"><button class="btn-action" id="skipRoundBtn">跳过回合</button><button class="btn-action" id="abortBtn">放弃战斗</button></div>';
   }
-  if (phase === 'battle') {
-    return '<div class="action-bar"><span class="ab-note">自动作战中</span></div>';
-  }
-  return '<div class="action-bar"></div>';
+  // 战斗期不渲染行动条：参考项目战斗期底部不放行动按钮，状态由
+  // renderHudBottom 的 hud-hint 承载（那里已给出「自动作战中 · …」），
+  // 再放一条只会重复文案，还要为它留出整个 248px 右栏。
+  return '';
 }
 
 function renderPoolSectionBind() {
@@ -2644,9 +2644,10 @@ function renderBattle() {
     html += '<div class="fort-sh"><div class="fill" style="width:' + (fsB.shield / fsB.maxShield * 100) + '%"></div><span>护盾 ' + Math.max(0, Math.round(fsB.shield)) + ' / ' + fsB.maxShield + '</span></div></div>';
   }
   html += renderNewsTicker();
-  // 战斗期战场本身已是三栏（左我方 / 中日志 / 右敌方），再套一层分屏会把它挤扁，
-  // 所以战斗期只把行动按钮收进右栏，战场保持满宽。
-  html += '<div class="ws-split"><div class="ws-main">';
+  // 战斗期战场本身已是三栏（左我方 / 中日志 / 右敌方），再套一层分屏会把它挤扁；
+  // 而右栏在战斗期没有任何内容（行动条已去掉，状态由 hud-hint 承载），
+  // 留着只会白占 248px，所以这里既不套双栏也不渲染右栏，战场直接满宽。
+  html += '<div class="ws-split no-side"><div class="ws-main">';
   html += '<div class="battle-view">';
   html += '<div class="fleet-panel left">';
   html += '<div class="fleet-title"><span class="ft-tag my">我</span>我方舰队 <span class="fp-cnt">' + state.units.filter(function (u) { return u.alive; }).length + '/' + state.units.length + '</span></div>';
@@ -2662,8 +2663,7 @@ function renderBattle() {
   html += '</div>';
   html += '</div>';
   html += renderHudBottom();
-  html += '</div><div class="ws-side">';
-  html += renderActionBar('battle');
+  // 战斗期不渲染右栏：无内容可放（见上方 no-side 注释）
   html += '</div></div>';
   panel.innerHTML = html;
 }
@@ -2851,6 +2851,11 @@ function updateHudTop() {
       val.textContent = state.techPoints;
     }
   }
+
+  // 商店条右端的资金与 HUD 资金同源，这里一并定点刷新。
+  // 补给池已搬到视口右下、不在 hud-top 内，所以从 panel 而不是 hud 查。
+  const sf = panel.querySelector('.shop-funds b');
+  if (sf) sf.textContent = state.funds;
 
   // 时钟
   const hc = hud.querySelector('.hud-clock');
