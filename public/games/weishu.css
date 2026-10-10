@@ -152,7 +152,7 @@ body {
   display: none;
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 70;
   background: rgba(250, 248, 246, 0.86);   /* 浅暖灰蒙版，不再深色 */
   align-items: center;
   justify-content: center;
@@ -601,7 +601,7 @@ button.pf-title::before {
   font-weight: 800;
   color: var(--rhine-accent);
   text-shadow: none;                 /* 去发光 */
-  z-index: 5;
+  z-index: 3;
 }
 @keyframes clockPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 
@@ -872,7 +872,7 @@ button.pf-title::before {
   font-size: 0.84rem;
   padding: 10px 20px;
   border-radius: 2px;
-  z-index: 500;
+  z-index: 80;
   box-shadow: none;
   animation: tipIn 0.25s;
 }
@@ -950,14 +950,14 @@ button.pf-title::before {
 .readybtn__label { line-height: 1; }
 
 /* 舰船详情：贴边侧滑面板（参照参考项目 .dpanel 的停靠 + 滑入，非居中模态）。
-   z-index 取 90：低于通用 modal(200)、高于 HUD 内容，与参考的分层档位一致。 */
+   z-index 取 10：对齐参考分层档位（面板 8-12），低于模态 70、高于 HUD 3。 */
 .dpanel {
   position: fixed;
   top: 90px;
   left: 0;
   bottom: 24px;
   width: 300px;
-  z-index: 90;
+  z-index: 10;
   display: flex;
   flex-direction: column;
   background: var(--rhine-panel);
@@ -1143,7 +1143,7 @@ button.pf-title::before {
   left: 16px;
   top: 124px;
   width: 168px;
-  z-index: 5;
+  z-index: 3;
 }
 /* 有队友列时主区左侧让位，避免与列表重叠；单人局该列不渲染，故不生效 */
 .side-panel:has(> .game-header > .hud-team) .ws-main { padding-left: 184px; }
@@ -1433,7 +1433,7 @@ button.pf-title::before {
 .mod-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border: 1px solid var(--rhine-line); background: var(--rhine-panel); border-left: 3px solid var(--rhine-accent); border-radius: 2px; cursor: pointer; }
 .mod-item:hover { border-color: var(--rhine-accent); }
 .mod-item em { color: var(--rhine-mute); font-style: normal; font-size: 12px; }
-#warpCanvas { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; z-index: 300; pointer-events: none; }
+#warpCanvas { position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; z-index: 75; pointer-events: none; }
 
 /* ---------- 跃迁（去发光，改柠檬黄细线 + 透明度） ---------- */
 
