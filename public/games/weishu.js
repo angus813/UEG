@@ -1981,7 +1981,16 @@ function spawnEnemyWave() {
 function startBattle() {
   if (state.phase !== 'prep') return;
   if (typeof interTimer !== 'undefined' && interTimer) { clearInterval(interTimer); interTimer = null; }
-  if (!state.hand.some(function (c) { return c.ship; })) { flashTip('编组中没有舰船'); return; }
+  // 单机：手牌就是编组，没有舰船确实开不了战。
+  // 联机不能在这里拦 —— 联合舰队由各席位的 seat.fleet 合并而来
+  // （coopMergeFleets 内部执行 state.hand = merged），房主自己手牌为空是
+  // 正常的，尤其加入 AI 队友后舰船只存在于 AI 席位的 fleet 里。
+  // 放在这里会把合并整个挡住，表现为「点开始作战毫无反应」。
+  // 联机房主能否开战由下方合并后的 merged.count 判定。
+  if (!coop.isRoom() && !state.hand.some(function (c) { return c.ship; })) {
+    flashTip('编组中没有舰船');
+    return;
+  }
   // 联机：非房主不能「发起」战斗，但必须进入战斗界面 ——
   // 进了界面才会订阅房主快照、才能看到联合舰队。拦住他等于让他永远看不到战况。
   // 他本地的 units 只是占位，会被房主快照里的联合舰队整体替换掉。
