@@ -1095,6 +1095,15 @@ button.pf-title::before {
   border: 1px solid var(--rhine-accent);
   color: var(--rhine-accent);
 }
+/* 阶段胶囊内的击杀进度（参考 .capsule__kills 的 killed/total）：
+   与阶段名共处一枚胶囊，用竖线分隔，等宽数字避免跳动。 */
+.capsule__kills {
+  margin-left: 6px;
+  padding-left: 6px;
+  border-left: 1px solid currentColor;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 /* 回合进度：15 格，已打过 / 当前 / 未打，一眼看到节奏 */
 .hud-progress { display: flex; gap: 2px; }
 .hud-pip { width: 7px; height: 12px; background: var(--rhine-field); border: 1px solid var(--rhine-line); }

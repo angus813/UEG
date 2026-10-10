@@ -758,7 +758,16 @@ function renderHudTop(opts) {
   // 中段：回合 + 进度格 + 阶段
   html += '<div class="hud-center">';
   html += '<div class="hud-round"><span class="hud-round-num">' + waveNow + '</span><span class="hud-round-cap">/ ' + CONFIG.TOTAL_ROUNDS + ' 回合</span></div>';
-  html += '<div class="hud-phase">' + (o.phaseLabel || (state.phase === 'battle' ? '作战中' : '休整期')) + '</div>';
+  const phaseTxt = o.phaseLabel || (state.phase === 'battle' ? '作战中' : '休整期');
+  html += '<div class="hud-phase">' + phaseTxt;
+  // 战斗期补击杀进度：回合进度格只表达推进到第几波，还剩多少敌人看不出来。
+  // 参考项目的 .capsule--combat 在阶段胶囊里直接给 killed/total，这里同样处理。
+  if (state.phase === 'battle' && state.enemies && state.enemies.length) {
+    const total = state.enemies.length;
+    const alive = state.enemies.filter(function (e) { return e.alive; }).length;
+    html += '<span class="capsule__kills">' + (total - alive) + '/' + total + '</span>';
+  }
+  html += '</div>';
   html += '<div class="hud-progress">';
   for (let i = 1; i <= CONFIG.TOTAL_ROUNDS; i++) {
     // UPGRADE_ROUNDS 是强化回合（3/6/10/12/14），描边区分
