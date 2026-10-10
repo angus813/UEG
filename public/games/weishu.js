@@ -3062,6 +3062,31 @@ function escRoom(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// AI 队友的编队：随机抽取，走与真人完全相同的指挥值约束与合并链路
+// （coopMergeFleets 读 seat.fleet，按 joined_at 排序，真人优先）。
+// 不做波次成长 —— 房间阶段拿不到波次，且随机性已由每次添加时重新抽取提供。
+// 预算取一人份（400/4），超出部分会被合并逻辑自然截断。
+function rollAiFleet(budget) {
+  const ships = (window.PLAYER_SHIPS || []).filter(function (s) {
+    return s && s.id != null && s.command != null;
+  });
+  if (!ships.length) return { sh: [] };
+  const cap = budget || 100;
+  const sh = [];
+  let used = 0;
+  let guard = 0;
+  // 抽到塞满预算为止；guard 防止全是当前预算买不起的舰船导致死循环
+  while (used < cap && guard < 80) {
+    guard++;
+    const s = ships[Math.floor(Math.random() * ships.length)];
+    const cm = s.command;
+    if (used + cm > cap) continue;
+    used += cm;
+    sh.push({ sid: s.id, cm: cm, el: Math.random() < 0.2, eq: [], lv: {} });
+  }
+  return { sh: sh };
+}
+
 function renderRoomLobby(snap) {
   roomState = snap;
   const box = document.getElementById('roomLobby');
@@ -3105,20 +3130,35 @@ function renderRoomLobby(snap) {
     seatIdx++;
     const no = '<span class="seat__no">P' + seatIdx + '</span>';
     if (!s) {
+      // 只有房主能在空位上加 AI（参考项目空位卡的「添加 AI 队友」）。
+      // 用 class 而不是 id —— 多个空位会同时渲染多个按钮。
       seats += '<div class="room-seat is-empty">' +
         '<div class="seat__head">' + no + '</div>' +
         '<div class="seat__who"><span class="rs-name">空席</span></div>' +
-        '<div class="seat__foot"><span class="rs-wait">等待加入</span></div></div>';
+        '<div class="seat__foot">' +
+        (snap.isHost
+          ? '<button type="button" class="btn-action tiny js-add-bot">添加 AI 队友</button>'
+          : '<span class="rs-wait">等待加入</span>') +
+        '</div></div>';
       return;
     }
     const isHost = s.username === snap.host;
     const isMe = s.username === me;
-    seats += '<div class="room-seat' + (isHost ? ' is-host' : '') + (isMe ? ' is-me' : '') + '">' +
+    const isBot = s.role === 'ai';
+    // AI 的 ready 由 RPC 写死为 true，这里再兜一层，避免任何路径漏标
+    const isReady = s.ready || isBot;
+    seats += '<div class="room-seat' + (isHost ? ' is-host' : '') + (isMe ? ' is-me' : '') +
+      (isBot ? ' is-bot' : '') + '">' +
       '<div class="seat__head">' + no +
+      (isBot ? '<span class="rs-tag bot">AI</span>' : '') +
       (isHost ? '<span class="rs-tag host">房主</span>' : '') + '</div>' +
       '<div class="seat__who"><span class="rs-name">' + escRoom(s.username) + '</span></div>' +
       '<div class="seat__foot">' +
-      (s.ready ? '<span class="rs-ready">已准备</span>' : '<span class="rs-wait">未准备</span>') +
+      (isReady ? '<span class="rs-ready">已准备</span>' : '<span class="rs-wait">未准备</span>') +
+      (isBot && snap.isHost
+        ? '<button type="button" class="btn-action tiny danger js-remove-bot" data-name="' +
+          escRoom(s.username) + '">移除</button>'
+        : '') +
       '</div></div>';
     void taken;
   });
@@ -3127,9 +3167,11 @@ function renderRoomLobby(snap) {
   }).join('');
 
   const mine = snap.seats.filter(function (s) { return s.username === me; })[0];
-  const seatList = snap.seats.filter(function (s) { return s.role === 'seat'; });
-  const allReady = seatList.every(function (s) { return s.ready; }) && snap.seatCount > 0;
-  const readyCount = seatList.filter(function (s) { return s.ready; }).length;
+  // AI 与真人同占席位，就绪统计一并计入；AI 恒 ready（RPC 写死），这里再兜一层
+  const seatList = snap.seats.filter(function (s) { return s.role !== 'spectator'; });
+  const seatReady = function (s) { return s.ready || s.role === 'ai'; };
+  const allReady = seatList.length > 0 && seatList.every(seatReady);
+  const readyCount = seatList.filter(seatReady).length;
   const statusText = snap.isHost
     ? (allReady ? '人数达标，准许进入模拟' : '等待所有队员准备就绪')
     : (mine && mine.ready ? '已就绪 · 等待房主开始' : '准备就绪后，房主即可开始作战');
@@ -3276,6 +3318,29 @@ function bindRoomLobby(box) {
       R.leave().then(function () { flashTip('已离开房间'); });
     });
   }
+
+  // AI 队友增删。按钮只在房主视角渲染，RPC 侧还会再校验一次房主身份，
+  // 所以这里不需要重复判断。用 class 查询 —— 多个空位会同时有添加按钮。
+  // 成功路径会 refresh() 重建整个面板并重新走这里，无需手动恢复按钮。
+  box.querySelectorAll('.js-add-bot').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      R.addBot(rollAiFleet()).then(function (r) {
+        if (r.code !== 200) { roomErr(r.msg || '添加失败'); btn.disabled = false; return; }
+        roomErr('');
+        flashTip(r.msg || '已添加 AI 队友');
+      });
+    });
+  });
+  box.querySelectorAll('.js-remove-bot').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      R.removeBot(btn.getAttribute('data-name')).then(function (r) {
+        if (r.code !== 200) { roomErr(r.msg || '移除失败'); return; }
+        roomErr('');
+        flashTip(r.msg || '已移除 AI 队友');
+      });
+    });
+  });
 }
 
 // 从房间进入对局：关房间面板，再走与「开始模拟」完全相同的开局入口

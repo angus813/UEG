@@ -90,7 +90,10 @@
       life: state.life,
       maxLife: state.maxLife,
       seats: state.seats.slice(),
-      seatCount: state.seats.filter(function (s) { return s.role === 'seat'; }).length,
+      // AI 与真人一样占一个席位（RPC 侧 seat_counts 也按 role in ('seat','ai')
+      // 统计），所以这里用「非观战」而不是 role === 'seat'，否则加了 AI 后
+      // 房间面板会显示「席位 1/4」但网格里躺着 2 张卡。
+      seatCount: state.seats.filter(function (s) { return s.role !== 'spectator'; }).length,
       spectatorCount: state.seats.filter(function (s) { return s.role === 'spectator'; }).length,
       seatSlots: MAX_SEATS,
       spectatorSlots: MAX_SPECTATORS,
@@ -233,6 +236,60 @@
     if (!u || !state.code) return Promise.resolve({ code: 400 });
     return rest('/rest/v1/weishu_room_seats?room_code=eq.' + enc(state.code) + '&username=eq.' + enc(u),
       { method: 'PATCH', body: { fleet: fleet || [] } });
+  }
+
+  // AI 队友没有自己的登录态，席位行由房主代写，所以走 SECURITY DEFINER 的
+  // RPC 而不是 REST（RLS 的 self_* 策略会拦下任何非本人行的写入）。
+  // RPC 侧强制 username 带 ASCII 前缀 AI_，防止用这套接口伪造真人席位。
+  function nextBotName() {
+    const used = {};
+    state.seats.forEach(function (s) { used[s.username] = true; });
+    for (let i = 1; i <= 4; i++) {
+      const n = 'AI_' + i;
+      if (!used[n]) return n;
+    }
+    // 四个名字都被占（理论上到不了，座位本身只有 4 个）时兜底
+    return 'AI_' + Date.now().toString(36).slice(-4);
+  }
+
+  function addBot(fleet) {
+    if (!state.code) return Promise.resolve({ code: 400, msg: '不在房间中' });
+    const name = nextBotName();
+    return rest('/rest/v1/rpc/weishu_add_bot', {
+      method: 'POST',
+      body: { p_code: state.code, p_username: name, p_fleet: fleet || {} }
+    }).then(function (r) {
+      if (r.code !== 200) return { code: r.code, msg: botErrMsg(r && r.msg) };
+      return refresh().then(function () {
+        return { code: 200, msg: '已添加 ' + name, data: { username: name } };
+      });
+    });
+  }
+
+  function removeBot(name) {
+    if (!state.code) return Promise.resolve({ code: 400, msg: '不在房间中' });
+    return rest('/rest/v1/rpc/weishu_remove_bot', {
+      method: 'POST',
+      body: { p_code: state.code, p_username: name }
+    }).then(function (r) {
+      if (r.code !== 200) return { code: r.code, msg: botErrMsg(r && r.msg) };
+      return refresh().then(function () {
+        return { code: 200, msg: '已移除 ' + name };
+      });
+    });
+  }
+
+  // Postgres 的 raise exception 原样透传，这里换成玩家看得懂的话
+  function botErrMsg(m) {
+    const s = String(m || '');
+    if (s.indexOf('NOT_HOST') >= 0) return '只有房主能增删 AI 队友';
+    if (s.indexOf('ROOM_FULL') >= 0) return '席位已满';
+    if (s.indexOf('ROOM_STARTED') >= 0) return '对局已开始';
+    if (s.indexOf('ROOM_CLOSED') >= 0) return '房间已解散';
+    if (s.indexOf('ROOM_NOT_FOUND') >= 0) return '房间不存在';
+    if (s.indexOf('BAD_BOT_NAME') >= 0) return 'AI 名称不合法';
+    if (s.indexOf('NOT_LOGGED_IN') >= 0) return '请先登录';
+    return s || '操作失败';
   }
 
   function closeRoom() {
@@ -740,6 +797,8 @@ function syncTimer() {
     refresh: refresh,
     setReady: setReady,
     saveFleet: saveFleet,
+    addBot: addBot,
+    removeBot: removeBot,
     hostUpdate: hostUpdate,
     pushEvent: pushEvent,
     eventsSince: eventsSince,

@@ -56,6 +56,12 @@ create table if not exists weishu_room_seats (
 create index if not exists weishu_room_seats_room_idx
   on weishu_room_seats (room_code, role);
 
+-- role gains 'ai' for host-added AI teammates. create table if not exists will
+-- not touch an existing table, so relax the check separately (idempotent).
+alter table weishu_room_seats drop constraint if exists weishu_room_seats_role;
+alter table weishu_room_seats add constraint weishu_room_seats_role
+  check (role in ('seat', 'spectator', 'ai'));
+
 alter table weishu_room_seats enable row level security;
 
 
@@ -85,8 +91,11 @@ create or replace function public.weishu_room_seat_counts(p_code text)
 returns table (seats integer, spectators integer)
 language sql stable security definer set search_path = public
 as $$
+  -- 'ai' occupies a seat slot exactly like a human: the reference project's
+  -- freeSeat() hands out the first empty slot regardless of who fills it, so
+  -- an AI must count toward MAX_SEATS or the room could hold 4 humans + N AIs.
   select
-    count(*) filter (where role = 'seat'),
+    count(*) filter (where role in ('seat', 'ai')),
     count(*) filter (where role = 'spectator')
   from public.weishu_room_seats
   where room_code = p_code;
@@ -147,6 +156,109 @@ begin
 end;
 $$;
 
+-- Host adds an AI teammate.
+--
+-- An AI row has no login of its own, so RLS self_* policies would reject any
+-- direct insert; the host writes it on the AI's behalf through this SECURITY
+-- DEFINER function instead (same pattern as weishu_join_room).
+--
+-- p_username is client-minted, so it is forced to carry the ASCII 'AI_'
+-- prefix: without that a host could mint rows impersonating a real player.
+-- The prefix is ASCII on purpose -- the dashboard editor mangles full-width
+-- characters in this file.
+create or replace function public.weishu_add_bot(
+  p_code text, p_username text, p_fleet jsonb default '{}'::jsonb)
+returns boolean
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user  text := public.current_username();
+  v_open  boolean;
+  v_phase text;
+  v_seats integer;
+begin
+  if v_user is null then
+    raise exception 'NOT_LOGGED_IN';
+  end if;
+  if p_username is null or p_username not like 'AI\_%' escape '\'
+     or char_length(p_username) > 32 then
+    raise exception 'BAD_BOT_NAME';
+  end if;
+
+  select r.open, r.phase into v_open, v_phase
+    from public.weishu_rooms r where r.code = p_code;
+  if not found then
+    raise exception 'ROOM_NOT_FOUND';
+  end if;
+  if not v_open then
+    raise exception 'ROOM_CLOSED';
+  end if;
+  if v_phase <> 'LOBBY' then
+    raise exception 'ROOM_STARTED';
+  end if;
+
+  perform 1 from public.weishu_rooms r
+   where r.code = p_code and r.host = v_user;
+  if not found then
+    raise exception 'NOT_HOST';
+  end if;
+
+  -- AI fills a seat slot like a human, so it consumes the same quota.
+  select s.seats into v_seats from public.weishu_room_seat_counts(p_code) s;
+  if v_seats >= 4 then
+    raise exception 'ROOM_FULL';
+  end if;
+
+  insert into public.weishu_room_seats
+    (room_code, username, role, ready, connected, fleet)
+  values
+    (p_code, p_username, 'ai', true, true, coalesce(p_fleet, '{}'::jsonb))
+  on conflict (room_code, username) do nothing;
+
+  return true;
+end;
+$$;
+
+-- Host removes an AI teammate. Only rows that really are AI can be removed
+-- through here; kicking a human is a different path with its own checks.
+create or replace function public.weishu_remove_bot(p_code text, p_username text)
+returns boolean
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user  text := public.current_username();
+  v_phase text;
+begin
+  if v_user is null then
+    raise exception 'NOT_LOGGED_IN';
+  end if;
+  if p_username is null or p_username not like 'AI\_%' escape '\' then
+    raise exception 'BAD_BOT_NAME';
+  end if;
+
+  select r.phase into v_phase from public.weishu_rooms r where r.code = p_code;
+  if not found then
+    raise exception 'ROOM_NOT_FOUND';
+  end if;
+  if v_phase <> 'LOBBY' then
+    raise exception 'ROOM_STARTED';
+  end if;
+
+  perform 1 from public.weishu_rooms r
+   where r.code = p_code and r.host = v_user;
+  if not found then
+    raise exception 'NOT_HOST';
+  end if;
+
+  delete from public.weishu_room_seats
+   where room_code = p_code
+     and username = p_username
+     and role = 'ai';
+
+  return found;
+end;
+$$;
+
 -- Host-only state transitions. Centralising them keeps phase/round from being
 -- written by anyone, which would let two clients disagree about the round.
 create or replace function public.weishu_host_update(
@@ -203,6 +315,8 @@ grant execute on function public.weishu_room_seat_counts(text) to authenticated;
 grant execute on function public.weishu_join_room(text, text) to authenticated;
 grant execute on function public.weishu_host_update(text, text, integer, integer, integer, jsonb) to authenticated;
 grant execute on function public.weishu_push_event(text, text, jsonb) to authenticated;
+grant execute on function public.weishu_add_bot(text, text, jsonb) to authenticated;
+grant execute on function public.weishu_remove_bot(text, text) to authenticated;
 
 -- ============ 5) policies ============
 -- rooms: readable by any signed-in player (you need to find a room by code to

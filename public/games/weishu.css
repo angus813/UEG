@@ -1410,6 +1410,19 @@ button.pf-title::before {
 }
 .rs-tag.host { color: var(--rhine-accent); }
 .rs-tag.spectator { color: var(--rhine-mute); }
+
+/* AI 席位：与真人（强调色顶条）和空席（虚线）都要区分开 ——
+   中性灰顶条 + 斜体名 + 独立徽标。参考项目用冰蓝系表达，
+   我们沿用站内中性色，不引入新调色。 */
+.room-seat.is-bot { border-top-color: var(--rhine-mute); }
+.room-seat.is-bot .rs-name { color: var(--rhine-mute); font-style: italic; }
+.rs-tag.bot {
+  color: var(--rhine-mute);
+  border-color: var(--rhine-mute);
+}
+/* AI 卡的底脚要同时放「已准备」和「移除」，两端对齐 */
+.room-seat.is-bot .seat__foot { justify-content: space-between; }
+
 .rs-ready { color: #62805a; font-size: 0.72rem; }
 .rs-wait { color: var(--rhine-mute); font-size: 0.72rem; }
 .room-phase-row {
