@@ -1539,3 +1539,96 @@ button.pf-title::before {
 .ep-name { font-weight: 700; color: var(--rhine-ink); }
 .ep-cls { font-size: 0.72rem; color: var(--rhine-mute); }
 .ep-has { margin-left: auto; font-size: 0.7rem; color: var(--rhine-accent); }
+
+/* ==================== 设备层：安全区 / 触控 / 窄屏 ====================
+   参照参考项目的 public/css/devices.css（该文件同样是最后加载、用来覆盖
+   前面各屏的桌面取值）。放在本文件末尾，让本段尺寸优先级更高。 */
+
+:root {
+  /* 刘海、圆角屏与 Home 指示条。env() 在不支持的设备上回退 0px，
+     所以桌面端这一整段等于没有效果。 */
+  --sa-t: env(safe-area-inset-top, 0px);
+  --sa-r: env(safe-area-inset-right, 0px);
+  --sa-b: env(safe-area-inset-bottom, 0px);
+  --sa-l: env(safe-area-inset-left, 0px);
+  --tap-min: 44px;
+}
+
+/* 1) 手势：禁下拉刷新、双指/双击缩放与长按菜单。
+   html 上保留 pan-x pan-y，可滚动列表照常滑动；按钮加 manipulation
+   消除 300ms 点击延迟，同时不触发双击缩放。 */
+html, body { overscroll-behavior: none; }
+html { touch-action: pan-x pan-y; }
+body { -webkit-touch-callout: none; }
+:is(button, a, label, [role="button"], .btn-action, .readybtn, .room-seat,
+     .pool-card, .hand-card, .prep-card, .fleet-card, .spec-who) {
+  touch-action: manipulation;
+}
+img { -webkit-user-drag: none; }
+input, textarea, select { -webkit-user-select: text; user-select: text; }
+
+/* 2) 安全区：全屏层与贴边浮层退到刘海 / 圆角 / Home 指示条之内。
+   只影响贴边元素，页面正文本身已有 padding。 */
+#roomModal.room-screen { padding: var(--sa-t) var(--sa-r) var(--sa-b) var(--sa-l); }
+.pool-section {
+  right: calc(18px + var(--sa-r));
+  bottom: calc(18px + var(--sa-b));
+  max-width: calc(100vw - 36px - var(--sa-r) - var(--sa-l));
+}
+.dpanel {
+  top: calc(90px + var(--sa-t));
+  left: var(--sa-l);
+  bottom: calc(24px + var(--sa-b));
+}
+.flash-tip { top: calc(60px + var(--sa-t)); }
+
+/* 3) 触摸：给小控件一个不小于 44px 的隐形点击区，只扩大命中范围、
+   不改布局。用 @media (pointer: coarse) 判断触摸设备，不做 UA 嗅探。
+   同时要求窄屏：触摸屏笔记本用鼠标时不需要这套放大，而点击区一旦高过
+   按钮（约 34px），在我们 8-10px 的按钮间距下会溢出到相邻控件。
+   不能选中本身已用 ::before 画图标的元素 —— button.pf-title、
+   .action-btn[data-glyph]、.back-link、.fleet-card.elite 都占用了
+   ::before，选进来会把它们的图标顶掉（参考项目也踩过同一个坑）。 */
+@media (max-width: 900px) and (pointer: coarse),
+       (max-width: 900px) and (any-pointer: coarse) {
+  :is(.btn-action, .readybtn, .modal-close, .dpanel__close, .spec-who,
+      .hud-clock, .pool-card, .hand-card, .prep-card) {
+    position: relative;
+  }
+  :is(.btn-action, .readybtn, .modal-close, .dpanel__close, .spec-who,
+      .hud-clock, .pool-card, .hand-card, .prep-card)::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, var(--tap-min));
+    height: max(100%, var(--tap-min));
+    transform: translate(-50%, -50%);
+    background: transparent;
+    border: 0;
+    pointer-events: auto;
+  }
+}
+
+/* 4) 横屏手机（高度不超过 600px）：常用控件放大一点，够得着也看得清 */
+@media (max-height: 600px) and (pointer: coarse),
+       (max-height: 600px) and (any-pointer: coarse) {
+  .readybtn { min-height: 34px; padding: 9px 18px; }
+  .btn-action { min-height: 32px; }
+  .modal-close, .dpanel__close { min-width: 32px; min-height: 32px; }
+  .pool-card { padding: 10px 12px; }
+}
+
+/* 5) 窄屏（不超过 767px）：贴边浮层收窄，避免占掉大半个屏宽。
+   右栏在 900px 断点已收成单列，这里只处理 fixed 浮层与房间栏的间距 ——
+   房间顶栏/底栏保持三栏 grid 不动，只把 padding 与 gap 收紧。 */
+@media (max-width: 767px) {
+  .dpanel { width: min(300px, calc(100vw - 24px - var(--sa-l) - var(--sa-r))); }
+  .pool-section {
+    right: calc(10px + var(--sa-r));
+    bottom: calc(10px + var(--sa-b));
+    max-width: calc(100vw - 20px - var(--sa-l) - var(--sa-r));
+  }
+  .room-topbar, .room-bar { gap: 8px; padding: 8px 10px; }
+  #roomLobby { padding: 0 10px; }
+}
