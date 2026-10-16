@@ -481,6 +481,24 @@ function seatTag(username) {
   return coopTagMap[username] || ('p' + (Object.keys(coopTagMap).length + 1));
 }
 
+// tag -> 用户名 的映射。unpackUnit 靠 state.coopOwners 把舰船 id 里的
+// p<N> 前缀还原成显示用的玩家名，而这份映射此前只有 coopMergeFleets 会写，
+// 也就是只有房主有。队友端拿到的因此是 undefined：新开一局显示 p1_；
+// 而当这个浏览器当过房主、state.coopOwners 还留着上一局的残留时，就会把
+// 所有人错认成残留里的那一个 —— 表现为多个 AI 舰队全显示成 AI_1。
+//
+// 两端都按 snap.seats 的同一顺序编号（N = 席位序号），所以队友端用同样
+// 的口径重建就能对上房主编进舰船 id 的那个 N。
+function coopBuildOwners(seats) {
+  coopRebuildTags({ seats: seats });
+  const owners = {};
+  (seats || []).forEach(function (s) {
+    const t = seatTag(s.username);
+    if (t) owners[t] = s.username;
+  });
+  return owners;
+}
+
 // 各玩家卡面配色：按序号在铜金/靛蓝/苔绿/赭石里循环，
 // 与参考项目用 mint/amber 区分队友的做法同思路，但色相取站内调色盘。
 const COOP_COLORS = ['#9b7247', '#4a6b8a', '#6b7a4a', '#8a5a4a', '#5a6b8a', '#7a5a8a'];
@@ -1995,6 +2013,9 @@ function startBattle() {
   // 进了界面才会订阅房主快照、才能看到联合舰队。拦住他等于让他永远看不到战况。
   // 他本地的 units 只是占位，会被房主快照里的联合舰队整体替换掉。
   if (coop.isRoom() && !coop.isHost()) {
+    // 房主把联合舰队推过来时，舰船 id 已编成 p<N>_<序号>；这里按同样的席位
+    // 顺序重建 N -> 用户名，否则 unpackUnit 取不到显示名（详见 coopBuildOwners）。
+    state.coopOwners = coopBuildOwners(window.WeishuRoom.snapshot().seats);
     state.phase = 'battle';
     state.repairUntil = Date.now() + 2500;
     rebuildUnits();

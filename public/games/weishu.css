@@ -1623,6 +1623,22 @@ input, textarea, select { -webkit-user-select: text; user-select: text; }
    右栏在 900px 断点已收成单列，这里只处理 fixed 浮层与房间栏的间距 ——
    房间顶栏/底栏保持三栏 grid 不动，只把 padding 与 gap 收紧。 */
 @media (max-width: 767px) {
+  /* 顶栏三栏在窄屏撑不住：grid 是 1fr auto 1fr，中栏（波次/阶段）不可压缩，
+     于是左右两栏被挤到 48px，而左段的势力血条 + 护盾/生命/资金/强化点
+     需要 174px，溢出后直接压在波次上。实测 420x860 视口下
+     mb-val「1000/1000」与 hud-phase「休整期」重叠 39x7px。
+     改成两行两列：波次独占一行，资源与时钟各占一半（各约 194px，够放）。 */
+  .hud-top {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'center center'
+      'left   right';
+    gap: 8px 14px;
+  }
+  .hud-left { grid-area: left; justify-self: start; }
+  .hud-center { grid-area: center; justify-self: center; }
+  .hud-right { grid-area: right; justify-self: end; align-items: flex-end; }
+
   .dpanel { width: min(300px, calc(100vw - 24px - var(--sa-l) - var(--sa-r))); }
   .pool-section {
     right: calc(10px + var(--sa-r));
@@ -1631,4 +1647,39 @@ input, textarea, select { -webkit-user-select: text; user-select: text; }
   }
   .room-topbar, .room-bar { gap: 8px; padding: 8px 10px; }
   #roomLobby { padding: 0 10px; }
+}
+
+/* 更窄（手机竖屏，<= 480px）：两行两列仍只有约 84px 一列，放不下 174px 的
+   资源行，实测 360px 下 mb-val 与开始作战按钮重叠 26x11px。
+   退成单列三行，每行独占整宽。 */
+@media (max-width: 480px) {
+  .hud-top {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'center'
+      'left'
+      'right';
+    gap: 6px;
+  }
+  .hud-left { grid-area: left; justify-self: stretch; }
+  .hud-right { grid-area: right; justify-self: stretch; }
+
+  /* 窄屏把补给池放回正常流：它是 position:fixed 贴视口底的，不随内容滚动，
+     而窄屏一屏装不下「内容 + 池」，于是初始位置就压在行动条上
+     （实测 360x860：池 716-850，行动条 707-737，重叠 21px）。
+     留白救不了 —— 留白只在滚动到底时才起作用。放回文档流后
+     池排在 ws-side 之后，不再覆盖任何内容，也不需要额外留白。 */
+  .pool-section {
+    position: static;
+    margin-top: 10px;
+    max-width: none;
+  }
+  .game-header:has(> .ws-split > .ws-main > .pool-section) { padding-bottom: 0; }
+
+  /* 极窄（<= 380px，如 iPhone SE 竖屏）：资源行「标签 + 血条 + 数值」
+     横排需要 174px，可用宽只剩 141px，会多出 18px 横向溢出。
+     让血条换到第二行独占整宽，标签与数值仍同行。 */
+  .hud-meta .mb-row { flex-wrap: wrap; row-gap: 2px; }
+  .hud-meta .mb-row .shield-bar,
+  .hud-meta .mb-row .life-bar { order: 2; width: 100%; }
 }
