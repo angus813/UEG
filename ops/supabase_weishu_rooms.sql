@@ -215,6 +215,16 @@ begin
     (p_code, p_username, 'ai', true, true, coalesce(p_fleet, '{}'::jsonb))
   on conflict (room_code, username) do nothing;
 
+  -- With ON CONFLICT DO NOTHING, FOUND stays false when the row was skipped.
+  -- That happens when the requested name is already taken -- normally because
+  -- the client minted it from a stale seat list and reused a live name. It must
+  -- surface as a failure: returning true anyway leaves the caller believing a
+  -- new teammate joined while the table still holds the original row, which
+  -- shows up as several AI teammates all named AI_1.
+  if not found then
+    raise exception 'BOT_NAME_TAKEN';
+  end if;
+
   return true;
 end;
 $$;

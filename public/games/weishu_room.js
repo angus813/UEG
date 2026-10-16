@@ -282,6 +282,7 @@
   // Postgres 的 raise exception 原样透传，这里换成玩家看得懂的话
   function botErrMsg(m) {
     const s = String(m || '');
+    if (s.indexOf('BOT_NAME_TAKEN') >= 0) return 'AI 名称已被占用，请再点一次';
     if (s.indexOf('NOT_HOST') >= 0) return '只有房主能增删 AI 队友';
     if (s.indexOf('ROOM_FULL') >= 0) return '席位已满';
     if (s.indexOf('ROOM_STARTED') >= 0) return '对局已开始';

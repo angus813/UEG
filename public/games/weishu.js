@@ -3333,9 +3333,17 @@ function bindRoomLobby(box) {
   // 成功路径会 refresh() 重建整个面板并重新走这里，无需手动恢复按钮。
   box.querySelectorAll('.js-add-bot').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      btn.disabled = true;
+      // 要禁的是全部添加按钮，不只是被点的那个：每个空位各有一个，
+      // 只禁当前这个的话，点下一个会在 refresh 回来之前又发一次请求，
+      // 而那一刻 nextBotName 看到的还是旧席位表，会复用同一个名字。
+      const btns = box.querySelectorAll('.js-add-bot');
+      btns.forEach(function (x) { x.disabled = true; });
       R.addBot(rollAiFleet()).then(function (r) {
-        if (r.code !== 200) { roomErr(r.msg || '添加失败'); btn.disabled = false; return; }
+        if (r.code !== 200) {
+          roomErr(r.msg || '添加失败');
+          btns.forEach(function (x) { x.disabled = false; });
+          return;
+        }
         roomErr('');
         flashTip(r.msg || '已添加 AI 队友');
       });
