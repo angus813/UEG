@@ -249,6 +249,60 @@
       setCurrentUser(null);
       return { code: 200, msg: '密码修改成功，请重新登录' };
     },
+
+    // ---- 密码找回（申请 + 管理员审批） ----
+    // 本站不做邮件找回，三条路都堵死了：
+    //   1) 账号地址是 encEmail() 拼出来的 <用户名>@ueg.local，auth.users 里
+    //      37 个账号没有一个真实邮箱；
+    //   2) GoTrue 的 /recover 只对查得到的账号做格式校验，于是真实账号一律
+    //      拿到 email_address_invalid，而不存在的地址反而返回 200；
+    //   3) 就算格式过了，内置 SMTP 也只投给 dashboard 里的 team members。
+    // 所以唯一走得通的是人工审批。
+    //
+    // 三个 RPC 都走 rest 而不是 gt：gt 不带 Authorization（等于 anon），
+    // 而 pw_reset_list / pw_reset_resolve 要求管理员身份。
+    // pw_request_reset 则相反 —— 未登录时要能用，rest 在没有 token 时正好
+    // 退回匿名通道，而 anon 已被 grant 了 execute。
+    async requestPasswordReset(username, note, contact) {
+      username = (username || '').trim();
+      if (!username) return { code: 400, msg: '请填写用户名' };
+      const r = await this.rest('/rest/v1/rpc/pw_request_reset', {
+        method: 'POST', body: { p_username: username, p_note: (note || '').trim(), p_contact: (contact || '').trim() }
+      });
+      if (r.code !== 200) {
+        const m = (r.body && r.body.message) || '';
+        if (m.indexOf('BAD_USERNAME') >= 0) return { code: 400, msg: '用户名格式不对（2-20 位，不能含空格）' };
+        if (m.indexOf('RATE_LIMITED') >= 0) return { code: 429, msg: '提交太频繁，请稍后再试' };
+        if (m.indexOf('TEXT_TOO_LONG') >= 0) return { code: 400, msg: '填写内容过长' };
+        return { code: r.code, msg: '提交失败：' + (r.msg || m) };
+      }
+      return { code: 200, msg: '提交成功', data: { id: r.data } };
+    },
+    async listPasswordResets() {
+      const r = await this.rest('/rest/v1/rpc/pw_reset_list', { method: 'POST', body: {} });
+      if (r.code !== 200) {
+        const m = (r.body && r.body.message) || '';
+        if (m.indexOf('NOT_ADMIN') >= 0) return { code: 403, msg: '只有管理员可以查看' };
+        return { code: r.code, msg: r.msg };
+      }
+      return { code: 200, data: Array.isArray(r.data) ? r.data : [] };
+    },
+    async resolvePasswordReset(id, action, newPw, note) {
+      const r = await this.rest('/rest/v1/rpc/pw_reset_resolve', {
+        method: 'POST',
+        body: { p_id: parseInt(id, 10) || 0, p_action: action, p_newpw: newPw || '', p_note: (note || '').trim() }
+      });
+      if (r.code !== 200) {
+        const m = (r.body && r.body.message) || '';
+        if (m.indexOf('NOT_ADMIN') >= 0) return { code: 403, msg: '只有管理员可以处理' };
+        if (m.indexOf('NOT_PENDING') >= 0) return { code: 400, msg: '该申请已被处理过' };
+        if (m.indexOf('PW_TOO_SHORT') >= 0) return { code: 400, msg: '密码长度至少6位' };
+        if (m.indexOf('NO_SUCH_ACCOUNT') >= 0) return { code: 404, msg: '该用户名没有对应的登录账号' };
+        if (m.indexOf('BAD_ACTION') >= 0) return { code: 400, msg: '操作无效' };
+        return { code: r.code, msg: r.msg };
+      }
+      return { code: 200, msg: action === 'done' ? '密码已重置' : '已驳回' };
+    },
     async deleteUser(username) {
       const r = await this.rest('/rest/v1/users?username=eq.' + enc(username), { method: 'DELETE' });
       if (r.code !== 200) return { code: 403, msg: r.msg };

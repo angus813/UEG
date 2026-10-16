@@ -45,11 +45,59 @@
         <tbody id="userTableBody"></tbody>
       </table>
     </div>
+
+    <!-- 密码重置申请（只有 is_admin 能看到这一节；后端 pw_reset_* 也再校验一次） -->
+    <div id="pwSection" style="display:none;">
+      <div class="admin-title" style="margin:30px 0 12px; font-size:1.05rem;">密码重置申请</div>
+      <div id="pwEmpty" class="loading-message" style="display:none;">暂无申请</div>
+      <table class="admin-table" id="pwTable" style="display:none;">
+        <thead>
+          <tr>
+            <th>单号</th>
+            <th>用户名</th>
+            <th>账号</th>
+            <th>补充说明 / 联系方式</th>
+            <th>提交时间</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="pwTableBody"></tbody>
+      </table>
+
+      <!-- 重置密码对话框 -->
+      <div id="pwDialog" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:70; display:none; align-items:center; justify-content:center; padding:16px;">
+        <div style="width:min(480px,92vw); background:var(--rl-panel); border:1px solid var(--rl-line-soft); border-radius:12px; padding:22px;">
+          <div style="font-weight:700; letter-spacing:0.06em;">重置密码</div>
+          <div id="pwDialogWho" style="font-size:0.85rem; color:var(--rl-text-dim); margin:6px 0 16px;"></div>
+          <input type="text" id="pwDialogPw" class="modal-input" autocomplete="off" style="width:100%;">
+          <div style="font-size:0.8rem; line-height:1.6; color:var(--rl-text-dim); margin:-4px 0 16px;">
+            已预填一个随机密码，可直接用，也可自己改成别的。密码不会入库，关闭后无法再查看。
+          </div>
+          <div class="btn-row">
+            <button class="btn-small" id="pwDialogAgain">换一个</button>
+            <button class="modal-btn" id="pwDialogCancel">取消</button>
+            <button class="modal-btn toggle" id="pwDialogOk">确认重置</button>
+          </div>
+          <div id="pwDialogMsg" style="color:var(--rl-danger); font-size:0.85rem; margin-top:12px; min-height:20px;"></div>
+
+          <!-- 成功后换成「把密码给用户」的展示态 -->
+          <div id="pwResult" style="display:none;">
+            <div style="font-size:0.85rem; line-height:1.7; color:var(--rl-text-dim);">新密码已生效，旧密码和旧登录状态都已失效。请把下面这串密码交给用户：</div>
+            <div id="pwResultPw" style="font-size:1.15rem; font-weight:700; letter-spacing:0.08em; word-break:break-all; margin:12px 0; padding:12px; border:1px dashed var(--rl-line-strong); border-radius:8px; user-select:all;"></div>
+            <div class="btn-row">
+              <button class="btn-small" id="pwCopy">复制</button>
+              <button class="modal-btn toggle" id="pwDone" style="flex:2;">完成</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- 引入 Supabase 客户端 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase-client.js"></script>
+  <script src="supabase-client.js?v=20261016a"></script>
 
   <script>
     // ==================== 工具函数 ====================
@@ -178,16 +226,167 @@
     // 暴露函数到全局（供 onclick 调用）
     window.updateRecord = updateRecord;
 
+    // ==================== 密码重置申请 ====================
+    // 站内账号没有真实邮箱（地址是 encEmail() 拼的 <用户名>@ueg.local），
+    // GoTrue 的 /recover 对这些地址一律判 email_address_invalid，
+    // 而内置 SMTP 又只投给 team members —— 三条路都堵死，所以只走人工审批。
+    //
+    // 权限：这一节只有 is_admin 看得到，后端 pw_reset_list / pw_reset_resolve
+    // 也会再校验一次 current_user_is_admin()，前端隐藏不算防护。
+    let pwRows = [];
+    let pwTarget = null;
+
+    // 生成一个「好念、好记、不易混」的随机密码：去掉 I/O/l/0/1 这些
+    // 电话里念出来会歧义的字符，长度 12 位，混合大小写数字加一个符号。
+    function generatePassword() {
+      const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      const lower = 'abcdefghijkmnpqrstuvwxyz';
+      const digit = '23456789';
+      const sym = '!@#$%&*';
+      const pool = upper + lower + digit;
+      const pick = a => a.charAt(Math.floor(Math.random() * a.length));
+      let s = pick(upper) + pick(lower) + pick(digit) + pick(sym);
+      for (let i = 0; i < 8; i++) s += pick(pool);
+      return s;
+    }
+
+    function fmtTime(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '-';
+      const p = n => String(n).padStart(2, '0');
+      return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+        + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    }
+
+    async function renderPwTable() {
+      const tbody = document.getElementById('pwTableBody');
+      const r = await DB.listPasswordResets();
+      if (r.code !== 200) {
+        tbody.innerHTML = '<tr><td colspan="7" class="error-message">加载失败：' + esc(r.msg) + '</td></tr>';
+        document.getElementById('pwTable').style.display = '';
+        return;
+      }
+      pwRows = r.data || [];
+      if (!pwRows.length) {
+        document.getElementById('pwTable').style.display = 'none';
+        const empty = document.getElementById('pwEmpty');
+        empty.style.display = '';
+        empty.textContent = '暂无申请';
+        return;
+      }
+      document.getElementById('pwEmpty').style.display = 'none';
+      document.getElementById('pwTable').style.display = '';
+
+      const statusText = { pending: '待处理', done: '已重置', rejected: '已驳回' };
+      let html = '';
+      pwRows.forEach(rw => {
+        const name = esc(rw.username);
+        const detail = [esc(rw.note), rw.contact ? '联系：' + esc(rw.contact) : '']
+          .filter(Boolean).join(' / ') || '<span style="color:#8a9aa5;">（无）</span>';
+        const actions = rw.status === 'pending'
+          ? '<button class="btn-small" onclick="openPwDialog(' + rw.id + ')">重置密码</button> '
+            + '<button class="btn-small" onclick="rejectPw(' + rw.id + ')">驳回</button>'
+          : '<span style="color:#8a9aa5;">' + (rw.handled_by ? esc(rw.handled_by) + ' · ' + fmtTime(rw.handled_at) : '-') + '</span>';
+        html += '<tr>'
+          + '<td>#' + rw.id + '</td>'
+          + '<td>' + name + (rw.submissions > 1 ? ' <span style="color:#b06;">×' + rw.submissions + '</span>' : '') + '</td>'
+          // 账号不存在时明确标出来：管理员没必要为一个查无此人的用户名改密码
+          + '<td>' + (rw.account_exists ? '存在' : '<span style="color:var(--rl-danger);">查无此账号</span>') + '</td>'
+          + '<td style="max-width:260px;">' + detail + '</td>'
+          + '<td>' + fmtTime(rw.created_at) + '</td>'
+          + '<td>' + (statusText[rw.status] || esc(rw.status)) + '</td>'
+          + '<td>' + actions + '</td>'
+          + '</tr>';
+      });
+      tbody.innerHTML = html;
+    }
+
+    function closePwDialog() {
+      document.getElementById('pwDialog').style.display = 'none';
+      document.getElementById('pwResult').style.display = 'none';
+      document.getElementById('pwDialogMsg').textContent = '';
+      pwTarget = null;
+    }
+
+    function openPwDialog(id) {
+      const rw = pwRows.find(x => x.id === id);
+      if (!rw) return;
+      if (!rw.account_exists) {
+        alert('「' + rw.username + '」在登录账号表里查不到，改不了密码。\n请先驳回这条申请。');
+        return;
+      }
+      pwTarget = rw;
+      document.getElementById('pwDialogWho').textContent =
+        '用户：' + rw.username + '（单号 #' + rw.id + '）';
+      document.getElementById('pwDialogPw').value = generatePassword();
+      document.getElementById('pwDialogMsg').textContent = '';
+      document.getElementById('pwResult').style.display = 'none';
+      document.getElementById('pwDialog').style.display = 'flex';
+      setTimeout(() => document.getElementById('pwDialogPw').select(), 0);
+    }
+
+    async function confirmPwReset() {
+      if (!pwTarget) return;
+      const pw = document.getElementById('pwDialogPw').value;
+      const okBtn = document.getElementById('pwDialogOk');
+      okBtn.disabled = true;
+      const r = await DB.resolvePasswordReset(pwTarget.id, 'done', pw, '管理员重置');
+      okBtn.disabled = false;
+      if (r.code !== 200) {
+        document.getElementById('pwDialogMsg').textContent = r.msg;
+        return;
+      }
+      // 密码不落库，只能在这里给管理员看一眼，让它转交给用户
+      document.getElementById('pwResultPw').textContent = pw;
+      document.getElementById('pwResult').style.display = '';
+      document.getElementById('pwDialogMsg').textContent = '';
+      await renderPwTable();
+    }
+
+    async function rejectPw(id) {
+      if (!confirm('驳回这条密码重置申请？')) return;
+      const r = await DB.resolvePasswordReset(id, 'reject', '', '管理员驳回');
+      if (r.code !== 200) { alert(r.msg); return; }
+      await renderPwTable();
+    }
+
+    document.getElementById('pwDialogCancel').addEventListener('click', closePwDialog);
+    document.getElementById('pwDone').addEventListener('click', closePwDialog);
+    document.getElementById('pwDialogAgain').addEventListener('click', () => {
+      document.getElementById('pwDialogPw').value = generatePassword();
+    });
+    document.getElementById('pwDialogOk').addEventListener('click', confirmPwReset);
+    document.getElementById('pwDialogPw').addEventListener('keydown', e => {
+      if (e.key === 'Enter') confirmPwReset();
+    });
+    document.getElementById('pwCopy').addEventListener('click', async () => {
+      const pw = document.getElementById('pwResultPw').textContent;
+      try {
+        await navigator.clipboard.writeText(pw);
+        document.getElementById('pwCopy').textContent = '已复制';
+        setTimeout(() => { document.getElementById('pwCopy').textContent = '复制'; }, 1500);
+      } catch (e) {
+        window.prompt('手动复制：', pw);
+      }
+    });
+
+    window.openPwDialog = openPwDialog;
+    window.rejectPw = rejectPw;
+
     // ==================== 初始化 ====================
     async function init() {
       const isAdmin = await checkAdmin();
-      if (isAdmin) {
-        await renderTable();
-      }
+      if (!isAdmin) return;
+      document.getElementById('pwSection').style.display = '';
+      await renderTable();
+      await renderPwTable();
     }
 
-    // 等会话恢复完成再初始化：token 过期回来的首屏先 401 会被误判非管理员
+    // 等会话恢复完成再初始化：token 过期回来的首屏先 401 会被误判非管理员。
+    // UEG_DB_READY 同样要等：DB 的 RPC 走 ueg_token，token 还没恢复就调用会被判未登录。
     (async function () {
+      try { if (window.UEG_DB_READY) await window.UEG_DB_READY; } catch (e) {}
       try { if (window.UEG_SESSION_READY) await window.UEG_SESSION_READY; } catch (e) {}
       await init();
     })();
