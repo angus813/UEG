@@ -33,30 +33,37 @@
 
     <!-- 管理表格 -->
     <div id="adminContent" style="display:none;">
-      <table class="admin-table">
-        <thead>
-          <tr>
-            <th>用户名</th>
-            <th>管理员</th>
-            <th>最高记录</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="userTableBody"></tbody>
-      </table>
-    </div>
+      <!-- 两个视图。密码重置申请原本接在用户表格下面，而用户表格有三十多行，
+           那一节实际落在首屏之外，管理员根本看不到入口也没有任何提示指向它。
+           改成 tab：入口固定在顶部，待处理数量直接挂在 tab 上。 -->
+      <nav class="tabs" id="adminTabs">
+        <button type="button" class="tab active" data-view="users">用户档案</button>
+        <button type="button" class="tab" data-view="pw">密码重置申请<span id="pwBadge" style="display:none;margin-left:7px;padding:1px 8px;border-radius:10px;background:var(--rl-accent);color:var(--rl-paper);font-size:10px;font-weight:700;letter-spacing:0;"></span></button>
+      </nav>
 
-    <!-- 密码重置申请（只有 is_admin 能看到这一节；后端 pw_reset_* 也再校验一次） -->
-    <div id="pwSection" style="display:none;">
-      <div class="admin-title" style="margin:30px 0 12px; font-size:1.05rem;">密码重置申请</div>
-      <div id="pwEmpty" class="loading-message" style="display:none;">暂无申请</div>
-      <table class="admin-table" id="pwTable" style="display:none;">
-        <thead>
-          <tr>
-            <th>单号</th>
-            <th>用户名</th>
-            <th>账号</th>
-            <th>补充说明 / 联系方式</th>
+      <div id="viewUsers">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>用户名</th>
+              <th>管理员</th>
+              <th>最高记录</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody"></tbody>
+        </table>
+      </div>
+
+      <div id="viewPw" style="display:none;">
+        <div id="pwEmpty" class="loading-message" style="display:none;">暂无申请</div>
+        <table class="admin-table" id="pwTable" style="display:none;">
+          <thead>
+            <tr>
+              <th>单号</th>
+              <th>用户名</th>
+              <th>账号</th>
+              <th>补充说明 / 联系方式</th>
             <th>提交时间</th>
             <th>状态</th>
             <th>操作</th>
@@ -91,6 +98,7 @@
             </div>
           </div>
         </div>
+      </div>
       </div>
     </div>
   </div>
@@ -259,7 +267,22 @@
         + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
     }
 
-    async function renderPwTable() {
+    // ==================== 视图切换 ====================
+// 用户表格三十多行，密码重置申请若接在它下面就永远落在首屏之外。tab 把入口
+// 固定在顶部，待处理数量挂在 tab 上，管理员不用先滚一遍用户表才知道有没有事。
+function switchAdminView(view) {
+  document.querySelectorAll('#adminTabs .tab').forEach(function (b) {
+    b.classList.toggle('active', b.dataset.view === view);
+  });
+  document.getElementById('viewUsers').style.display = view === 'users' ? '' : 'none';
+  document.getElementById('viewPw').style.display = view === 'pw' ? '' : 'none';
+}
+
+document.querySelectorAll('#adminTabs .tab').forEach(function (b) {
+  b.addEventListener('click', function () { switchAdminView(b.dataset.view); });
+});
+
+async function renderPwTable() {
       const tbody = document.getElementById('pwTableBody');
       const r = await DB.listPasswordResets();
       if (r.code !== 200) {
@@ -268,6 +291,12 @@
         return;
       }
       pwRows = r.data || [];
+      const pending = pwRows.filter(x => x.status === 'pending').length;
+      const badge = document.getElementById('pwBadge');
+      if (badge) {
+        badge.textContent = pending;
+        badge.style.display = pending ? '' : 'none';
+      }
       if (!pwRows.length) {
         document.getElementById('pwTable').style.display = 'none';
         const empty = document.getElementById('pwEmpty');
@@ -378,7 +407,7 @@
     async function init() {
       const isAdmin = await checkAdmin();
       if (!isAdmin) return;
-      document.getElementById('pwSection').style.display = '';
+      switchAdminView('users');
       await renderTable();
       await renderPwTable();
     }
