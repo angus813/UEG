@@ -288,6 +288,73 @@
       }
       return { code: 200, msg: '提交成功', data: { id: r.data } };
     },
+
+    // ---- 自助重置（安全问题） ----
+    // 这三个 RPC 里，取问题与改密是 anon 调用，必须显式传 anon：找回密码的人
+    // 手里多半攥着一个过期令牌，带上它会被 PostgREST 判 JWT 失效挡在函数外
+    // 面（见 pw_request_reset 的同类问题）。设置问题相反，需要真实登录态。
+    async setSecurityQuestion(question, answer) {
+      const q = (question || '').trim();
+      const a = (answer || '').trim();
+      if (!q || q.length < 2) return { code: 400, msg: '安全问题至少 2 个字' };
+      if (!a || a.length < 2) return { code: 400, msg: '答案至少 2 个字' };
+      const r = await this.rest('/rest/v1/rpc/pw_set_secret', {
+        method: 'POST', body: { p_question: q, p_answer: a }
+      });
+      if (r.code !== 200) {
+        const m = (r.body && r.body.message) || '';
+        if (m.indexOf('NOT_LOGGED_IN') >= 0) return { code: 401, msg: '请先登录' };
+        if (m.indexOf('BAD_QUESTION') >= 0) return { code: 400, msg: '安全问题长度不对（2-120 字）' };
+        if (m.indexOf('BAD_ANSWER') >= 0) return { code: 400, msg: '答案长度不对（2-80 字）' };
+        return { code: r.code, msg: '保存失败：' + (r.msg || m) };
+      }
+      return { code: 200, msg: '安全问题已保存' };
+    },
+    async getSecurityQuestion(username) {
+      username = (username || '').trim();
+      if (!username) return { code: 400, msg: '请填写用户名' };
+      const r = await this.rest('/rest/v1/rpc/pw_get_question', {
+        method: 'POST', anon: true, body: { p_username: username }
+      });
+      if (r.code !== 200) {
+        const m = (r.body && r.body.message) || '';
+        if (m.indexOf('NO_SECRET') >= 0)
+          return { code: 404, msg: '该账号还没设置安全问题——请先登录设置，或改用管理员重置。' };
+        return { code: r.code, msg: '查询失败：' + (r.msg || m) };
+      }
+      return { code: 200, data: { question: String(r.data || '') } };
+    },
+    async resetPasswordWithSecret(username, answer, newPw) {
+      username = (username || '').trim();
+      if (!username) return { code: 400, msg: '请填写用户名' };
+      if (!answer || !answer.trim()) return { code: 400, msg: '请填写安全问题答案' };
+      if (!newPw || newPw.length < 6) return { code: 400, msg: '新密码长度至少6位' };
+      const r = await this.rest('/rest/v1/rpc/pw_reset_self', {
+        method: 'POST', anon: true,
+        body: { p_username: username, p_answer: answer, p_newpw: newPw }
+      });
+      if (r.code !== 200) {
+        const m = (r.body && r.body.message) || '';
+        return { code: r.code, msg: '重置失败：' + (r.msg || m) };
+      }
+      // 服务端返回状态字符串，失败也走 200，必须在这里分支
+      const s = String(r.data || '');
+      if (s === 'OK') {
+        // 改密后旧令牌作废，顺手清掉本地会话，免得界面还显示成已登录
+        setToken(null);
+        setCurrentUser(null);
+        return { code: 200, msg: '密码已重置，请用新密码登录' };
+      }
+      const MAP = {
+        BAD_USERNAME: '用户名格式不对',
+        PW_TOO_SHORT: '新密码长度至少6位',
+        NO_SECRET: '该账号还没设置安全问题——请改用管理员重置。',
+        RATE_LIMITED: '失败次数过多，该账号已锁定 15 分钟，稍后再试',
+        BAD_ANSWER: '答案不正确',
+        NO_SUCH_ACCOUNT: '该用户名没有对应的登录账号'
+      };
+      return { code: 400, msg: MAP[s] || ('重置失败：' + s) };
+    },
     async listPasswordResets() {
       const r = await this.rest('/rest/v1/rpc/pw_reset_list', { method: 'POST', body: {} });
       if (r.code !== 200) {

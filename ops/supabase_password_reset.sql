@@ -235,3 +235,217 @@ grant execute on function public.pw_reset_resolve(bigint, text, text, text) to a
 
 -- The anon role needs USAGE on public to reach the function at all.
 grant usage on schema public to anon, authenticated;
+
+
+-- ============ 6) self-service reset (security question) ============
+-- Channel A above is dead for this deployment, so "reset your own password"
+-- needs a knowledge factor stored on the account. A security question is the
+-- only one that does not require a delivery channel the site does not have
+-- (no real e-mail, no phone, and public.users carries no field that only the
+-- account holder knows -- highest_record is 0 for every row).
+--
+-- Bootstrap: existing accounts have no question yet, so those users still go
+-- through channel B until they sign in and set one in their profile.
+--
+-- answer_hash is crypt(), never the plain answer. The answer is normalized
+-- before hashing -- trim, collapse runs of whitespace, lower-case -- because
+-- failing to answer over spacing or capital is the single most common reason
+-- people get locked out of a question/answer flow.
+
+-- Whitespace + case folding. Full-width input (a Chinese IME will happily type
+-- "ＡＢＣ" or U+3000) is folded by the client before it is sent, since this
+-- file must stay ASCII-only -- the dashboard editor mangles full-width
+-- characters, including inside string literals.
+create or replace function public.pw_norm_answer(p text)
+returns text
+language sql immutable
+as $$
+  select lower(regexp_replace(btrim(coalesce(p, '')), '\s+', ' ', 'g'));
+$$;
+
+
+-- Question text is not a secret: the person answering needs to see it to
+-- remember what they picked. This is anon-callable on purpose -- the answer
+-- endpoint must work for a signed-out user, and there is no way to fetch the
+-- question first otherwise. What it must never do is return the answer.
+create or replace function public.pw_get_question(p_username text)
+returns text
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_q text;
+begin
+  if p_username is null
+     or char_length(p_username) < 2
+     or char_length(p_username) > 20
+     or p_username ~ '[[:space:][:cntrl:]]' then
+    raise exception 'BAD_USERNAME';
+  end if;
+
+  select s.question into v_q
+    from pw_secrets s
+   where s.username = p_username;
+  if v_q is null then
+    raise exception 'NO_SECRET';
+  end if;
+  return v_q;
+end;
+$$;
+
+
+-- One row per account that has opted in. Deleting the profile cascades here,
+-- so an account that is removed stops having a question at all.
+create table if not exists pw_secrets (
+  username     text primary key references public.users(username) on delete cascade,
+  question     text not null,
+  answer_hash  text not null,
+  fail_count   integer not null default 0,
+  locked_until timestamptz,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  constraint pw_secrets_question_len check (char_length(question) between 2 and 120)
+);
+
+alter table pw_secrets enable row level security;
+
+-- No policies on purpose, same as pw_reset_requests: direct reads and writes
+-- stay denied for anon and authenticated, and the only way in is the three
+-- functions below.
+
+
+-- Set (or replace) your own question. Requires a session: an anonymous caller
+-- cannot pick someone else's answer.
+create or replace function public.pw_set_secret(
+  p_question text, p_answer text)
+returns boolean
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_user   text := public.current_username();
+  v_answer text := public.pw_norm_answer(p_answer);
+begin
+  if v_user is null then
+    raise exception 'NOT_LOGGED_IN';
+  end if;
+  if p_question is null or char_length(btrim(p_question)) < 2
+     or char_length(p_question) > 120 then
+    raise exception 'BAD_QUESTION';
+  end if;
+  if char_length(v_answer) < 2 or char_length(v_answer) > 80 then
+    raise exception 'BAD_ANSWER';
+  end if;
+
+  -- Replacing the answer also clears the lockout: someone who just changed the
+  -- question should not inherit the previous attempt counter.
+  insert into pw_secrets (username, question, answer_hash, fail_count, locked_until, updated_at)
+  values (v_user, left(btrim(p_question), 120),
+          extensions.crypt(v_answer, extensions.gen_salt('bf')), 0, null, now())
+  on conflict (username) do update
+    set question = excluded.question,
+        answer_hash = excluded.answer_hash,
+        fail_count = 0,
+        locked_until = null,
+        updated_at = now();
+
+  return true;
+end;
+$$;
+
+
+-- Reset your own password by answering the question.
+--
+-- This is the only anon-callable endpoint that changes a password, so it
+-- carries the abuse controls: the answer is compared by crypt(), and five
+-- wrong answers in a row close the account for 15 minutes. Without that the
+-- question is worth little -- an attacker who knows a username could simply
+-- keep trying answers.
+--
+-- Returns a status string instead of raising, which is not a style choice:
+-- raise exception rolls the whole transaction back, so a counter written
+-- before the raise is discarded and fail_count would stay 0 forever -- the
+-- lockout would never engage (this is exactly how it shipped, and it was the
+-- one thing the test suite caught). Returning a value lets the increment
+-- commit. Callers branch on the string, not on HTTP status.
+--
+-- Self-reset does NOT check that the caller is the account holder by any
+-- other means, by design: there is no e-mail channel to confirm against. The
+-- strength of this path is entirely the strength of the chosen answer.
+create or replace function public.pw_reset_self(
+  p_username text, p_answer text, p_newpw text)
+returns text
+language plpgsql security definer set search_path = public
+as $$
+declare
+  v_row   record;
+  v_uid   text;
+  v_now   timestamptz := now();
+  v_ans   text := public.pw_norm_answer(p_answer);
+begin
+  if p_username is null
+     or char_length(p_username) < 2
+     or char_length(p_username) > 20
+     or p_username ~ '[[:space:][:cntrl:]]' then
+    return 'BAD_USERNAME';
+  end if;
+  if p_newpw is null or char_length(p_newpw) < 6 then
+    return 'PW_TOO_SHORT';
+  end if;
+
+  select * into v_row
+    from pw_secrets s
+   where s.username = p_username
+     for update;
+  if not found then
+    return 'NO_SECRET';
+  end if;
+
+  if v_row.locked_until is not null and v_row.locked_until > v_now then
+    return 'RATE_LIMITED';
+  end if;
+
+  if extensions.crypt(v_ans, v_row.answer_hash) is distinct from v_row.answer_hash then
+    if v_row.fail_count + 1 >= 5 then
+      update pw_secrets
+         set fail_count = 0,
+             locked_until = v_now + interval '15 minutes'
+       where username = p_username;
+      return 'RATE_LIMITED';
+    end if;
+    update pw_secrets
+       set fail_count = fail_count + 1,
+           updated_at = v_now
+     where username = p_username;
+    return 'BAD_ANSWER';
+  end if;
+
+  -- Answer is correct: replace the password and cut every live session, the
+  -- same two steps pw_reset_resolve takes.
+  select a.id::text into v_uid
+    from auth.users a
+   where a.raw_user_meta_data ->> 'username' = p_username;
+  if v_uid is null then
+    return 'NO_SUCH_ACCOUNT';
+  end if;
+
+  update auth.users
+     set encrypted_password = extensions.crypt(p_newpw, extensions.gen_salt('bf')),
+         updated_at         = v_now
+   where id::text = v_uid;
+
+  delete from auth.refresh_tokens where user_id = v_uid::text;
+
+  update pw_secrets
+     set fail_count = 0, locked_until = null, updated_at = v_now
+   where username = p_username;
+
+  return 'OK';
+end;
+$$;
+
+
+-- ============ 7) grants ============
+-- Setting a question needs a session. Answering does not -- that is the whole
+-- point of a password recovery flow.
+grant execute on function public.pw_set_secret(text, text) to authenticated;
+grant execute on function public.pw_get_question(text) to anon, authenticated;
+grant execute on function public.pw_reset_self(text, text, text) to anon, authenticated;

@@ -64,6 +64,23 @@
       </div>
     </div>
 
+    <!-- 安全问题（忘记密码时自助重置用） -->
+    <div class="password-section">
+      <button class="btn-toggle-pw" id="btnToggleSecret">设置安全问题</button>
+      <div class="pw-form" id="secretForm" style="display:none">
+        <div id="secretCurrent" style="display:none;font-size:0.85rem;color:var(--rhine-body,#3c3a37);line-height:1.6;">当前设置：<b id="secretCurrentText"></b></div>
+        <input type="text" id="secretQuestion" placeholder="安全问题（2-120 字）" maxlength="120" autocomplete="off">
+        <input type="text" id="secretAnswer" placeholder="答案（不区分大小写，忽略空格与全角）" maxlength="80" autocomplete="off">
+        <div class="form-actions">
+          <button class="btn-save" id="btnSaveSecret">保存</button>
+          <button class="btn-cancel" id="btnCancelSecret">取消</button>
+        </div>
+        <div style="font-size:0.82rem;line-height:1.6;opacity:0.75;">
+          忘记密码时凭它自助重置。答案以不可逆哈希保存，站内不留明文。别选外人猜得到的问题（生日、宠物名这类常见答案要避开）。
+        </div>
+      </div>
+    </div>
+
     <!-- 注销账号 -->
     <div class="danger-zone">
       <button class="btn-delete" id="btnDeleteAccount">彻底注销账号</button>
@@ -75,7 +92,7 @@
   <!-- 引入 Supabase 客户端 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../config.js"></script>
-  <script src="../github-db.js?v=20261023a"></script>
+  <script src="../github-db.js?v=20261023b"></script>
   <script src="supabase-client.js?v=20261016a"></script>
 
   <script>
@@ -202,6 +219,57 @@ async function loadProfile() {
       setCurrentUser(null);
       return true;
     }
+
+    // ==================== 安全问题 ====================
+    // 忘记密码时凭它自助重置。答案只在服务端做哈希，这里能取回来的永远只有问题本身。
+    document.getElementById('btnToggleSecret').addEventListener('click', async () => {
+      document.getElementById('secretForm').style.display = 'flex';
+      const box = document.getElementById('secretCurrent');
+      const cu = getCurrentUser();
+      if (!cu || !window.DB || typeof DB.getSecurityQuestion !== 'function') {
+        box.style.display = 'none';
+        return;
+      }
+      try {
+        const g = await DB.getSecurityQuestion(cu.username);
+        if (g.code === 200) {
+          document.getElementById('secretCurrentText').textContent = g.data.question;
+          box.style.display = '';
+        } else {
+          box.style.display = 'none';
+        }
+      } catch (e) {
+        box.style.display = 'none';
+      }
+    });
+    document.getElementById('btnCancelSecret').addEventListener('click', () => {
+      document.getElementById('secretForm').style.display = 'none';
+      document.getElementById('secretQuestion').value = '';
+      document.getElementById('secretAnswer').value = '';
+    });
+    document.getElementById('btnSaveSecret').addEventListener('click', async () => {
+      const cu = getCurrentUser();
+      if (!cu) { alert('请先登录'); return; }
+      const q = document.getElementById('secretQuestion').value.trim();
+      const a = document.getElementById('secretAnswer').value.trim();
+      if (!window.DB || typeof DB.setSecurityQuestion !== 'function') {
+        alert('数据层未加载：请强制刷新后重试'); return;
+      }
+      if (q.length < 2) { alert('安全问题至少 2 个字'); return; }
+      if (a.length < 2) { alert('答案至少 2 个字'); return; }
+      const save = document.getElementById('btnSaveSecret');
+      save.disabled = true;
+      try {
+        const r = await DB.setSecurityQuestion(q, a);
+        if (r.code !== 200) { alert('保存失败：' + (r.msg || '')); return; }
+        alert('已保存。以后忘记密码时，在登录框点「忘记密码？」答对它就能直接重置。');
+        document.getElementById('secretForm').style.display = 'none';
+        document.getElementById('secretQuestion').value = '';
+        document.getElementById('secretAnswer').value = '';
+      } finally {
+        save.disabled = false;
+      }
+    });
 
     // ==================== 注销账号 ====================
     async function deleteAccount() {
