@@ -95,8 +95,13 @@
         'Content-Type': 'application/json',
         'X-Client-Info': 'ueg-web/2.0'
       };
+      // anon：端点本身不要求登录时跳过 Authorization。这里不能依赖「没有 token
+      // 就自然退回匿名」—— getToken() 只读 localStorage，不看有效期，一个过期的
+      // 旧令牌照样会被发出去，而 PostgREST 会先判 JWT 失效、直接 401 挡在函数
+      // 外面（连 grant execute 都走不到）。最需要找回密码的人恰好就是持有
+      // 过期令牌的人，所以那个端点必须绕开本地令牌。
       const t = getToken();
-      if (t) headers.Authorization = 'Bearer ' + t;
+      if (t && !(opts && opts.anon)) headers.Authorization = 'Bearer ' + t;
       if (opts && opts.prefer) headers.Prefer = opts.prefer;
       let res;
       // 同 gt()：网络层失败自动重试 1 次、超时 30s（原 15s），业务错误不重试
@@ -261,13 +266,18 @@
     //
     // 三个 RPC 都走 rest 而不是 gt：gt 不带 Authorization（等于 anon），
     // 而 pw_reset_list / pw_reset_resolve 要求管理员身份。
-    // pw_request_reset 则相反 —— 未登录时要能用，rest 在没有 token 时正好
-    // 退回匿名通道，而 anon 已被 grant 了 execute。
+    //
+    // pw_request_reset 显式传 anon。它虽然 grant 给了 anon，但「没登录时走匿名」
+    // 这条路只在本地完全没有 token 时才成立 —— getToken() 不看有效期，有过期令牌
+    // 就照发，PostgREST 会先判 JWT 失效直接 401，请求根本到不了函数。实测带无效
+    // Bearer 返回 401、不带则 200。该函数体内没有读 current_username()，令牌对它
+    // 毫无价值，只有害处。
     async requestPasswordReset(username, note, contact) {
       username = (username || '').trim();
       if (!username) return { code: 400, msg: '请填写用户名' };
       const r = await this.rest('/rest/v1/rpc/pw_request_reset', {
-        method: 'POST', body: { p_username: username, p_note: (note || '').trim(), p_contact: (contact || '').trim() }
+        method: 'POST', anon: true,
+        body: { p_username: username, p_note: (note || '').trim(), p_contact: (contact || '').trim() }
       });
       if (r.code !== 200) {
         const m = (r.body && r.body.message) || '';
