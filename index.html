@@ -155,14 +155,23 @@
 
   <!-- 引入核心模块（根目录） -->
   <script src="config.js"></script>
-  <script src="github-db.js?v=20261023b"></script>
+  <script src="github-db.js?v=20261025a"></script>
 
   <script>
     // ==================== 用户状态管理 ====================
     function getCurrentUser() {
       try {
         const cu = localStorage.getItem('ueg_current_user');
-        return cu ? JSON.parse(cu) : null;
+        if (!cu) return null;
+        const u = JSON.parse(cu);
+        // 没有用户名的对象不算登录态。空对象是真值，会让 updateUI() 走到
+        // 「已登录」分支（菜单可点、登录框不弹、页面直接能用），而实际上
+        // 压根没有任何会话 —— 这正是「没输密码就进去了」的外观。
+        if (!u || !u.username) {
+          localStorage.removeItem('ueg_current_user');
+          return null;
+        }
+        return u;
       } catch (e) {
         localStorage.removeItem('ueg_current_user');
         return null;
@@ -476,10 +485,16 @@
       }
       const r = await DB.resetPasswordWithSecret(username, answerInput.value, newPwInput.value);
       if (r.code === 200) {
-        // 清掉「记住密码」里那份已经失效的旧密码。
-        // 不自动切回登录：openModal('login') 会把刚写好的提示一起藏掉，
-        // 用户几乎看不到「密码已重置」。留在这儿让提示停住，和管理员那条流程一致。
+        // 重置成功必须彻底回到未登录，而且要用同一套原语 —— 别在这儿再手写
+        // 一遍清键：漏掉哪个键就会在下次打开时被会话恢复捞回来，表现为
+        // 「没输新密码就直接进去了」。logout() 清的是令牌 / 刷新令牌 / 用户缓存。
+        try { if (window.DB && DB.logout) await DB.logout(); } catch (e) {}
+        // 「记住密码」里存的是已失效的旧密码，一并清掉。
         clearRemembered();
+        // 立刻按未登录重渲染：菜单卡片禁用、状态显示「未登录」。
+        // 遮罩此时是 flex（还停在找回密码界面），updateUI 不会把它关掉，
+        // 所以「密码已重置」那句提示仍然留在屏幕上。
+        updateUI();
       }
       return r;
     }
