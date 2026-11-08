@@ -1188,7 +1188,7 @@ label { font-size: var(--fs-caption); letter-spacing: 0.08em; color: var(--rl-mu
 
   /* 触屏命中区≥40px：原来 27~34px 的一排小按钮/返回链接在手机上很难点 */
   .back-link, .link-back, .back-btn { font-size: var(--fs-sm); min-height: 40px; padding: 12px 2px; }
-  .btn, .rhine-btn, .modal-btn, .mini-btn, .btn-small, .btn-user, .mata-btn, .tool, .send { min-height: 40px; }
+  .btn, .rhine-btn, .modal-btn, .mini-btn, .btn-small, .btn-user, .tool, .send { min-height: 40px; }
   input[type=color] { width: 44px; height: 38px; padding: 0; }
 
   /* 手机浏览器地址栏会吃掉 100vh，整屏布局自己写 100dvh；底部留安全区 */

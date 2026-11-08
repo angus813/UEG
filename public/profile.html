@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="rhine-fonts.css" media="print" onload="this.media='all'"> <!-- MiSans（异步加载，不阻塞首屏） -->
   <noscript><link rel="stylesheet" href="rhine-fonts.css"></noscript> <!-- MiSans webfont -->
   <link rel="stylesheet" href="admin.css"> <!-- 基础布局（先于设计系统） -->
-  <link rel="stylesheet" href="rhine.css?v=20261023a"> <!-- Rhine Lab Archive 设计系统 -->
+  <link rel="stylesheet" href="rhine.css?v=20261108a"> <!-- Rhine Lab Archive 设计系统 -->
   <link rel="stylesheet" href="rhine-motion.css"> <!-- 动效层 -->
   <!-- 视觉统一由 rhine.css 设计系统提供 -->
   <script src="rhine-motion.js"></script>
@@ -364,7 +364,7 @@ async function loadProfile() {
 
     // ==================== 初始化 ====================
     // 等会话恢复完成再拉数据：access token 1 小时过期，隔一阵回来
-    // 首屏若带过期 token 会 401 被误判为未登录/无权限（forum/mata 等页都已等）
+    // 首屏若带过期 token 会 401 被误判为未登录/无权限（forum/guild 等页都已等）
     (async function () {
       try { if (window.UEG_SESSION_READY) await window.UEG_SESSION_READY; } catch (e) {}
       loadProfile();

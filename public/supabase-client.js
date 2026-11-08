@@ -72,7 +72,7 @@
     return dbPromise;
   }
 
-  // 立即开始加载 config.js + github-db.js：直接使用 window.DB 的页面（mata/forum/profile/guild）
+  // 立即开始加载 config.js + github-db.js：直接使用 window.DB 的页面（forum/profile/guild）
   // 不再依赖「先调一次 supabase.from 才会去加载数据层」这种隐式时序。
   window.ensureDB = ensureDb;
   window.UEG_DB_READY = ensureDb();
